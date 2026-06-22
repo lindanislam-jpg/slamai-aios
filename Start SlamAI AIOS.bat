@@ -28,7 +28,7 @@ if not exist "prisma\dev.db" (
 
 echo [4/4] Starting SlamAI AIOS on http://localhost:3005
 echo.
-echo  Login: admin@slamai.com / Admin@1234
+echo  Login: lindanislam@gmail.com / Sandiso@1988
 echo.
 start http://localhost:3005
 call npm run dev
