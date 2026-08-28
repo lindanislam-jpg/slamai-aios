@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { getOpenAI } from "@/lib/openai";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -20,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const prompt = modePrompts[mode || "summarize"];
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     messages: [
       { role: "system", content: "You are an expert document analyst. Provide clear, structured, and actionable insights from documents." },

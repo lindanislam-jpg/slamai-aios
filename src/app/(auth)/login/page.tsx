@@ -14,6 +14,14 @@ export default function LoginPage() {
   const [show,    setShow]    = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Only ever follow a same-origin, path-relative callback so a crafted
+  // ?callbackUrl= cannot turn the login form into an open redirect.
+  function safeCallbackUrl() {
+    const raw = new URLSearchParams(window.location.search).get("callbackUrl");
+    if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+    return "/dashboard";
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -21,7 +29,10 @@ export default function LoginPage() {
     setLoading(false);
     if (res?.ok) {
       toast.success("Welcome back!");
-      router.push("/dashboard");
+      router.push(safeCallbackUrl());
+      // Drop the cached RSC payload so the dashboard layout re-runs `auth()`
+      // with the session cookie that signIn just set.
+      router.refresh();
     } else {
       toast.error("Invalid email or password");
     }

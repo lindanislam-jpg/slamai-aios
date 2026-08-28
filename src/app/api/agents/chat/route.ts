@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import type OpenAI from "openai";
+import { getOpenAI } from "@/lib/openai";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -47,7 +46,7 @@ export async function POST(req: NextRequest) {
     { role: "user", content: message },
   ];
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: agent.model || "gpt-4o",
     messages,
     max_tokens: 1024,

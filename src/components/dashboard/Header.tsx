@@ -35,7 +35,7 @@ export default function Header({ title }: { title: string }) {
             <div className="text-sm font-medium text-slate-200 leading-none">{session?.user?.name || "User"}</div>
             <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
               <Sparkles className="w-2.5 h-2.5 text-brand-400" />
-              {(session?.user as { plan?: string })?.plan || "Free"} Plan
+              {session?.user?.plan || "Free"} Plan
             </div>
           </div>
         </div>

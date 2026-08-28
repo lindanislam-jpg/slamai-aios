@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password } = await req.json();
+    const body = await req.json();
+    const name: string = typeof body.name === "string" ? body.name.trim() : "";
+    const email: string = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password: string = typeof body.password === "string" ? body.password : "";
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: "All fields required" }, { status: 400 });

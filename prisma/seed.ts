@@ -3,15 +3,24 @@ import bcrypt from "bcryptjs";
 
 const db = new PrismaClient();
 
+const ADMIN_EMAIL = "lindanislam@gmail.com";
+
 async function main() {
-  const password = await bcrypt.hash("Sandiso@1988", 12);
+  const plaintext = process.env.SEED_ADMIN_PASSWORD;
+  if (!plaintext || plaintext.length < 8) {
+    throw new Error(
+      "SEED_ADMIN_PASSWORD must be set (min 8 characters) before seeding. " +
+        "See .env.example."
+    );
+  }
+  const password = await bcrypt.hash(plaintext, 12);
 
   const user = await db.user.upsert({
-    where: { email: "lindanislam@gmail.com" },
+    where: { email: ADMIN_EMAIL },
     update: { password, name: "Linda Nislam", role: "admin", plan: "enterprise" },
     create: {
       name:     "Linda Nislam",
-      email:    "lindanislam@gmail.com",
+      email:    ADMIN_EMAIL,
       password,
       role:     "admin",
       plan:     "enterprise",
@@ -69,7 +78,7 @@ async function main() {
   }
 
   console.log("✅ Seed complete");
-  console.log("📧 Login: lindanislam@gmail.com / Sandiso@1988");
+  console.log(`📧 Login: ${ADMIN_EMAIL} / the SEED_ADMIN_PASSWORD you supplied`);
 }
 
 main().catch(console.error).finally(() => db.$disconnect());
