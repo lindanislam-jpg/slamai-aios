@@ -39,6 +39,7 @@ model User {
   workflows     Workflow[]
   integrations  Integration[]
   calls         CallLog[]
+  voiceAgent    VoiceAgent?
   websites      Website[]
   installs      AgentInstall[]
 }
@@ -124,6 +125,7 @@ model Contact {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   deals     Deal[]
+  calls     CallLog[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -255,9 +257,41 @@ model CallLog {
   outcome    String   @default("completed")
   summary    String?
   recordingUrl String?
+
+  /// Twilio's call identifier — present on real calls, absent on manual entries.
+  callSid    String?  @unique
+  status     String   @default("completed")
+  /// The turn-by-turn conversation, stored as a JSON array of {role, text}.
+  transcript String?
+
+  /// The CRM contact this call was captured as, if a lead was identified.
+  contactId  String?
+  contact    Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model VoiceAgent {
+  id             String   @id @default(cuid())
+  /// The Twilio number calls arrive on. Unique so an inbound call routes to one owner.
+  phoneNumber    String?  @unique
+  isActive       Boolean  @default(false)
+  greeting       String   @default("Hello, thanks for calling. How can I help you today?")
+  systemPrompt   String   @default("You are a friendly phone receptionist. Keep replies to one or two short sentences, ask one question at a time, and offer to book a callback. Never invent prices or availability.")
+  voice          String   @default("Polly.Amy")
+  transferNumber String?
+  captureLeads   Boolean  @default(true)
+  maxTurns       Int      @default(20)
+
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Website {
