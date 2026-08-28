@@ -1,28 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { z } from "zod";
 import { db } from "@/lib/db";
+import { parseBody, requireUserId, unauthorized } from "@/lib/api";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await requireUserId();
+  if (!userId) return unauthorized();
 
   const contacts = await db.contact.findMany({
-    where: { userId: session.user.id },
+    where: { userId },
     include: { deals: true },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(contacts);
 }
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+// Only these fields are accepted; spreading the raw body would let a client
+// set ids, timestamps, or another user's ownership.
+const schema = z.object({
+  name:    z.string().min(1, "Name required"),
+  email:   z.string().email("Invalid email").optional().or(z.literal("")),
+  phone:   z.string().optional(),
+  company: z.string().optional(),
+  stage:   z.string().optional(),
+  score:   z.number().int().min(0).max(100).optional(),
+  tags:    z.string().optional(),
+  notes:   z.string().optional(),
+});
 
-  const data = await req.json();
-  if (!data.name) return NextResponse.json({ error: "Name required" }, { status: 400 });
+export async function POST(req: NextRequest) {
+  const userId = await requireUserId();
+  if (!userId) return unauthorized();
+
+  const { data, error } = await parseBody(req, schema);
+  if (error) return error;
 
   const contact = await db.contact.create({
-    data: { ...data, userId: session.user.id },
+    data: { ...data, email: data.email || null, userId },
   });
   return NextResponse.json(contact, { status: 201 });
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Header from "@/components/dashboard/Header";
-import { Mic, Phone, PhoneIncoming, PhoneOff, Volume2, MessageSquare, Clock, TrendingUp, Calendar, CheckCircle, PlayCircle, PauseCircle } from "lucide-react";
+import { Mic, Phone, PhoneIncoming, Volume2, MessageSquare, Clock, TrendingUp, Calendar, CheckCircle, PlayCircle, PauseCircle } from "lucide-react";
 
 const callLogs = [
   { caller: "+353 1 234 5678", duration: "3:42", status: "qualified",  outcome: "Demo booked",      time: "10:24 AM" },

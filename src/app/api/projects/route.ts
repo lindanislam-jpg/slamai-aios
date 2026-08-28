@@ -1,28 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { z } from "zod";
 import { db } from "@/lib/db";
+import { parseBody, requireUserId, unauthorized } from "@/lib/api";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await requireUserId();
+  if (!userId) return unauthorized();
 
   const projects = await db.project.findMany({
-    where: { userId: session.user.id },
+    where: { userId },
     include: { tasks: true },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(projects);
 }
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+const schema = z.object({
+  name: z.string().min(1, "Name required"),
+  description: z.string().optional(),
+});
 
-  const { name, description } = await req.json();
-  if (!name) return NextResponse.json({ error: "Name required" }, { status: 400 });
+export async function POST(req: NextRequest) {
+  const userId = await requireUserId();
+  if (!userId) return unauthorized();
+
+  const { data, error } = await parseBody(req, schema);
+  if (error) return error;
 
   const project = await db.project.create({
-    data: { name, description, userId: session.user.id },
+    data: { ...data, userId },
   });
   return NextResponse.json(project, { status: 201 });
 }

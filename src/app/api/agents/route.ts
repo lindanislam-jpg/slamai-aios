@@ -1,27 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { z } from "zod";
 import { db } from "@/lib/db";
+import { parseBody, requireUserId, unauthorized } from "@/lib/api";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await requireUserId();
+  if (!userId) return unauthorized();
 
   const agents = await db.aIAgent.findMany({
-    where: { userId: session.user.id },
+    where: { userId },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(agents);
 }
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+const schema = z.object({
+  name: z.string().min(1, "Name and type required"),
+  type: z.string().min(1, "Name and type required"),
+  description:  z.string().optional(),
+  systemPrompt: z.string().optional(),
+  model:        z.string().optional(),
+});
 
-  const { name, type, description, systemPrompt, model } = await req.json();
-  if (!name || !type) return NextResponse.json({ error: "Name and type required" }, { status: 400 });
+export async function POST(req: NextRequest) {
+  const userId = await requireUserId();
+  if (!userId) return unauthorized();
+
+  const { data, error } = await parseBody(req, schema);
+  if (error) return error;
 
   const agent = await db.aIAgent.create({
-    data: { name, type, description, systemPrompt, model: model || "gpt-4o", userId: session.user.id },
+    data: { ...data, model: data.model || "gpt-4o", userId },
   });
   return NextResponse.json(agent, { status: 201 });
 }

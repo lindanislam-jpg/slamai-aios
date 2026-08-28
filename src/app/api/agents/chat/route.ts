@@ -1,25 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { z } from "zod";
 import { db } from "@/lib/db";
-import OpenAI from "openai";
+import { getOpenAI } from "@/lib/openai";
+import { aiError, openAIUnavailable, parseBody, requireUserId, unauthorized } from "@/lib/api";
+import type OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const schema = z.object({
+  agentId: z.string().min(1, "agentId and message required"),
+  message: z.string().min(1, "agentId and message required"),
+  conversationId: z.string().optional(),
+});
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await requireUserId();
+  if (!userId) return unauthorized();
 
-  const { agentId, message, conversationId } = await req.json();
-  if (!agentId || !message) return NextResponse.json({ error: "agentId and message required" }, { status: 400 });
+  const unavailable = openAIUnavailable();
+  if (unavailable) return unavailable;
 
-  const agent = await db.aIAgent.findFirst({ where: { id: agentId, userId: session.user.id } });
+  const { data, error } = await parseBody(req, schema);
+  if (error) return error;
+  const { agentId, message } = data;
+
+  const agent = await db.aIAgent.findFirst({ where: { id: agentId, userId } });
   if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
 
-  // Get or create conversation
-  let convId = conversationId;
-  if (!convId) {
+  // Get or create conversation, scoped to this user so an id can't be borrowed
+  let convId = data.conversationId;
+  if (convId) {
+    const existing = await db.conversation.findFirst({ where: { id: convId, userId } });
+    if (!existing) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+  } else {
     const conv = await db.conversation.create({
-      data: { agentId, userId: session.user.id, title: message.slice(0, 50) },
+      data: { agentId, userId, title: message.slice(0, 50) },
     });
     convId = conv.id;
   }
@@ -47,13 +60,17 @@ export async function POST(req: NextRequest) {
     { role: "user", content: message },
   ];
 
-  const completion = await openai.chat.completions.create({
-    model: agent.model || "gpt-4o",
-    messages,
-    max_tokens: 1024,
-  });
-
-  const reply = completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
+  let reply: string;
+  try {
+    const completion = await getOpenAI().chat.completions.create({
+      model: agent.model || "gpt-4o",
+      messages,
+      max_tokens: 1024,
+    });
+    reply = completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
+  } catch (err) {
+    return aiError(err, "agents/chat");
+  }
 
   await db.message.create({ data: { role: "assistant", content: reply, conversationId: convId } });
 

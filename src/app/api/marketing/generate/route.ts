@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { z } from "zod";
+import { getOpenAI } from "@/lib/openai";
+import { aiError, openAIUnavailable, parseBody, requireUserId, unauthorized } from "@/lib/api";
 
 const prompts: Record<string, string> = {
   linkedin:    "Write a professional LinkedIn post",
@@ -14,23 +13,36 @@ const prompts: Record<string, string> = {
   "video-script": "Write a YouTube video script with intro, main content, and outro",
 };
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+const schema = z.object({
+  type:  z.string().min(1, "type and topic required"),
+  topic: z.string().min(1, "type and topic required"),
+  tone:     z.string().optional(),
+  audience: z.string().optional(),
+});
 
-  const { type, topic, tone, audience } = await req.json();
-  if (!type || !topic) return NextResponse.json({ error: "type and topic required" }, { status: 400 });
+export async function POST(req: NextRequest) {
+  const userId = await requireUserId();
+  if (!userId) return unauthorized();
+
+  const unavailable = openAIUnavailable();
+  if (unavailable) return unavailable;
+
+  const { data, error } = await parseBody(req, schema);
+  if (error) return error;
+  const { type, topic, tone, audience } = data;
 
   const basePrompt = prompts[type] || "Write content";
   const systemMsg  = `You are an expert marketing copywriter. Create compelling, conversion-focused content.`;
   const userMsg    = `${basePrompt} about: "${topic}". Tone: ${tone || "professional"}. Target audience: ${audience || "general business"}. Make it engaging and action-oriented.`;
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [{ role: "system", content: systemMsg }, { role: "user", content: userMsg }],
-    max_tokens: 1500,
-  });
-
-  const content = completion.choices[0]?.message?.content || "";
-  return NextResponse.json({ content });
+  try {
+    const completion = await getOpenAI().chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "system", content: systemMsg }, { role: "user", content: userMsg }],
+      max_tokens: 1500,
+    });
+    return NextResponse.json({ content: completion.choices[0]?.message?.content || "" });
+  } catch (err) {
+    return aiError(err, "marketing/generate");
+  }
 }

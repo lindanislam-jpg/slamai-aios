@@ -5,7 +5,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
-import { TrendingUp, TrendingDown, Users, Bot, Zap, DollarSign, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { TrendingUp, Users, Bot, Zap, DollarSign, ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 const revenueData = [
   { month: "Jan", revenue: 4200, leads: 24, aiCalls: 340 },

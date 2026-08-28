@@ -3,15 +3,25 @@ import bcrypt from "bcryptjs";
 
 const db = new PrismaClient();
 
+// Credentials come from the environment so no real password lives in the repo.
+const ADMIN_EMAIL = (process.env.SEED_ADMIN_EMAIL || "admin@slamai.local").toLowerCase();
+const ADMIN_NAME  = process.env.SEED_ADMIN_NAME || "SlamAI Admin";
+
 async function main() {
-  const password = await bcrypt.hash("Sandiso@1988", 12);
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!adminPassword) {
+    throw new Error(
+      "SEED_ADMIN_PASSWORD is not set. Export it (and optionally SEED_ADMIN_EMAIL / SEED_ADMIN_NAME) before running db:seed."
+    );
+  }
+  const password = await bcrypt.hash(adminPassword, 12);
 
   const user = await db.user.upsert({
-    where: { email: "lindanislam@gmail.com" },
-    update: { password, name: "Linda Nislam", role: "admin", plan: "enterprise" },
+    where: { email: ADMIN_EMAIL },
+    update: { password, name: ADMIN_NAME, role: "admin", plan: "enterprise" },
     create: {
-      name:     "Linda Nislam",
-      email:    "lindanislam@gmail.com",
+      name:     ADMIN_NAME,
+      email:    ADMIN_EMAIL,
       password,
       role:     "admin",
       plan:     "enterprise",
