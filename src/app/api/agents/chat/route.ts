@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import type OpenAI from "openai";
+import { getOpenAI, isOpenAIConfigured } from "@/lib/openai";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!isOpenAIConfigured()) {
+    return NextResponse.json(
+      { error: "AI features are unavailable — OPENAI_API_KEY is not configured." },
+      { status: 503 }
+    );
+  }
 
   const { agentId, message, conversationId } = await req.json();
   if (!agentId || !message) return NextResponse.json({ error: "agentId and message required" }, { status: 400 });
@@ -47,7 +53,7 @@ export async function POST(req: NextRequest) {
     { role: "user", content: message },
   ];
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: agent.model || "gpt-4o",
     messages,
     max_tokens: 1024,

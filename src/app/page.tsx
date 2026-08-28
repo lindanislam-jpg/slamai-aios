@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { PLANS } from "@/lib/plans";
 import {
   Bot, Zap, Users, Globe, Megaphone, Mic, FileText,
   BarChart3, Kanban, Store, ChevronRight, Star, Check,
@@ -20,28 +22,7 @@ const modules = [
   { icon: Store,     title: "AI Marketplace",       desc: "Install industry-specific agents: logistics, real estate, insurance, and more.", color: "from-indigo-500 to-blue-600" },
 ];
 
-const plans = [
-  {
-    name: "Starter",    price: 49,  period: "month",
-    features: ["1 user", "1 AI assistant", "Basic automation", "5 GB storage", "Email support"],
-    color: "border-slate-700", cta: "Start Free Trial", popular: false,
-  },
-  {
-    name: "Professional", price: 149, period: "month",
-    features: ["5 users", "All AI agents", "CRM system", "Marketing AI", "Analytics", "Website builder", "Priority support"],
-    color: "border-brand-500", cta: "Get Started", popular: true,
-  },
-  {
-    name: "Business",   price: 499, period: "month",
-    features: ["Unlimited users", "Voice AI", "Advanced automations", "Custom branding", "API access", "Dedicated manager"],
-    color: "border-slate-700", cta: "Get Started", popular: false,
-  },
-  {
-    name: "Enterprise", price: 1999, period: "month",
-    features: ["Everything in Business", "White-label platform", "Custom AI agents", "SLA guarantee", "Onboarding & training"],
-    color: "border-yellow-500", cta: "Contact Sales", popular: false,
-  },
-];
+const plans = PLANS.filter((p) => p.id !== "free");
 
 const stats = [
   { label: "AI Agents Deployed", value: "10,000+", icon: Bot },
@@ -51,6 +32,16 @@ const stats = [
 ];
 
 export default function LandingPage() {
+  const router = useRouter();
+
+  /**
+   * Checkout needs an account, so a visitor picking a plan is sent to sign-up
+   * with the plan remembered; from there they land on Settings to complete it.
+   */
+  function choosePlan(planId: string) {
+    router.push(`/register?plan=${planId}`);
+  }
+
   return (
     <div className="min-h-screen bg-slam-dark text-slate-100 overflow-x-hidden">
 
@@ -190,7 +181,7 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {plans.map((p) => (
-              <div key={p.name} className={`glass rounded-2xl p-6 border-2 ${p.color} relative ${p.popular ? "scale-105 glow-purple" : ""}`}>
+              <div key={p.id} className={`glass rounded-2xl p-6 border-2 relative ${p.popular ? "border-brand-500 scale-105 glow-purple" : "border-slate-700"}`}>
                 {p.popular && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-600 text-white text-xs font-bold px-4 py-1 rounded-full flex items-center gap-1">
                     <Star className="w-3 h-3" /> Most Popular
@@ -211,12 +202,12 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href="/register"
-                  className={`block text-center py-2.5 rounded-lg font-semibold text-sm transition-all ${p.popular ? "btn-primary" : "btn-secondary"}`}
+                <button
+                  onClick={() => choosePlan(p.id)}
+                  className={`block w-full text-center py-2.5 rounded-lg font-semibold text-sm transition-all ${p.popular ? "btn-primary" : "btn-secondary"}`}
                 >
                   {p.cta}
-                </Link>
+                </button>
               </div>
             ))}
           </div>

@@ -2,9 +2,24 @@
 
 import { useState } from "react";
 import Header from "@/components/dashboard/Header";
-import { Megaphone, Sparkles, Copy, Check, Loader2, Linkedin, Twitter, Instagram, Mail, FileText, Video, Mic2, MousePointerClick } from "lucide-react";
+import { Megaphone, Sparkles, Copy, Check, Loader2, Linkedin, Twitter, Instagram, Mail, FileText, Video, Mic2, MousePointerClick, Save, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import axios from "axios";
+import { useResource, mutate } from "@/lib/useApi";
+import { LoadingState, ErrorState, EmptyState } from "@/components/dashboard/States";
+import { formatRelativeTime } from "@/lib/utils";
+
+interface Campaign {
+  id: string; name: string; type: string; status: string;
+  content: string | null; platform: string | null; reach: number; engagement: number; createdAt: string;
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  draft:     "bg-yellow-500/20 text-yellow-400",
+  scheduled: "bg-blue-500/20 text-blue-400",
+  active:    "bg-green-500/20 text-green-400",
+  archived:  "bg-slate-500/20 text-slate-400",
+};
 
 const contentTypes = [
   { type: "linkedin",     label: "LinkedIn Post",   icon: Linkedin,          color: "from-blue-600 to-blue-800" },
@@ -27,6 +42,39 @@ export default function MarketingPage() {
   const [content,   setContent]  = useState("");
   const [loading,   setLoading]  = useState(false);
   const [copied,    setCopied]   = useState(false);
+  const [saving,    setSaving]   = useState(false);
+
+  const campaigns = useResource<Campaign[]>("/api/campaigns");
+
+  async function saveCampaign() {
+    if (!content) return;
+    setSaving(true);
+    try {
+      await mutate("/api/campaigns", "POST", {
+        name:     topic.slice(0, 60) || `${selectedType.label} campaign`,
+        type:     type,
+        platform: selectedType.label,
+        content,
+        status:   "draft",
+      });
+      await campaigns.refresh();
+      toast.success("Saved to your campaigns");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the campaign");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteCampaign(id: string) {
+    try {
+      await mutate(`/api/campaigns/${id}`, "DELETE");
+      await campaigns.refresh();
+      toast.success("Campaign deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete the campaign");
+    }
+  }
 
   async function generate() {
     if (!topic) { toast.error("Enter a topic first"); return; }
@@ -143,35 +191,63 @@ export default function MarketingPage() {
 
             {content && (
               <div className="flex gap-2 mt-4 pt-4 border-t border-slam-border">
-                <button className="flex-1 btn-secondary text-sm py-2">Schedule Post</button>
+                <button
+                  onClick={saveCampaign}
+                  disabled={saving}
+                  className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  Save Campaign
+                </button>
                 <button className="flex-1 btn-primary text-sm py-2" onClick={generate}>Regenerate</button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Recent campaigns */}
+        {/* Saved campaigns */}
         <div>
-          <h3 className="font-semibold mb-4">Recent Campaigns</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { name: "Q1 LinkedIn Series",  platform: "LinkedIn",  status: "Published", reach: "4.2K", engagement: "8.3%", color: "bg-blue-500/20 text-blue-400" },
-              { name: "Summer Email Blast",  platform: "Email",     status: "Scheduled", reach: "1.8K", engagement: "24%",  color: "bg-green-500/20 text-green-400" },
-              { name: "Product Launch Ads",  platform: "Facebook",  status: "Draft",     reach: "—",    engagement: "—",    color: "bg-yellow-500/20 text-yellow-400" },
-            ].map(c => (
-              <div key={c.name} className="glass rounded-xl p-4 card-hover">
-                <div className="flex items-start justify-between mb-3">
-                  <h4 className="font-medium text-sm">{c.name}</h4>
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${c.color}`}>{c.status}</span>
+          <h3 className="font-semibold mb-4">Your Campaigns</h3>
+
+          {campaigns.loading ? (
+            <LoadingState label="Loading campaigns…" />
+          ) : campaigns.error ? (
+            <ErrorState message={campaigns.error} onRetry={campaigns.refresh} />
+          ) : (campaigns.data ?? []).length === 0 ? (
+            <div className="glass rounded-2xl">
+              <EmptyState
+                icon={Megaphone}
+                title="No saved campaigns"
+                description="Generate content above and hit Save Campaign to keep it here."
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(campaigns.data ?? []).map((c) => (
+                <div key={c.id} className="glass rounded-xl p-4 card-hover flex flex-col">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <h4 className="font-medium text-sm leading-snug">{c.name}</h4>
+                    <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ${STATUS_COLORS[c.status] || STATUS_COLORS.draft}`}>
+                      {c.status}
+                    </span>
+                  </div>
+                  {c.content && (
+                    <p className="text-xs text-slate-500 line-clamp-3 mb-3 flex-1">{c.content}</p>
+                  )}
+                  <div className="text-xs text-slate-500 space-y-1 pt-3 border-t border-slam-border">
+                    <div className="flex justify-between"><span>Platform</span><span className="text-slate-300">{c.platform || "—"}</span></div>
+                    <div className="flex justify-between"><span>Created</span><span className="text-slate-300">{formatRelativeTime(c.createdAt)}</span></div>
+                  </div>
+                  <button
+                    onClick={() => deleteCampaign(c.id)}
+                    className="mt-3 text-xs text-slate-600 hover:text-red-400 transition-colors flex items-center gap-1 self-start"
+                  >
+                    <Trash2 className="w-3 h-3" />Delete
+                  </button>
                 </div>
-                <div className="text-xs text-slate-500 space-y-1">
-                  <div className="flex justify-between"><span>Platform</span><span className="text-slate-300">{c.platform}</span></div>
-                  <div className="flex justify-between"><span>Reach</span><span className="text-slate-300">{c.reach}</span></div>
-                  <div className="flex justify-between"><span>Engagement</span><span className="text-slate-300">{c.engagement}</span></div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -17,8 +17,14 @@ model User {
   image         String?
   role          String    @default("user")
   plan          String    @default("free")
-  stripeCustomerId String?
+  company       String?
+
+  stripeCustomerId     String?   @unique
   stripeSubscriptionId String?
+  stripePriceId        String?
+  stripeStatus         String?
+  planRenewsAt         DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -30,6 +36,11 @@ model User {
   projects      Project[]
   campaigns     Campaign[]
   conversations Conversation[]
+  workflows     Workflow[]
+  integrations  Integration[]
+  calls         CallLog[]
+  websites      Website[]
+  installs      AgentInstall[]
 }
 
 model Account {
@@ -192,6 +203,72 @@ model MarketplaceAgent {
   rating      Float    @default(0)
   installs    Int      @default(0)
   isActive    Boolean  @default(true)
+  installedBy AgentInstall[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model AgentInstall {
+  id        String           @id @default(cuid())
+  userId    String
+  agentId   String
+  user      User             @relation(fields: [userId],  references: [id], onDelete: Cascade)
+  agent     MarketplaceAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@unique([userId, agentId])
+}
+
+model Workflow {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  trigger     String
+  action      String
+  isActive    Boolean  @default(false)
+  runCount    Int      @default(0)
+  lastRunAt   DateTime?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Integration {
+  id        String   @id @default(cuid())
+  provider  String
+  status    String   @default("disconnected")
+  accountId String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, provider])
+}
+
+model CallLog {
+  id         String   @id @default(cuid())
+  caller     String
+  direction  String   @default("inbound")
+  durationSec Int     @default(0)
+  outcome    String   @default("completed")
+  summary    String?
+  recordingUrl String?
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+}
+
+model Website {
+  id         String   @id @default(cuid())
+  name       String
+  template   String
+  domain     String?
+  status     String   @default("draft")
+  visits     Int      @default(0)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

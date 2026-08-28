@@ -2,161 +2,222 @@
 
 import { useState } from "react";
 import Header from "@/components/dashboard/Header";
-import { Mic, Phone, PhoneIncoming, PhoneOff, Volume2, MessageSquare, Clock, TrendingUp, Calendar, CheckCircle, PlayCircle, PauseCircle } from "lucide-react";
+import {
+  Mic, Phone, PhoneIncoming, PhoneOutgoing, Clock, TrendingUp, Calendar,
+  Plus, X, Loader2, PhoneCall,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { useResource, mutate } from "@/lib/useApi";
+import { LoadingState, ErrorState, EmptyState } from "@/components/dashboard/States";
+import { formatDuration, formatRelativeTime } from "@/lib/utils";
 
-const callLogs = [
-  { caller: "+353 1 234 5678", duration: "3:42", status: "qualified",  outcome: "Demo booked",      time: "10:24 AM" },
-  { caller: "+353 86 901 2345",duration: "1:15", status: "transferred",outcome: "Transferred to sales","time": "10:18 AM" },
-  { caller: "+44 20 1234 5678",duration: "5:21", status: "resolved",   outcome: "Issue resolved",    time: "9:55 AM"  },
-  { caller: "+353 1 987 6543", duration: "0:48", status: "voicemail",  outcome: "Callback scheduled",time: "9:30 AM"  },
-  { caller: "+353 87 765 4321",duration: "2:10", status: "booked",     outcome: "Appointment set",   time: "9:12 AM"  },
-];
+interface CallLog {
+  id: string; caller: string; direction: string; durationSec: number;
+  outcome: string; summary: string | null; createdAt: string;
+}
 
-const statusColors: Record<string, string> = {
+interface CallsResponse {
+  calls: CallLog[];
+  stats: { total: number; totalSeconds: number; booked: number; bookingRate: number };
+}
+
+const OUTCOMES = ["completed", "qualified", "booked", "transferred", "voicemail", "no-answer"];
+
+const OUTCOME_COLORS: Record<string, string> = {
+  completed:   "bg-teal-500/20 text-teal-400",
   qualified:   "bg-green-500/20 text-green-400",
-  transferred: "bg-blue-500/20 text-blue-400",
-  resolved:    "bg-teal-500/20 text-teal-400",
-  voicemail:   "bg-yellow-500/20 text-yellow-400",
   booked:      "bg-purple-500/20 text-purple-400",
+  transferred: "bg-blue-500/20 text-blue-400",
+  voicemail:   "bg-yellow-500/20 text-yellow-400",
+  "no-answer": "bg-slate-500/20 text-slate-400",
 };
 
 export default function VoiceAIPage() {
-  const [isActive, setIsActive] = useState(false);
+  const { data, loading, error, refresh } = useResource<CallsResponse>("/api/voice/calls");
+  const [showLog, setShowLog] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [form, setForm] = useState({
+    caller: "", direction: "inbound", minutes: "0", seconds: "0", outcome: OUTCOMES[0], summary: "",
+  });
+
+  async function logCall() {
+    if (!form.caller.trim()) return;
+    setSaving(true);
+    try {
+      await mutate("/api/voice/calls", "POST", {
+        caller:      form.caller.trim(),
+        direction:   form.direction,
+        durationSec: Number(form.minutes) * 60 + Number(form.seconds),
+        outcome:     form.outcome,
+        summary:     form.summary.trim() || undefined,
+      });
+      await refresh();
+      setShowLog(false);
+      setForm({ caller: "", direction: "inbound", minutes: "0", seconds: "0", outcome: OUTCOMES[0], summary: "" });
+      toast.success("Call logged");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not log the call");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const stats = data?.stats;
+  const calls = data?.calls ?? [];
+  const avgSeconds = stats && stats.total ? Math.round(stats.totalSeconds / stats.total) : 0;
 
   return (
     <div className="flex flex-col h-full">
       <Header title="Voice AI" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Calls Today",       value: "47",   icon: Phone,       color: "text-blue-400",   bg: "bg-blue-500/10"   },
-            { label: "Avg. Handle Time",  value: "2:48", icon: Clock,       color: "text-green-400",  bg: "bg-green-500/10"  },
-            { label: "Appointments Set",  value: "12",   icon: Calendar,    color: "text-purple-400", bg: "bg-purple-500/10" },
-            { label: "Resolution Rate",   value: "89%",  icon: TrendingUp,  color: "text-yellow-400", bg: "bg-yellow-500/10" },
-          ].map(s => (
-            <div key={s.label} className="glass rounded-xl p-4">
-              <div className={`w-9 h-9 rounded-lg ${s.bg} flex items-center justify-center mb-3`}><s.icon className={`w-4 h-4 ${s.color}`} /></div>
-              <div className="text-2xl font-bold">{s.value}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
-            </div>
-          ))}
+        {/* Provider notice — honest about what is and isn't connected */}
+        <div className="glass rounded-2xl p-5 flex items-start gap-4 border border-yellow-500/20">
+          <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+            <PhoneCall className="w-5 h-5 text-yellow-400" />
+          </div>
+          <div>
+            <div className="font-medium text-sm text-slate-200">No telephony provider connected</div>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
+              Calls are recorded here through <code className="text-brand-400">POST /api/voice/calls</code>. Point a Twilio or
+              Vonage webhook at that endpoint to have calls appear automatically, or log them by hand below in the meantime.
+            </p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Agent status */}
-          <div className="glass rounded-2xl p-6">
-            <h3 className="font-semibold mb-6">Voice Agent Status</h3>
-            <div className="flex flex-col items-center gap-6">
-              <div className="relative">
-                <div className={`w-32 h-32 rounded-full border-4 flex items-center justify-center transition-all ${isActive ? "border-green-500 shadow-lg shadow-green-500/30" : "border-slam-border"}`}>
-                  {isActive && <div className="absolute inset-0 rounded-full bg-green-500/10 animate-ping" />}
-                  <Mic className={`w-14 h-14 ${isActive ? "text-green-400" : "text-slate-600"}`} />
-                </div>
-                {isActive && <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center"><div className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" /></div>}
-              </div>
-
-              <div className="text-center">
-                <div className={`text-lg font-bold ${isActive ? "text-green-400" : "text-slate-500"}`}>
-                  {isActive ? "Agent Active — Listening" : "Agent Offline"}
-                </div>
-                <p className="text-sm text-slate-500 mt-1">{isActive ? "Ready to handle incoming calls 24/7" : "Activate to enable phone AI"}</p>
-              </div>
-
-              <button onClick={() => setIsActive(!isActive)} className={`flex items-center gap-2 px-8 py-3 rounded-xl font-semibold transition-all ${isActive ? "bg-red-600/20 text-red-400 border border-red-600/40 hover:bg-red-600/30" : "bg-green-600/20 text-green-400 border border-green-600/40 hover:bg-green-600/30"}`}>
-                {isActive ? <><PauseCircle className="w-5 h-5" />Deactivate Agent</> : <><PlayCircle className="w-5 h-5" />Activate Agent</>}
-              </button>
-
-              <div className="w-full space-y-3">
-                {[
-                  { label: "Answer calls",        enabled: true  },
-                  { label: "Book appointments",   enabled: true  },
-                  { label: "Qualify leads",       enabled: true  },
-                  { label: "Transfer to human",   enabled: true  },
-                  { label: "Send SMS follow-up",  enabled: false },
-                ].map(f => (
-                  <div key={f.label} className="flex items-center justify-between">
-                    <span className="text-sm text-slate-400">{f.label}</span>
-                    <div className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${f.enabled ? "bg-brand-600" : "bg-slam-border"}`}>
-                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${f.enabled ? "left-5" : "left-0.5"}`} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Call script */}
-          <div className="glass rounded-2xl p-6">
-            <h3 className="font-semibold mb-4">AI Call Script</h3>
-            <div className="space-y-3 text-sm">
+        {loading ? (
+          <LoadingState label="Loading call history…" />
+        ) : error ? (
+          <ErrorState message={error} onRetry={refresh} />
+        ) : (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { step: "Greeting",      script: "Hello! Thank you for calling. I'm SlamAI, your virtual assistant. How can I help you today?",  icon: Volume2   },
-                { step: "Qualification", script: "Great! Could I get your name and the best way to reach you? What brings you to us today?",        icon: MessageSquare },
-                { step: "Booking",       script: "I'd love to arrange a call with our team. Are you available this week? I can check availability.", icon: Calendar  },
-                { step: "Handoff",       script: "Let me connect you with one of our specialists who can help you further. Please hold briefly.",    icon: Phone     },
-                { step: "Resolution",    script: "Is there anything else I can help you with today? Thank you for calling — have a great day!",     icon: CheckCircle },
-              ].map(s => (
-                <div key={s.step} className="flex gap-3 p-3 bg-slam-dark rounded-xl border border-slam-border">
-                  <s.icon className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-xs text-brand-300 mb-1">{s.step}</div>
-                    <p className="text-slate-400 leading-relaxed text-xs">{s.script}</p>
+                { label: "Total Calls",      value: stats?.total ?? 0,                    icon: Phone,      color: "text-blue-400",   bg: "bg-blue-500/10"   },
+                { label: "Avg. Handle Time", value: formatDuration(avgSeconds),           icon: Clock,      color: "text-green-400",  bg: "bg-green-500/10"  },
+                { label: "Appointments Set", value: stats?.booked ?? 0,                   icon: Calendar,   color: "text-purple-400", bg: "bg-purple-500/10" },
+                { label: "Booking Rate",     value: `${stats?.bookingRate ?? 0}%`,        icon: TrendingUp, color: "text-yellow-400", bg: "bg-yellow-500/10" },
+              ].map((s) => (
+                <div key={s.label} className="glass rounded-xl p-4">
+                  <div className={`w-9 h-9 rounded-lg ${s.bg} flex items-center justify-center mb-3`}>
+                    <s.icon className={`w-4 h-4 ${s.color}`} />
                   </div>
+                  <div className="text-2xl font-bold">{s.value}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
 
-        {/* Call logs */}
-        <div className="glass rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="font-semibold">Recent Calls</h3>
-            <button className="text-sm text-brand-400 hover:text-brand-300">View All</button>
-          </div>
-          <div className="space-y-2">
-            {callLogs.map((c, i) => (
-              <div key={i} className="flex items-center gap-4 p-3 bg-slam-dark rounded-xl border border-slam-border hover:border-slate-600 transition-colors">
-                <div className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center flex-shrink-0">
-                  <PhoneIncoming className="w-4 h-4 text-brand-400" />
-                </div>
-                <div className="flex-1">
-                  <div className="font-medium text-sm">{c.caller}</div>
-                  <div className="text-xs text-slate-500">{c.outcome}</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-600 flex items-center gap-1"><Clock className="w-3 h-3" />{c.duration}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${statusColors[c.status] || "bg-slate-500/20 text-slate-400"}`}>{c.status}</span>
-                  <span className="text-xs text-slate-600">{c.time}</span>
-                </div>
+            {/* Call logs */}
+            <div className="glass rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-semibold">Call History</h3>
+                <button onClick={() => setShowLog(true)} className="btn-primary text-sm flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />Log a Call
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Integrations */}
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { name: "Twilio",        desc: "Phone number provisioning & call routing", connected: true,  color: "from-red-500 to-rose-600"    },
-            { name: "GoHighLevel",   desc: "CRM sync & appointment management",        connected: false, color: "from-orange-500 to-yellow-600" },
-          ].map(i => (
-            <div key={i.name} className="glass rounded-xl p-5 flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${i.color} flex items-center justify-center flex-shrink-0`}>
-                <Phone className="w-6 h-6 text-white" />
-              </div>
-              <div className="flex-1">
-                <div className="font-medium">{i.name}</div>
-                <div className="text-xs text-slate-500">{i.desc}</div>
-              </div>
-              <button className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all ${i.connected ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-brand-600/20 text-brand-400 border border-brand-600/30 hover:bg-brand-600/30"}`}>
-                {i.connected ? "Connected" : "Connect"}
-              </button>
+              {calls.length === 0 ? (
+                <EmptyState
+                  icon={Mic}
+                  title="No calls recorded yet"
+                  description="Connect a telephony provider to this workspace, or log a call manually to start building history."
+                  action={<button onClick={() => setShowLog(true)} className="btn-primary text-sm">Log your first call</button>}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {calls.map((c) => (
+                    <div key={c.id} className="flex items-center gap-4 p-3 bg-slam-dark rounded-xl border border-slam-border hover:border-slate-600 transition-colors">
+                      <div className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center flex-shrink-0">
+                        {c.direction === "outbound"
+                          ? <PhoneOutgoing className="w-4 h-4 text-brand-400" />
+                          : <PhoneIncoming className="w-4 h-4 text-brand-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm">{c.caller}</div>
+                        <div className="text-xs text-slate-500 truncate">{c.summary || `${c.direction} call`}</div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-xs text-slate-600 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />{formatDuration(c.durationSec)}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${OUTCOME_COLORS[c.outcome] || "bg-slate-500/20 text-slate-400"}`}>
+                          {c.outcome}
+                        </span>
+                        <span className="text-xs text-slate-600 hidden sm:inline">{formatRelativeTime(c.createdAt)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </div>
+
+      {/* Log call modal */}
+      {showLog && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass rounded-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b border-slam-border">
+              <h2 className="font-bold">Log a Call</h2>
+              <button onClick={() => setShowLog(false)}><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-sm font-medium text-slate-300 mb-1.5 block">Caller</label>
+                <input
+                  value={form.caller}
+                  onChange={(e) => setForm((p) => ({ ...p, caller: e.target.value }))}
+                  placeholder="+353 1 234 5678"
+                  className="input-field"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-slate-300 mb-1.5 block">Direction</label>
+                  <select value={form.direction} onChange={(e) => setForm((p) => ({ ...p, direction: e.target.value }))} className="input-field">
+                    <option value="inbound">Inbound</option>
+                    <option value="outbound">Outbound</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-300 mb-1.5 block">Outcome</label>
+                  <select value={form.outcome} onChange={(e) => setForm((p) => ({ ...p, outcome: e.target.value }))} className="input-field capitalize">
+                    {OUTCOMES.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-300 mb-1.5 block">Duration</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" min="0" value={form.minutes} onChange={(e) => setForm((p) => ({ ...p, minutes: e.target.value }))} className="input-field" />
+                  <span className="text-sm text-slate-500">min</span>
+                  <input type="number" min="0" max="59" value={form.seconds} onChange={(e) => setForm((p) => ({ ...p, seconds: e.target.value }))} className="input-field" />
+                  <span className="text-sm text-slate-500">sec</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-300 mb-1.5 block">Summary (optional)</label>
+                <textarea
+                  value={form.summary}
+                  onChange={(e) => setForm((p) => ({ ...p, summary: e.target.value }))}
+                  placeholder="What was the call about?"
+                  className="input-field min-h-[80px] resize-none"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowLog(false)} className="btn-secondary flex-1">Cancel</button>
+                <button onClick={logCall} disabled={!form.caller.trim() || saving} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Log Call
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

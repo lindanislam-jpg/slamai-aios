@@ -26,3 +26,19 @@ export function formatRelativeTime(date: Date | string) {
 export function truncate(str: string, n: number) {
   return str.length > n ? str.slice(0, n - 1) + "…" : str;
 }
+
+/** Minimum password length, enforced on registration and on password change alike. */
+export const MIN_PASSWORD_LENGTH = 12;
+
+export function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${String(s).padStart(2, "0")}s`;
+}
+
+export function formatBytes(bytes: number) {
+  if (!bytes) return "—";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}

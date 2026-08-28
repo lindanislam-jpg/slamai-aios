@@ -8,27 +8,32 @@ A map of this codebase: "I want to change X → go to this file."
 
 | I want to change… | Go to |
 |---|---|
-| Prices on the public site | `src/app/page.tsx` → `plans` array (line ~29) |
-| Module names/descriptions on the public site | `src/app/page.tsx` → `modules` array (line ~10) |
-| Headline / hero copy | `src/app/page.tsx` → HERO section (line ~76) |
-| Stats ("10,000+ agents deployed") | `src/app/page.tsx` → `stats` array (line ~52) |
-| Footer | `src/app/page.tsx` → FOOTER section (bottom of file) |
+| Prices (site AND checkout AND settings) | `src/lib/plans.ts` → the `PLANS` array — **one place, everywhere** |
+| Module names/descriptions on the public site | `src/app/page.tsx` → `modules` array |
+| Headline / hero copy | `src/app/page.tsx` → HERO section |
+| Stats ("10,000+ agents deployed") | `src/app/page.tsx` → `stats` array |
+| Footer | `src/app/page.tsx` → FOOTER section |
 | Browser tab title, SEO description | `src/app/layout.tsx` → `metadata` |
-| Brand colours (purple, dark background) | `tailwind.config.ts` → `colors.brand` and `colors.slam` |
+| Brand colours (purple, dark background) | `tailwind.config.ts` → `colors.brand` / `colors.slam` |
 | Fonts | `tailwind.config.ts` → `fontFamily` |
 | Buttons / glass / gradient styles | `src/app/globals.css` |
-| Left sidebar menu items | `src/components/dashboard/Sidebar.tsx` → `nav` array (line ~14) |
+| Left sidebar menu items | `src/components/dashboard/Sidebar.tsx` → `nav` array |
 | Top bar (search, notifications, avatar) | `src/components/dashboard/Header.tsx` |
+| Loading / error / empty screens | `src/components/dashboard/States.tsx` |
 | Login page | `src/app/(auth)/login/page.tsx` |
 | Sign-up page | `src/app/(auth)/register/page.tsx` |
-| Who can log in / password rules | `src/lib/auth.ts` and `src/app/api/auth/register/route.ts` |
+| Minimum password length | `src/lib/utils.ts` → `MIN_PASSWORD_LENGTH` |
+| Who can log in | `src/lib/auth.ts` |
 | Database tables and fields | `prisma/schema.prisma` |
-| Demo/starter data | `prisma/seed.ts` |
+| Demo data and the admin account | `prisma/seed.ts` (reads env vars — no passwords in code) |
 | The AI's personality when chatting | `src/app/api/agents/chat/route.ts` → the `system` message |
-| The AI's marketing writing instructions | `src/app/api/marketing/generate/route.ts` → `prompts` object |
+| The AI's marketing writing instructions | `src/app/api/marketing/generate/route.ts` → `prompts` |
 | The AI's document-analysis instructions | `src/app/api/documents/analyze/route.ts` → `modePrompts` |
-| Which OpenAI model is used | Same three files above — search for `gpt-4o` |
-| Port the app runs on | `package.json` → `dev` / `start` scripts (currently 3005) |
+| Which OpenAI model is used | Those three files — search for `gpt-4o` |
+| Which apps appear in Automation | `src/lib/integrations.ts` → `PROVIDERS` |
+| Stripe checkout / portal behaviour | `src/app/api/stripe/checkout/route.ts`, `portal/route.ts` |
+| What happens when someone pays | `src/app/api/stripe/webhook/route.ts` |
+| Port the app runs on | `package.json` → `dev` / `start` scripts (3005) |
 
 ---
 
@@ -37,52 +42,53 @@ A map of this codebase: "I want to change X → go to this file."
 ```
 src/
   app/
-    page.tsx              ← THE PUBLIC WEBSITE (everything a visitor sees)
-    layout.tsx            ← site-wide title/SEO/toast notifications
-    globals.css           ← shared styles (.btn-primary, .glass, .gradient-text)
+    page.tsx              ← THE PUBLIC WEBSITE
+    layout.tsx            ← site-wide title/SEO/notifications
+    globals.css           ← shared styles
 
     (auth)/               ← pages for logged-OUT people
-      login/page.tsx
-      register/page.tsx
+      login/ register/
 
     (dashboard)/          ← pages for logged-IN people
-      layout.tsx          ← the "you must be signed in" gate + sidebar frame
-      dashboard/page.tsx  ← the main overview screen
-      agents/page.tsx     ← AI Agent Hub
-      crm/page.tsx        ← CRM
-      automation/page.tsx
-      marketing/page.tsx
-      voice-ai/page.tsx
-      documents/page.tsx
-      analytics/page.tsx
-      projects/page.tsx
-      marketplace/page.tsx
-      website/page.tsx
+      layout.tsx          ← the "you must be signed in" gate
+      dashboard/          ← overview
+      agents/ crm/ automation/ marketing/ voice-ai/
+      documents/ analytics/ projects/ marketplace/ website/
+      settings/           ← profile, password, billing
 
-    api/                  ← THE BACK END (no visuals, just logic)
-      auth/register       ← creates accounts
-      auth/[...nextauth]  ← handles sign in/out
-      agents              ← list/create agents
-      agents/chat         ← talks to OpenAI
-      crm/contacts        ← list/create contacts
-      projects            ← list/create projects
-      marketing/generate  ← AI writes marketing content
-      documents/analyze   ← AI reads documents
-      dashboard/stats     ← the numbers on the overview screen
+    api/                  ← THE BACK END
+      auth/               register · [...nextauth]
+      agents/             list · create · [id] · chat
+      crm/                contacts · contacts/[id] · deals
+      projects/           list · create · [id]
+      tasks/              list · create · [id]
+      documents/          list · create · [id] · analyze
+      campaigns/          list · create · [id]
+      workflows/          list · create · [id]
+      integrations/       list · connect
+      voice/calls         list · record
+      websites/           list · create · [id]
+      marketplace/        catalogue · install
+      analytics/          real aggregates
+      dashboard/stats     overview numbers, chart, activity
+      settings/           profile · password
+      stripe/             checkout · portal · webhook
 
-  components/
-    dashboard/Sidebar.tsx ← left menu
-    dashboard/Header.tsx  ← top bar
-    SessionProvider.tsx
-
+  components/dashboard/   Sidebar · Header · States
   lib/
-    auth.ts               ← login rules
-    db.ts                 ← database connection
-    utils.ts              ← small helpers
+    auth.ts               login rules
+    db.ts                 database connection
+    api.ts                requireUser() + shared route helpers
+    useApi.ts             useResource() hook + mutate()
+    plans.ts              ← PRICING LIVES HERE
+    plan-pricing.ts       server-only Stripe price lookups
+    stripe.ts  openai.ts  lazy API clients
+    integrations.ts       the provider list
+    utils.ts              formatting helpers
 
 prisma/
-  schema.prisma           ← the shape of the database
-  seed.ts                 ← demo data + the admin account
+  schema.prisma           the shape of the database
+  seed.ts                 admin account + marketplace catalogue
 ```
 
 **The naming rule:** a folder in `src/app/` becomes a web address. `src/app/(dashboard)/crm/page.tsx` is the page at `/crm`. Folders in `(brackets)` are grouping only — they do **not** appear in the URL.
@@ -92,63 +98,70 @@ prisma/
 ## Common jobs, step by step
 
 ### Change a price
-1. Open `src/app/page.tsx`
-2. Find `const plans = [` near the top
-3. Edit `price:` — it's a plain number; the `€` is added automatically
+Open `src/lib/plans.ts`, edit `price:` in the `PLANS` array. That updates the landing page, the settings page, and what Stripe charges — all three read from it. If the plan is new, add its Stripe price ID env var too.
 
-### Add a new page to the dashboard
+### Add a new dashboard page
 1. Create `src/app/(dashboard)/yourpage/page.tsx`
-2. Add an entry to the `nav` array in `src/components/dashboard/Sidebar.tsx`
-3. Icons come from `lucide-react` — pick one at lucide.dev and add it to the import list
+2. Add an entry to `nav` in `src/components/dashboard/Sidebar.tsx`
+3. Icons come from lucide.dev — add yours to the import list
 
-### Change what an AI agent says
-- **Per agent:** the `systemPrompt` field on that agent (set at creation, stored in the database)
-- **The fallback for all agents:** `src/app/api/agents/chat/route.ts`, the `content:` under `role: "system"`
+### Add a page that loads data
+```tsx
+const { data, loading, error, refresh } = useResource<Thing[]>("/api/things");
+```
+Then render `<LoadingState/>`, `<ErrorState/>` or `<EmptyState/>` from `components/dashboard/States`. Every dashboard page follows this pattern.
 
-### Add a field to the database (e.g. a contact's website)
-1. Add the field in `prisma/schema.prisma` under the right `model`
+### Add a new API route
+Copy an existing one. Every route starts with:
+```ts
+const gate = await requireUser();
+if (!gate.ok) return gate.response;
+```
+and scopes every query by `gate.userId` so one account can never read another's data.
+
+### Add a field to the database
+1. Add it in `prisma/schema.prisma`
 2. Run `npm run db:push`
-3. Then use it in the API route and the page
+3. Use it in the API route and the page
 
 ---
 
-## Important: current state of the build
+## Current state
 
-**The dashboard pages are all front-end mockups.** Not one of the eleven dashboard pages calls the back end — the numbers, charts, call logs, and workflows you see are hardcoded arrays inside each page file. The API routes underneath them are real and working, but nothing is plugged into them yet.
+**Working end to end:** sign-up, sign-in, password change, profile editing, AI agents and chat, CRM contacts and deals, projects and tasks, marketing generation with saved campaigns, document analysis with saved results, automation workflows, integration toggles, call logging, website records, marketplace install/uninstall, analytics, and Stripe checkout + customer portal + webhook.
 
-Only two things are genuinely wired end to end:
-- **Sign up** (`register/page.tsx` → `/api/auth/register` → database)
-- **Sign in** (`login/page.tsx` → `src/lib/auth.ts` → database)
+Every dashboard page reads and writes real records scoped to the signed-in user. There is no hardcoded sample data left in the UI.
 
-So: editing a dashboard page changes what's on screen, but it isn't reading real data yet. Connecting a page means replacing its hardcoded array with a call to the matching API route.
+**Needs configuration before it works in production:**
 
-**Not built at all:**
-- Stripe billing — the package is installed but there is no checkout, no subscription handling, no webhook. Every "Get Started" button just goes to the sign-up page.
-- A `/settings` page — the sidebar links to it, but the page doesn't exist (that link 404s).
-- Voice AI, Automation, Website Builder, Marketplace — visuals only, no back end behind them.
+| Feature | What's needed |
+|---|---|
+| Billing | Stripe keys + a price ID per plan, and a webhook endpoint pointed at `/api/stripe/webhook` |
+| AI features | `OPENAI_API_KEY` |
+| Voice AI | A telephony provider (Twilio/Vonage) posting to `POST /api/voice/calls`. Calls can be logged by hand until then. |
+| Integrations | Each provider's OAuth credentials. Toggling one records your choice; no data syncs yet. |
+| Website builder | Records and tracks sites. It does not yet generate or host the site itself. |
 
----
-
-## Security — worth fixing
-
-Your admin password is written in plain text in two files that are committed to GitHub:
-- `prisma/seed.ts` (line 8)
-- `Start SlamAI AIOS.bat`
-
-Anyone who can see the repository can read it. Two things to do: change that password wherever else you use it, and move it into an environment variable so it isn't in the code.
+**Known gap:** `npm run lint` prompts to configure ESLint because the project has no ESLint config file. `npm run build` type-checks everything, so this doesn't block you.
 
 ---
 
 ## Environment variables
 
-Set these in `.env.local` locally, and in Vercel's dashboard for the live site. They are deliberately not in the repo.
+Copy `.env.example` to `.env.local` and fill it in. On Vercel, set the same values in the project's Environment Variables.
 
 | Variable | What it's for |
 |---|---|
-| `DATABASE_URL` | Postgres connection |
-| `DIRECT_URL` | Postgres direct connection (for migrations) |
-| `NEXTAUTH_SECRET` | Signs login sessions |
+| `DATABASE_URL` / `DIRECT_URL` | Postgres |
+| `NEXTAUTH_SECRET` | Signs login sessions (`openssl rand -base64 32`) |
+| `NEXTAUTH_URL` | Public site URL — used for Stripe redirects |
 | `OPENAI_API_KEY` | Every AI feature |
+| `STRIPE_SECRET_KEY` | Billing |
+| `STRIPE_WEBHOOK_SECRET` | Verifies webhooks are really from Stripe |
+| `STRIPE_PRICE_*` | One price ID per paid plan |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seed script only — never read at runtime |
+
+Missing keys degrade gracefully: AI and billing routes return a clear 503 rather than crashing.
 
 ---
 
@@ -156,9 +169,8 @@ Set these in `.env.local` locally, and in Vercel's dashboard for the live site. 
 
 ```bash
 npm run dev        # run locally at http://localhost:3005
-npm run build      # production build — run before pushing to catch errors
+npm run build      # production build — run before pushing, it type-checks everything
 npm run db:push    # apply schema.prisma changes to the database
-npm run db:studio  # browse the database in a visual editor
-npm run db:seed    # load the demo data
-npm run lint       # check code style
+npm run db:studio  # browse the database visually
+npm run db:seed    # create the admin account (needs ADMIN_EMAIL + ADMIN_PASSWORD)
 ```

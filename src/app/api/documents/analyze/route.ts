@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { getOpenAI, isOpenAIConfigured } from "@/lib/openai";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!isOpenAIConfigured()) {
+    return NextResponse.json(
+      { error: "AI features are unavailable — OPENAI_API_KEY is not configured." },
+      { status: 503 }
+    );
+  }
 
   const { text, question, mode } = await req.json();
   if (!text) return NextResponse.json({ error: "Document text required" }, { status: 400 });
@@ -20,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const prompt = modePrompts[mode || "summarize"];
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     messages: [
       { role: "system", content: "You are an expert document analyst. Provide clear, structured, and actionable insights from documents." },

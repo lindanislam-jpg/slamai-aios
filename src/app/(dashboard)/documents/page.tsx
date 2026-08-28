@@ -3,9 +3,17 @@
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import Header from "@/components/dashboard/Header";
-import { FileText, Upload, Search, Loader2, Sparkles, Copy, Check, Brain, FileSearch, ListFilter, MessageSquare } from "lucide-react";
+import { FileText, Upload, Loader2, Sparkles, Copy, Check, Brain, FileSearch, ListFilter, MessageSquare, Save, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import axios from "axios";
+import { useResource, mutate } from "@/lib/useApi";
+import { LoadingState, ErrorState, EmptyState } from "@/components/dashboard/States";
+import { formatRelativeTime, formatBytes } from "@/lib/utils";
+
+interface SavedDocument {
+  id: string; name: string; type: string; size: number;
+  summary: string | null; createdAt: string;
+}
 
 const modes = [
   { id: "summarize", label: "Summarize",    icon: FileText,   desc: "Get a comprehensive summary" },
@@ -22,11 +30,45 @@ export default function DocumentsPage() {
   const [result,   setResult]  = useState("");
   const [loading,  setLoading] = useState(false);
   const [copied,   setCopied]  = useState(false);
+  const [saving,   setSaving]  = useState(false);
+  const [fileSize, setFileSize]= useState(0);
+
+  const documents = useResource<SavedDocument[]>("/api/documents");
+
+  async function saveDocument() {
+    if (!result) return;
+    setSaving(true);
+    try {
+      await mutate("/api/documents", "POST", {
+        name:    fileName || `Pasted document — ${new Date().toLocaleDateString("en-IE")}`,
+        type:    fileName.split(".").pop()?.toLowerCase() || "text",
+        size:    fileSize || text.length,
+        summary: result,
+      });
+      await documents.refresh();
+      toast.success("Analysis saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the analysis");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteDocument(id: string) {
+    try {
+      await mutate(`/api/documents/${id}`, "DELETE");
+      await documents.refresh();
+      toast.success("Document deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete the document");
+    }
+  }
 
   const onDrop = useCallback((files: File[]) => {
     const file = files[0];
     if (!file) return;
     setFileName(file.name);
+    setFileSize(file.size);
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
@@ -140,9 +182,19 @@ export default function DocumentsPage() {
                 <p className="text-sm">AI is analyzing your document…</p>
               </div>
             ) : result ? (
-              <div className="flex-1 bg-slam-dark rounded-xl p-4 overflow-y-auto">
-                <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">{result}</pre>
-              </div>
+              <>
+                <div className="flex-1 bg-slam-dark rounded-xl p-4 overflow-y-auto">
+                  <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">{result}</pre>
+                </div>
+                <button
+                  onClick={saveDocument}
+                  disabled={saving}
+                  className="btn-secondary text-sm py-2 mt-4 flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  Save Analysis
+                </button>
+              </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-600">
                 <FileSearch className="w-12 h-12" />
@@ -152,20 +204,48 @@ export default function DocumentsPage() {
           </div>
         </div>
 
-        {/* Features */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { label: "PDF Analysis",       desc: "Extract text and insights from PDF files",         icon: FileText, color: "text-red-400"    },
-            { label: "Data Extraction",    desc: "Pull key numbers, names, and dates automatically", icon: ListFilter, color: "text-blue-400"  },
-            { label: "Document Compare",   desc: "Compare two versions to identify changes",          icon: Search, color: "text-purple-400"  },
-            { label: "Smart Q&A",          desc: "Ask natural language questions about any doc",     icon: MessageSquare, color: "text-green-400" },
-          ].map(f => (
-            <div key={f.label} className="glass rounded-xl p-4 card-hover">
-              <f.icon className={`w-6 h-6 ${f.color} mb-3`} />
-              <h4 className="font-medium text-sm mb-1">{f.label}</h4>
-              <p className="text-xs text-slate-500">{f.desc}</p>
+        {/* Saved documents */}
+        <div>
+          <h3 className="font-semibold mb-4">Saved Analyses</h3>
+
+          {documents.loading ? (
+            <LoadingState label="Loading your documents…" />
+          ) : documents.error ? (
+            <ErrorState message={documents.error} onRetry={documents.refresh} />
+          ) : (documents.data ?? []).length === 0 ? (
+            <div className="glass rounded-2xl">
+              <EmptyState
+                icon={FileSearch}
+                title="Nothing saved yet"
+                description="Analyse a document above and hit Save Analysis to keep it here."
+              />
             </div>
-          ))}
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(documents.data ?? []).map((d) => (
+                <div key={d.id} className="glass rounded-xl p-4 card-hover flex flex-col">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-4 h-4 text-brand-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-medium text-sm truncate">{d.name}</h4>
+                      <p className="text-xs text-slate-600">
+                        {d.type.toUpperCase()} · {formatBytes(d.size)} · {formatRelativeTime(d.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                  {d.summary && <p className="text-xs text-slate-500 line-clamp-4 flex-1">{d.summary}</p>}
+                  <button
+                    onClick={() => deleteDocument(d.id)}
+                    className="mt-3 text-xs text-slate-600 hover:text-red-400 transition-colors flex items-center gap-1 self-start"
+                  >
+                    <Trash2 className="w-3 h-3" />Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
