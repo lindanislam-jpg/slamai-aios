@@ -18,6 +18,8 @@ model User {
   role          String    @default("user")
   plan          String    @default("free")
   company       String?
+  /// Set once the user dismisses the setup checklist on the dashboard.
+  onboardingDismissed Boolean @default(false)
 
   stripeCustomerId     String?   @unique
   stripeSubscriptionId String?

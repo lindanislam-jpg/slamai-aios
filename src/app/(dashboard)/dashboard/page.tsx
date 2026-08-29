@@ -10,6 +10,7 @@ import {
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 import { useResource } from "@/lib/useApi";
 import { LoadingState, ErrorState } from "@/components/dashboard/States";
+import SetupChecklist from "@/components/dashboard/SetupChecklist";
 
 interface ActivityItem { kind: "contact" | "agent" | "campaign" | "document"; text: string; at: string }
 
@@ -63,6 +64,8 @@ export default function DashboardPage() {
             <span className="text-sm text-green-400 font-medium">All systems operational</span>
           </div>
         </div>
+
+        <SetupChecklist />
 
         {loading ? (
           <LoadingState label="Loading your workspace…" />

@@ -38,6 +38,8 @@ A map of this codebase: "I want to change X → go to this file."
 | The phone conversation loop | `src/app/api/voice/twilio/respond/route.ts` |
 | Turning a call into a CRM lead | `src/app/api/voice/twilio/status/route.ts` |
 | Which voices are offered | `src/lib/voices.ts` |
+| The new-customer setup checklist steps | `src/app/api/onboarding/route.ts` → the `steps` array |
+| How the checklist looks | `src/components/dashboard/SetupChecklist.tsx` |
 | Stripe checkout / portal behaviour | `src/app/api/stripe/checkout/route.ts`, `portal/route.ts` |
 | What happens when someone pays | `src/app/api/stripe/webhook/route.ts` |
 | Port the app runs on | `package.json` → `dev` / `start` scripts (3005) |
@@ -139,7 +141,7 @@ and scopes every query by `gate.userId` so one account can never read another's 
 
 ## Current state
 
-**Working end to end:** sign-up, sign-in, password change, profile editing, AI agents and chat, CRM contacts and deals, projects and tasks, marketing generation with saved campaigns, document analysis with saved results, automation workflows, integration toggles, website records, marketplace install/uninstall, analytics, Stripe checkout + customer portal + webhook, and the **Twilio phone agent** — it answers calls, holds a conversation, transfers to a human, and files the caller as a CRM lead.
+**Working end to end:** sign-up, sign-in, password change, profile editing, AI agents and chat, CRM contacts and deals, projects and tasks, marketing generation with saved campaigns, document analysis with saved results, automation workflows, integration toggles, website records, marketplace install/uninstall, analytics, Stripe checkout + customer portal + webhook, and the **Twilio phone agent** — it answers calls, holds a conversation, transfers to a human, and files the caller as a CRM lead. New customers get a setup checklist on the dashboard that walks them from sign-up to a live answered phone.
 
 Every dashboard page reads and writes real records scoped to the signed-in user. There is no hardcoded sample data left in the UI.
 
@@ -199,4 +201,5 @@ npm run build      # production build — run before pushing, it type-checks eve
 npm run db:push    # apply schema.prisma changes to the database
 npm run db:studio  # browse the database visually
 npm run db:seed    # create the admin account (needs ADMIN_EMAIL + ADMIN_PASSWORD)
+npm run check:defaults  # guards the setup checklist against schema drift
 ```
