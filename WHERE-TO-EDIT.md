@@ -10,8 +10,10 @@ A map of this codebase: "I want to change X → go to this file."
 |---|---|
 | Prices (site AND checkout AND settings) | `src/lib/plans.ts` → the `PLANS` array — **one place, everywhere** |
 | Module names/descriptions on the public site | `src/app/page.tsx` → `modules` array |
+| The four "what happens when someone rings" steps | `src/app/page.tsx` → `howItWorks` array |
+| The example call transcript on the site | `src/app/page.tsx` → SAMPLE CALL section |
+| Your demo number, contact email, booking link | `src/lib/site.ts` (set via `NEXT_PUBLIC_*` env vars) |
 | Headline / hero copy | `src/app/page.tsx` → HERO section |
-| Stats ("10,000+ agents deployed") | `src/app/page.tsx` → `stats` array |
 | Footer | `src/app/page.tsx` → FOOTER section |
 | Browser tab title, SEO description | `src/app/layout.tsx` → `metadata` |
 | Brand colours (purple, dark background) | `tailwind.config.ts` → `colors.brand` / `colors.slam` |

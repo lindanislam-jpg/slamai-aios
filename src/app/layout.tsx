@@ -3,13 +3,14 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
-  title: "SlamAI AIOS – The Operating System for Modern Business",
+  title: "SlamAI — AI that answers your phone and books the job",
   description:
-    "One Platform. Infinite Intelligence. Deploy AI agents, automate workflows, manage leads, create content, and grow your business with SlamAI AIOS.",
-  keywords: "AI agents, business automation, CRM, AI operating system, SlamAI",
+    "An AI phone agent for Irish service businesses. It answers every call, talks to the customer, books them in, and writes the lead straight into your CRM. Works at 9pm on a Sunday.",
+  keywords: "AI phone agent, AI receptionist, missed calls, voice AI, CRM, Ireland, SlamAI",
   openGraph: {
-    title: "SlamAI AIOS™",
-    description: "The AI Operating System for Modern Business",
+    title: "SlamAI — stop losing jobs to missed calls",
+    description:
+      "An AI that answers your phone, books the customer in, and files the lead in your CRM.",
     type: "website",
   },
 };
