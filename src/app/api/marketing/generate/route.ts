@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { getOpenAI, isOpenAIConfigured } from "@/lib/openai";
 
 const prompts: Record<string, string> = {
   linkedin:    "Write a professional LinkedIn post",
@@ -18,6 +16,13 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (!isOpenAIConfigured()) {
+    return NextResponse.json(
+      { error: "AI features are unavailable — OPENAI_API_KEY is not configured." },
+      { status: 503 }
+    );
+  }
+
   const { type, topic, tone, audience } = await req.json();
   if (!type || !topic) return NextResponse.json({ error: "type and topic required" }, { status: 400 });
 
@@ -25,7 +30,7 @@ export async function POST(req: NextRequest) {
   const systemMsg  = `You are an expert marketing copywriter. Create compelling, conversion-focused content.`;
   const userMsg    = `${basePrompt} about: "${topic}". Tone: ${tone || "professional"}. Target audience: ${audience || "general business"}. Make it engaging and action-oriented.`;
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     messages: [{ role: "system", content: systemMsg }, { role: "user", content: userMsg }],
     max_tokens: 1500,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sparkles, Mail, Lock, User, Eye, EyeOff, Loader2, Check } from "lucide-react";
 import toast from "react-hot-toast";
+import { MIN_PASSWORD_LENGTH } from "@/lib/utils";
 import axios from "axios";
 
 export default function RegisterPage() {
@@ -17,10 +18,17 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password.length < 8) { toast.error("Password must be at least 8 characters"); return; }
+    if (password.length < MIN_PASSWORD_LENGTH) { toast.error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`); return; }
     setLoading(true);
     try {
       await axios.post("/api/auth/register", { name, email, password });
+
+      // Carry a plan chosen on the pricing page through sign-in to checkout.
+      const plan = new URLSearchParams(window.location.search).get("plan");
+      if (plan) {
+        try { sessionStorage.setItem("pendingPlan", plan); } catch { /* private mode — skip */ }
+      }
+
       toast.success("Account created! Please sign in.");
       router.push("/login");
     } catch (err: unknown) {
@@ -31,7 +39,7 @@ export default function RegisterPage() {
     }
   }
 
-  const strength = password.length >= 8 ? (password.match(/[A-Z]/) && password.match(/[0-9]/) ? "strong" : "medium") : password.length > 0 ? "weak" : "";
+  const strength = password.length >= MIN_PASSWORD_LENGTH ? (password.match(/[A-Z]/) && password.match(/[0-9]/) ? "strong" : "medium") : password.length > 0 ? "weak" : "";
 
   return (
     <div className="min-h-screen hero-bg flex items-center justify-center px-4 py-12">
@@ -67,7 +75,7 @@ export default function RegisterPage() {
               <label className="text-sm font-medium text-slate-300 mb-1.5 block">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input type={show ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="Min. 8 characters" className="input-field pl-10 pr-10" required />
+                <input type={show ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder={`Min. ${MIN_PASSWORD_LENGTH} characters`} className="input-field pl-10 pr-10" required />
                 <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
                   {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>

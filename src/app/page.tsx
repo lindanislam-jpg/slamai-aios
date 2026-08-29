@@ -1,56 +1,71 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { PLANS } from "@/lib/plans";
+import { site, telHref } from "@/lib/site";
 import {
   Bot, Zap, Users, Globe, Megaphone, Mic, FileText,
-  BarChart3, Kanban, Store, ChevronRight, Star, Check,
-  ArrowRight, Sparkles, Shield, TrendingUp, Clock
+  BarChart3, Kanban, Store, Star, Check, PhoneCall,
+  ArrowRight, Sparkles, PhoneIncoming, ClipboardCheck, UserPlus, Mail,
 } from "lucide-react";
 
+/** What happens on a call, in the order it happens. */
+const howItWorks = [
+  {
+    icon: PhoneIncoming,
+    step: "Someone rings",
+    desc: "Your AI answers on the first ring — evenings, weekends, while you're on a job.",
+  },
+  {
+    icon: Mic,
+    step: "It has a conversation",
+    desc: "It asks what they need, answers questions about your business, and offers to book them in.",
+  },
+  {
+    icon: ClipboardCheck,
+    step: "You get the transcript",
+    desc: "Every call is written up and summarised. Nothing depends on you remembering it.",
+  },
+  {
+    icon: UserPlus,
+    step: "The lead lands in your CRM",
+    desc: "Their name, number and what they wanted — filed automatically, ready to follow up.",
+  },
+];
+
+/** The rest of the platform, honestly framed as what surrounds the phone agent. */
 const modules = [
-  { icon: Bot,       title: "AI Agent Hub",        desc: "Deploy specialized AI employees: sales, support, HR, finance, and more.",       color: "from-purple-500 to-indigo-600" },
-  { icon: Users,     title: "CRM System",           desc: "Manage contacts, pipelines, and deals with AI-powered lead scoring.",            color: "from-blue-500 to-cyan-600" },
-  { icon: Zap,       title: "Automation Center",    desc: "Connect Gmail, Slack, Shopify, Stripe and automate any business workflow.",      color: "from-yellow-500 to-orange-600" },
-  { icon: Globe,     title: "Website Builder",      desc: "Create AI-powered websites, landing pages, and e-commerce stores in minutes.",   color: "from-green-500 to-emerald-600" },
-  { icon: Megaphone, title: "Marketing AI",         desc: "Generate and schedule content for LinkedIn, Instagram, email, and more.",        color: "from-pink-500 to-rose-600" },
-  { icon: Mic,       title: "Voice AI",             desc: "AI phone agents that answer calls, book appointments, and qualify leads 24/7.",   color: "from-cyan-500 to-blue-600" },
-  { icon: FileText,  title: "Document Intelligence",desc: "Upload PDFs, Excel, CAD files — AI reads, summarizes, and answers questions.",   color: "from-violet-500 to-purple-600" },
-  { icon: BarChart3, title: "Analytics Dashboard",  desc: "Real-time revenue, leads, AI usage, and team productivity in one view.",         color: "from-teal-500 to-green-600" },
-  { icon: Kanban,    title: "Project Management",   desc: "Kanban boards, tasks, team collaboration with AI meeting summaries.",            color: "from-orange-500 to-red-600" },
-  { icon: Store,     title: "AI Marketplace",       desc: "Install industry-specific agents: logistics, real estate, insurance, and more.", color: "from-indigo-500 to-blue-600" },
+  { icon: Users,     title: "CRM",                 desc: "Contacts, pipeline and deals. Callers land here on their own." },
+  { icon: Bot,       title: "AI Agent Hub",        desc: "Specialist assistants for support, sales, finance and more." },
+  { icon: Megaphone, title: "Marketing AI",        desc: "Write posts, emails and ad copy, then keep them as campaigns." },
+  { icon: FileText,  title: "Document Intelligence", desc: "Upload a document and ask it questions. Save the analysis." },
+  { icon: Zap,       title: "Automation",          desc: "Connect a trigger in one part of the business to an action in another." },
+  { icon: BarChart3, title: "Analytics",           desc: "Revenue, pipeline and AI usage — all from your own records." },
+  { icon: Kanban,    title: "Projects",            desc: "Boards and tasks to track the work the calls turn into." },
+  { icon: Globe,     title: "Website Builder",     desc: "Track the sites and landing pages you run." },
+  { icon: Store,     title: "Marketplace",         desc: "Install a ready-made agent built for your industry." },
 ];
 
-const plans = [
-  {
-    name: "Starter",    price: 49,  period: "month",
-    features: ["1 user", "1 AI assistant", "Basic automation", "5 GB storage", "Email support"],
-    color: "border-slate-700", cta: "Start Free Trial", popular: false,
-  },
-  {
-    name: "Professional", price: 149, period: "month",
-    features: ["5 users", "All AI agents", "CRM system", "Marketing AI", "Analytics", "Website builder", "Priority support"],
-    color: "border-brand-500", cta: "Get Started", popular: true,
-  },
-  {
-    name: "Business",   price: 499, period: "month",
-    features: ["Unlimited users", "Voice AI", "Advanced automations", "Custom branding", "API access", "Dedicated manager"],
-    color: "border-slate-700", cta: "Get Started", popular: false,
-  },
-  {
-    name: "Enterprise", price: 1999, period: "month",
-    features: ["Everything in Business", "White-label platform", "Custom AI agents", "SLA guarantee", "Onboarding & training"],
-    color: "border-yellow-500", cta: "Contact Sales", popular: false,
-  },
-];
-
-const stats = [
-  { label: "AI Agents Deployed", value: "10,000+", icon: Bot },
-  { label: "Hours Automated Weekly", value: "500K+",  icon: Clock },
-  { label: "Businesses Powered",   value: "2,500+",  icon: TrendingUp },
-  { label: "Uptime Guarantee",     value: "99.9%",   icon: Shield },
-];
+const plans = PLANS.filter((p) => p.id !== "free");
 
 export default function LandingPage() {
+  const router = useRouter();
+
+  /**
+   * Checkout needs an account, so a visitor picking a plan is sent to sign-up
+   * with the plan remembered; from there they land on Settings to complete it.
+   */
+  function choosePlan(planId: string) {
+    if (planId === "enterprise" && site.contactEmail) {
+      window.location.href = `mailto:${site.contactEmail}?subject=Enterprise%20enquiry`;
+      return;
+    }
+    router.push(`/register?plan=${planId}`);
+  }
+
+  const demoHref = site.demoNumber ? telHref(site.demoNumber) : site.bookingUrl || null;
+
   return (
     <div className="min-h-screen bg-slam-dark text-slate-100 overflow-x-hidden">
 
@@ -64,9 +79,9 @@ export default function LandingPage() {
             <span className="font-bold text-lg">SlamAI <span className="text-brand-400">AIOS</span></span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">
-            <a href="#modules"  className="hover:text-white transition-colors">Modules</a>
+            <a href="#how"      className="hover:text-white transition-colors">How it works</a>
+            <a href="#platform" className="hover:text-white transition-colors">Platform</a>
             <a href="#pricing"  className="hover:text-white transition-colors">Pricing</a>
-            <a href="#features" className="hover:text-white transition-colors">Features</a>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/login"    className="text-sm text-slate-400 hover:text-white transition-colors px-4 py-2">Sign In</Link>
@@ -76,78 +91,94 @@ export default function LandingPage() {
       </nav>
 
       {/* HERO */}
-      <section className="hero-bg pt-32 pb-24 px-6 text-center relative">
+      <section className="hero-bg pt-32 pb-20 px-6 text-center relative">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-600/10 rounded-full blur-3xl" />
           <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl" />
         </div>
-        <div className="relative max-w-5xl mx-auto">
+        <div className="relative max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-brand-950/60 border border-brand-800 rounded-full px-4 py-1.5 text-sm text-brand-300 mb-8">
             <Sparkles className="w-3.5 h-3.5" />
-            Introducing SlamAI AIOS™ — One Platform. Infinite Intelligence.
+            AI phone agents for Irish service businesses
           </div>
+
           <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight">
-            The <span className="gradient-text">AI Operating System</span><br />for Modern Business
+            Stop losing jobs to<br /><span className="gradient-text">missed calls</span>
           </h1>
-          <p className="text-xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
-            Replace repetitive work with AI digital employees. Deploy agents, automate workflows, manage customers, create content, and grow your business — all from one intelligent platform.
+
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+            An AI that answers your phone, talks to the customer properly, books them in, and
+            writes the lead straight into your CRM. It works at 9pm on a Sunday.
           </p>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register" className="btn-primary text-base py-3.5 px-8 flex items-center gap-2 justify-center">
-              Start Free Trial <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link href="/login" className="btn-secondary text-base py-3.5 px-8 flex items-center gap-2 justify-center">
-              View Demo <ChevronRight className="w-4 h-4" />
+            {demoHref && (
+              <a href={demoHref} className="btn-primary text-base py-3.5 px-8 flex items-center gap-2 justify-center">
+                <PhoneCall className="w-4 h-4" />
+                {site.demoNumber ? `Ring it: ${site.demoNumber}` : "Book a live demo"}
+              </a>
+            )}
+            <Link
+              href="/register"
+              className={`${demoHref ? "btn-secondary" : "btn-primary"} text-base py-3.5 px-8 flex items-center gap-2 justify-center`}
+            >
+              Start free trial <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          <p className="text-sm text-slate-500 mt-4">No credit card required · 14-day free trial · Cancel anytime</p>
+
+          <p className="text-sm text-slate-500 mt-4">
+            {site.demoNumber
+              ? "That's a real number. Talk to the agent yourself before you decide anything."
+              : "14-day free trial · No credit card required · Cancel anytime"}
+          </p>
         </div>
       </section>
 
-      {/* STATS */}
-      <section className="py-16 border-y border-slam-border bg-slam-card/30">
-        <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
-          {stats.map((s) => (
-            <div key={s.label} className="text-center">
-              <s.icon className="w-6 h-6 text-brand-400 mx-auto mb-2" />
-              <div className="text-3xl font-bold gradient-text">{s.value}</div>
-              <div className="text-sm text-slate-500 mt-1">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* MODULES */}
-      <section id="modules" className="py-24 px-6">
-        <div className="max-w-7xl mx-auto">
+      {/* HOW IT WORKS */}
+      <section id="how" className="py-24 px-6 border-y border-slam-border bg-slam-card/20">
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">10 Powerful Modules.<br /><span className="gradient-text">One Unified Platform.</span></h2>
-            <p className="text-slate-400 text-lg max-w-2xl mx-auto">Everything your business needs to automate, grow, and scale — powered by the world&apos;s most advanced AI models.</p>
+            <h2 className="text-4xl font-bold mb-4">What happens when someone rings</h2>
+            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+              Four steps, no work from you after setup.
+            </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {modules.map((m) => (
-              <div key={m.title} className="glass rounded-xl p-6 card-hover cursor-pointer group">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${m.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                  <m.icon className="w-6 h-6 text-white" />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {howItWorks.map((s, i) => (
+              <div key={s.step} className="glass rounded-xl p-6 relative">
+                <div className="absolute top-6 right-6 text-3xl font-black text-slam-border select-none">
+                  {i + 1}
                 </div>
-                <h3 className="font-semibold text-slate-100 mb-2">{m.title}</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">{m.desc}</p>
+                <div className="w-11 h-11 rounded-xl bg-brand-600/20 flex items-center justify-center mb-4">
+                  <s.icon className="w-5 h-5 text-brand-400" />
+                </div>
+                <h3 className="font-semibold text-slate-100 mb-2">{s.step}</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">{s.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* FEATURES HIGHLIGHT */}
-      <section id="features" className="py-24 px-6 bg-slam-card/20">
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center">
+      {/* SAMPLE CALL */}
+      <section className="py-24 px-6">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
           <div>
-            <h2 className="text-4xl font-bold mb-6">Your AI Team.<br /><span className="gradient-text">Working 24/7.</span></h2>
+            <h2 className="text-4xl font-bold mb-6">It holds a<br /><span className="gradient-text">real conversation</span></h2>
             <p className="text-slate-400 mb-8 leading-relaxed text-lg">
-              SlamAI AIOS gives your business a full team of AI employees — each specialized for a different function. They learn your business, follow your workflows, and never take a day off.
+              You write the instructions in plain English — what you do, what you charge, what it
+              should never promise. It sticks to them, asks one question at a time, and hands the
+              call to you if the customer asks for a person.
             </p>
             <div className="space-y-4">
-              {["Multi-language support for global teams", "Long-term memory across sessions", "Voice conversations on any device", "Seamless integrations with 50+ tools", "White-label ready for agencies"].map((f) => (
+              {[
+                "Answers every call, 24/7",
+                "Transfers to your mobile on request",
+                "Full transcript of every conversation",
+                "Captures the caller as a CRM lead automatically",
+                "You set the voice, the greeting and the rules",
+              ].map((f) => (
                 <div key={f} className="flex items-center gap-3">
                   <div className="w-5 h-5 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
                     <Check className="w-3 h-3 text-white" />
@@ -157,26 +188,66 @@ export default function LandingPage() {
               ))}
             </div>
             <Link href="/register" className="btn-primary mt-8 inline-flex items-center gap-2">
-              Deploy Your AI Team <ArrowRight className="w-4 h-4" />
+              Set yours up <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          <div className="glass rounded-2xl p-6 space-y-4">
-            {[
-              { agent: "Customer Support Agent", status: "Active", msg: "Resolved 47 tickets today", color: "bg-green-500" },
-              { agent: "Sales Agent",            status: "Active", msg: "Qualified 12 new leads",    color: "bg-blue-500"  },
-              { agent: "Marketing Agent",        status: "Active", msg: "Published 3 campaigns",     color: "bg-purple-500"},
-              { agent: "Finance Agent",          status: "Active", msg: "Generated 8 invoices",      color: "bg-yellow-500"},
-            ].map((a) => (
-              <div key={a.agent} className="flex items-center gap-4 p-4 bg-slam-dark/50 rounded-xl border border-slam-border">
-                <div className={`w-2.5 h-2.5 rounded-full ${a.color} animate-pulse`} />
-                <div className="flex-1">
-                  <div className="font-medium text-sm">{a.agent}</div>
-                  <div className="text-xs text-slate-500">{a.msg}</div>
+
+          {/* An illustrative script, labelled as one — not presented as live data. */}
+          <div className="glass rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-5 pb-4 border-b border-slam-border">
+              <PhoneIncoming className="w-4 h-4 text-brand-400" />
+              <span className="text-sm font-medium">Example call</span>
+              <span className="text-xs text-slate-600 ml-auto">Illustration</span>
+            </div>
+            <div className="space-y-3">
+              {[
+                { who: "agent",  text: "Good evening, thanks for calling Murphy Plumbing. How can I help?" },
+                { who: "caller", text: "Yeah, hi — I've a leak under the kitchen sink." },
+                { who: "agent",  text: "Sorry to hear that. Is water still coming out, or have you managed to stop it?" },
+                { who: "caller", text: "I turned it off at the mains." },
+                { who: "agent",  text: "Good call, that buys us time. Can I take your name and the area you're in?" },
+                { who: "caller", text: "Dave Kelly, out in Clondalkin." },
+                { who: "agent",  text: "Thanks Dave. I can get someone to you tomorrow morning — does nine o'clock suit?" },
+              ].map((m, i) => (
+                <div key={i} className={`flex ${m.who === "caller" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                    m.who === "caller"
+                      ? "bg-brand-600 text-white rounded-br-sm"
+                      : "bg-slam-dark border border-slam-border text-slate-300 rounded-bl-sm"
+                  }`}>
+                    {m.text}
+                  </div>
                 </div>
-                <span className="text-xs text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full">{a.status}</span>
+              ))}
+            </div>
+            <div className="mt-5 pt-4 border-t border-slam-border flex items-center gap-2 text-sm">
+              <UserPlus className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+              <span className="text-slate-400">Dave Kelly saved to your CRM, tagged</span>
+              <span className="text-cyan-400 text-xs bg-cyan-500/10 px-2 py-0.5 rounded-full">voice-ai</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PLATFORM */}
+      <section id="platform" className="py-24 px-6 bg-slam-card/20 border-y border-slam-border">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold mb-4">And the rest of the business,<br /><span className="gradient-text">in the same place</span></h2>
+            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+              The phone agent is the front door. Behind it is everything the call turns into.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {modules.map((m) => (
+              <div key={m.title} className="glass rounded-xl p-6 card-hover">
+                <div className="w-11 h-11 rounded-xl bg-brand-600/20 flex items-center justify-center mb-4">
+                  <m.icon className="w-5 h-5 text-brand-400" />
+                </div>
+                <h3 className="font-semibold text-slate-100 mb-2">{m.title}</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">{m.desc}</p>
               </div>
             ))}
-            <div className="text-center pt-2 text-sm text-slate-500">Live AI team dashboard · Updates every 30s</div>
           </div>
         </div>
       </section>
@@ -186,11 +257,11 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h2>
-            <p className="text-slate-400 text-lg">Scale as you grow. Start free, upgrade anytime.</p>
+            <p className="text-slate-400 text-lg">Every plan starts with a 14-day free trial.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {plans.map((p) => (
-              <div key={p.name} className={`glass rounded-2xl p-6 border-2 ${p.color} relative ${p.popular ? "scale-105 glow-purple" : ""}`}>
+              <div key={p.id} className={`glass rounded-2xl p-6 border-2 relative ${p.popular ? "border-brand-500 scale-105 glow-purple" : "border-slate-700"}`}>
                 {p.popular && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-600 text-white text-xs font-bold px-4 py-1 rounded-full flex items-center gap-1">
                     <Star className="w-3 h-3" /> Most Popular
@@ -198,6 +269,7 @@ export default function LandingPage() {
                 )}
                 <div className="mb-6">
                   <h3 className="font-bold text-lg mb-1">{p.name}</h3>
+                  <p className="text-xs text-slate-500 mb-3">{p.tagline}</p>
                   <div className="flex items-baseline gap-1">
                     <span className="text-4xl font-black">€{p.price.toLocaleString()}</span>
                     <span className="text-slate-500">/{p.period}</span>
@@ -211,12 +283,12 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href="/register"
-                  className={`block text-center py-2.5 rounded-lg font-semibold text-sm transition-all ${p.popular ? "btn-primary" : "btn-secondary"}`}
+                <button
+                  onClick={() => choosePlan(p.id)}
+                  className={`block w-full text-center py-2.5 rounded-lg font-semibold text-sm transition-all ${p.popular ? "btn-primary" : "btn-secondary"}`}
                 >
                   {p.cta}
-                </Link>
+                </button>
               </div>
             ))}
           </div>
@@ -226,12 +298,25 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="py-24 px-6 text-center">
         <div className="max-w-3xl mx-auto glass rounded-3xl p-12 glow-purple">
-          <Sparkles className="w-12 h-12 text-brand-400 mx-auto mb-6" />
-          <h2 className="text-4xl font-black mb-4">Ready to Run Your Business on AI?</h2>
-          <p className="text-slate-400 text-lg mb-8">Join thousands of businesses already using SlamAI AIOS to work smarter, faster, and more profitably.</p>
-          <Link href="/register" className="btn-primary text-base py-4 px-10 inline-flex items-center gap-2">
-            Get Started Free <ArrowRight className="w-5 h-5" />
-          </Link>
+          <PhoneCall className="w-12 h-12 text-brand-400 mx-auto mb-6" />
+          <h2 className="text-4xl font-black mb-4">How many calls did you miss this week?</h2>
+          <p className="text-slate-400 text-lg mb-8">
+            Every one of them was someone ready to buy. Set your AI up in an afternoon and stop
+            finding out about them from a voicemail.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link href="/register" className="btn-primary text-base py-4 px-10 inline-flex items-center gap-2 justify-center">
+              Start free trial <ArrowRight className="w-5 h-5" />
+            </Link>
+            {site.contactEmail && (
+              <a
+                href={`mailto:${site.contactEmail}`}
+                className="btn-secondary text-base py-4 px-10 inline-flex items-center gap-2 justify-center"
+              >
+                <Mail className="w-4 h-4" /> Talk to us first
+              </a>
+            )}
+          </div>
           <p className="text-sm text-slate-600 mt-4">14-day free trial · No credit card required</p>
         </div>
       </section>
@@ -243,9 +328,20 @@ export default function LandingPage() {
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center">
               <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="font-bold">SlamAI AIOS™</span>
+            <span className="font-bold">SlamAI AIOS</span>
           </div>
-          <p className="text-sm text-slate-600">The Operating System for Modern Business</p>
+          <div className="flex items-center gap-6 text-sm text-slate-500">
+            {site.demoNumber && (
+              <a href={telHref(site.demoNumber)} className="hover:text-slate-300 transition-colors">
+                {site.demoNumber}
+              </a>
+            )}
+            {site.contactEmail && (
+              <a href={`mailto:${site.contactEmail}`} className="hover:text-slate-300 transition-colors">
+                {site.contactEmail}
+              </a>
+            )}
+          </div>
           <p className="text-sm text-slate-600">© {new Date().getFullYear()} SlamAI. All rights reserved.</p>
         </div>
       </footer>

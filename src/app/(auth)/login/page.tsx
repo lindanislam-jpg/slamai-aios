@@ -21,7 +21,15 @@ export default function LoginPage() {
     setLoading(false);
     if (res?.ok) {
       toast.success("Welcome back!");
-      router.push("/dashboard");
+
+      // If they picked a plan before signing up, take them straight to checkout.
+      let pendingPlan: string | null = null;
+      try {
+        pendingPlan = sessionStorage.getItem("pendingPlan");
+        if (pendingPlan) sessionStorage.removeItem("pendingPlan");
+      } catch { /* private mode — skip */ }
+
+      router.push(pendingPlan ? "/settings" : "/dashboard");
     } else {
       toast.error("Invalid email or password");
     }
