@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { HABIT_BY_ID } from "@/lib/life/habits";
-import { addDays, monthOf, parseKey, shortDate } from "@/lib/life/date";
+import { monthOf, parseKey, shortDate } from "@/lib/life/date";
 import {
   bestStreakIn,
   challengeProgress,

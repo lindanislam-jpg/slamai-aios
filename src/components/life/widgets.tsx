@@ -172,7 +172,7 @@ export function HabitCard({
  * ------------------------------------------------------------------ */
 
 export function NextActionPanel() {
-  const { state, today, completeMorningStep, togglePriority, toggleHabit, notify } = useLife();
+  const { state, completeMorningStep, togglePriority, toggleHabit, notify } = useLife();
   const now = useNow(15_000);
   const router = useRouter();
   const na = nextAction(state, now);

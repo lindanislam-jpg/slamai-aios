@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useLife } from "@/lib/life/store";
 import { Icon } from "@/components/life/icons";
-import { Btn, Chip, EmptyState, Field, Kicker, Modal, Panel, SectionHeader, TextArea } from "@/components/life/ui";
+import { Btn, EmptyState, Field, Kicker, Modal, Panel, SectionHeader, TextArea } from "@/components/life/ui";
 import type { Person, PersonImpact } from "@/lib/life/types";
 
 const IMPACTS: { id: PersonImpact; label: string; icon: string; tone: string; line: string }[] = [
