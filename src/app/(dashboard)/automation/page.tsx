@@ -4,7 +4,7 @@ import { useState } from "react";
 import Header from "@/components/dashboard/Header";
 import {
   Zap, Plus, Play, Pause, Trash2, Clock, Link2, X, Loader2,
-  Mail, MessageSquare, Database, FileText, ShoppingBag, CreditCard, Calendar, Calculator,
+  Mail, MessageSquare, Database, ShoppingBag, CreditCard, Calendar, Calculator,
   type LucideIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
