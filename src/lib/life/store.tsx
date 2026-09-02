@@ -111,6 +111,11 @@ interface LifeContext {
   deleteDemoHistory: () => void;
 }
 
+/** Fixed ids used by the old seed, so its samples can be cleaned up later. */
+const LEGACY_PERSON_IDS = new Set(["p1", "p2", "p3", "p4", "p5"]);
+const LEGACY_PLACE_IDS = new Set(["pl1", "pl2", "pl3", "pl4", "pl5", "pl6"]);
+const LEGACY_ENV_IDS = new Set(["e1", "e2", "e3", "e4", "e5"]);
+
 const Ctx = createContext<LifeContext | null>(null);
 
 export function useLife(): LifeContext {
@@ -395,7 +400,21 @@ export function LifeProvider({ children }: { children: React.ReactNode }) {
 
       deleteDemoHistory() {
         const days = Object.fromEntries(Object.entries(state.days).filter(([, v]) => !v.seeded));
-        dispatch({ type: "patch", patch: { days, seededAt: undefined } });
+        dispatch({
+          type: "patch",
+          patch: {
+            days,
+            seededAt: undefined,
+            // Earlier versions also seeded invented people and environment changes.
+            // Those carried fixed ids; anything the user added has a UUID, so this
+            // clears the samples without touching real entries.
+            people: state.people.filter((p) => !LEGACY_PERSON_IDS.has(p.id)),
+            envChanges: state.envChanges.filter((c) => !LEGACY_ENV_IDS.has(c.id)),
+            places: state.places.map((p) =>
+              LEGACY_PLACE_IDS.has(p.id) ? { ...p, status: "needs-work" as const, note: "" } : p,
+            ),
+          },
+        });
       },
     };
   }, [state, ready, today, notices, notify, dismiss, markAllRead, patchDay]);

@@ -36,6 +36,11 @@ export default function SettingsPage() {
 
   const s = state.settings;
   const seeded = Object.values(state.days).filter((d) => d.seeded).length;
+  // Older versions also seeded sample people and environment changes under fixed
+  // ids. Offer the cleanup whenever any of it is still present.
+  const samplePeople = state.people.filter((x) => /^p[1-5]$/.test(x.id)).length;
+  const sampleChanges = state.envChanges.filter((x) => /^e[1-5]$/.test(x.id)).length;
+  const hasSamples = seeded > 0 || samplePeople > 0 || sampleChanges > 0;
   const real = Object.keys(visibleDays(state)).length - (s.showDemoHistory ? seeded : 0);
 
   const download = () => {
@@ -181,6 +186,8 @@ export default function SettingsPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Chip>{real} real day{real === 1 ? "" : "s"} logged</Chip>
           {seeded ? <Chip tone="warn">{seeded} demo days</Chip> : null}
+          {samplePeople ? <Chip tone="warn">{samplePeople} sample people</Chip> : null}
+          {sampleChanges ? <Chip tone="warn">{sampleChanges} sample changes</Chip> : null}
         </div>
 
         <div className="mt-4 divide-y divide-[var(--hair)]">
@@ -211,16 +218,20 @@ export default function SettingsPage() {
               e.target.value = "";
             }}
           />
-          {seeded ? (
+          {hasSamples ? (
             <Btn
               icon="Trash2"
               variant="ghost"
               onClick={() => {
                 deleteDemoHistory();
-                notify({ title: "Demo history deleted", body: "Only your own days remain.", tone: "success" });
+                notify({
+                  title: "Sample data deleted",
+                  body: "Generated days, sample people and sample changes are gone. Only your own entries remain.",
+                  tone: "success",
+                });
               }}
             >
-              Delete demo history
+              Delete all sample data
             </Btn>
           ) : null}
           <Btn icon="RotateCcw" variant="ghost" onClick={() => setConfirmReset(true)}>
