@@ -233,7 +233,12 @@ export function momentum(state: LifeState, at: ISODate = dateKey(), now: Date = 
     weighted += score * recency;
     weight += recency;
   });
-  const consistency = weight ? weighted / weight : 0;
+  // Nothing logged in the window: there is no momentum to report, and inventing
+  // one from the neutral fallbacks would put a number on screen that means nothing.
+  if (!weight) {
+    return { score: 0, consistency: 0, trend: 0, rhythm: 0, direction: "stable", delta: 0 };
+  }
+  const consistency = weighted / weight;
 
   const recent = avgScore(state, lastNDays(3, at));
   const prior = avgScore(state, lastNDays(4, addDays(at, -3)));
@@ -268,7 +273,8 @@ function momentumSimple(state: LifeState, at: ISODate): number {
     weighted += dailyScore(d) * recency;
     weight += recency;
   });
-  const consistency = weight ? weighted / weight : 0;
+  if (!weight) return 0;
+  const consistency = weighted / weight;
   const recent = avgScore(state, lastNDays(3, at));
   const prior = avgScore(state, lastNDays(4, addDays(at, -3)));
   const trend = clamp(50 + (recent - prior) * 2.2, 0, 100);

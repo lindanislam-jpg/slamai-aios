@@ -390,11 +390,7 @@ export function LifeProvider({ children }: { children: React.ReactNode }) {
       },
 
       resetAll(withDemo) {
-        const fresh = createInitialState();
-        dispatch({
-          type: "reset",
-          state: withDemo ? fresh : { ...fresh, days: {}, seededAt: undefined },
-        });
+        dispatch({ type: "reset", state: createInitialState(dateKey(), { demo: withDemo }) });
       },
 
       deleteDemoHistory() {

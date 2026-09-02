@@ -502,7 +502,19 @@ export function MomentumFlow({
     return { line: d, area: `${d} L ${W} ${H} L 0 ${H} Z`, last: pts[pts.length - 1] };
   }, [points, H]);
 
-  if (!line) return null;
+  // A flat line at zero looks like data. With nothing logged, say so instead.
+  if (!line || points.every((p) => p.value === 0)) {
+    return (
+      <div
+        className={cn("grid place-items-center text-center", className)}
+        style={{ height: H }}
+      >
+        <p className="max-w-xs text-[13px] leading-relaxed text-[var(--ink-4)]">
+          Your momentum curve starts with the first habit you complete.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" className={cn("overflow-visible", className)}>

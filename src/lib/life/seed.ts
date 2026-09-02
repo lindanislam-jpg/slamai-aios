@@ -160,7 +160,15 @@ export function buildDemoHistory(today: ISODate = dateKey()): Record<ISODate, Da
   return days;
 }
 
-export function createInitialState(today: ISODate = dateKey()): LifeState {
+/**
+ * A fresh install starts EMPTY — no generated history, so every number on the
+ * dashboard is something the user actually did. Pass `{ demo: true }` to seed
+ * the 90-day sample history instead (Settings offers it as an explicit reset).
+ */
+export function createInitialState(
+  today: ISODate = dateKey(),
+  opts: { demo?: boolean } = {},
+): LifeState {
   return {
     version: STATE_VERSION,
     profile: {
@@ -168,7 +176,7 @@ export function createInitialState(today: ISODate = dateKey()): LifeState {
       mission: "Build something people can't ignore, without burning the person who built it.",
     },
     settings: { ...DEFAULT_SETTINGS },
-    days: buildDemoHistory(today),
+    days: opts.demo ? buildDemoHistory(today) : {},
     northStar: {
       label: "Business Growth",
       unit: "€",
@@ -179,17 +187,18 @@ export function createInitialState(today: ISODate = dateKey()): LifeState {
     challenge: {
       title: "Build Something Great",
       why: "Because the version of me I want lives on the other side of finishing this.",
-      startDate: addDays(today, -48),
-      endDate: addDays(today, 42),
+      startDate: today,
+      endDate: addDays(today, 90),
+      // Nothing is pre-completed: the climb starts at the bottom, where you are.
       milestones: [
-        { id: "m1", label: "Commit publicly", at: 0.06, done: true, doneOn: addDays(today, -47) },
-        { id: "m2", label: "First working prototype", at: 0.18, done: true, doneOn: addDays(today, -39) },
-        { id: "m3", label: "Ten real conversations", at: 0.3, done: true, doneOn: addDays(today, -30) },
-        { id: "m4", label: "First paying customer", at: 0.42, done: true, doneOn: addDays(today, -21) },
-        { id: "m5", label: "Rebuild on real feedback", at: 0.54, done: true, doneOn: addDays(today, -11) },
-        { id: "m6", label: "Ten customers", at: 0.67, done: true, doneOn: addDays(today, -3) },
-        { id: "m7", label: "Repeatable acquisition", at: 0.79, done: false },
-        { id: "m8", label: "Hit the North Star", at: 0.9, done: false },
+        { id: "m1", label: "Commit publicly", at: 0.11, done: false },
+        { id: "m2", label: "First working prototype", at: 0.22, done: false },
+        { id: "m3", label: "Ten real conversations", at: 0.33, done: false },
+        { id: "m4", label: "First paying customer", at: 0.44, done: false },
+        { id: "m5", label: "Rebuild on real feedback", at: 0.55, done: false },
+        { id: "m6", label: "Ten customers", at: 0.67, done: false },
+        { id: "m7", label: "Repeatable acquisition", at: 0.78, done: false },
+        { id: "m8", label: "Hit the North Star", at: 0.89, done: false },
         { id: "m9", label: "Ship it publicly", at: 1, done: false },
       ],
     },
@@ -200,30 +209,21 @@ export function createInitialState(today: ISODate = dateKey()): LifeState {
       dailyTarget: 10,
       startedOn: addDays(today, -21),
     },
-    people: [
-      { id: "p1", name: "Thabo", relation: "Business partner", impact: "raises", note: "Pushes the standard up every single week. More time here." },
-      { id: "p2", name: "Nomsa", relation: "Mentor", impact: "raises", note: "Monthly call. Ask harder questions next time." },
-      { id: "p3", name: "The training crew", relation: "Gym", impact: "raises", note: "Turning up is easier because they're there." },
-      { id: "p4", name: "Old work group chat", relation: "Former colleagues", impact: "neutral", note: "Warm, but pulls the conversation backwards." },
-      { id: "p5", name: "Sam", relation: "Friend", impact: "drains", note: "Every conversation ends in complaints. Reduce to daylight only." },
-    ],
+    // No invented relationships, no pre-ticked changes: People and Environment
+    // start empty and fill up with what the user actually observes.
+    people: [],
+    // The six spaces worth auditing, all unassessed until the user rates them.
     places: [
-      { id: "pl1", name: "Workspace", category: "physical", status: "optimized", note: "Desk cleared each night. Phone charges in the hall." },
-      { id: "pl2", name: "Home", category: "physical", status: "needs-work", note: "TV is still the default. Move the reading chair." },
-      { id: "pl3", name: "Gym", category: "physical", status: "optimized", note: "Bag packed the night before. Nine minutes away." },
-      { id: "pl4", name: "Phone", category: "digital", status: "needs-work", note: "Home screen is clean, but notifications are still loud." },
-      { id: "pl5", name: "Social media", category: "digital", status: "hostile", note: "Apps deleted from phone. Browser only, after 18:00." },
-      { id: "pl6", name: "Inbox", category: "digital", status: "needs-work", note: "Opens too early. Closed until priority one is done." },
+      { id: "pl1", name: "Workspace", category: "physical", status: "needs-work", note: "" },
+      { id: "pl2", name: "Home", category: "physical", status: "needs-work", note: "" },
+      { id: "pl3", name: "Gym", category: "physical", status: "needs-work", note: "" },
+      { id: "pl4", name: "Phone", category: "digital", status: "needs-work", note: "" },
+      { id: "pl5", name: "Social media", category: "digital", status: "needs-work", note: "" },
+      { id: "pl6", name: "Inbox", category: "digital", status: "needs-work", note: "" },
     ],
-    envChanges: [
-      { id: "e1", kind: "easy", text: "Training clothes laid out the night before", done: true, createdOn: addDays(today, -30) },
-      { id: "e2", kind: "easy", text: "Book on the pillow, not the shelf", done: true, createdOn: addDays(today, -24) },
-      { id: "e3", kind: "hard", text: "Social apps deleted from the phone", done: true, createdOn: addDays(today, -18) },
-      { id: "e4", kind: "hard", text: "Phone charges outside the bedroom", done: false, createdOn: addDays(today, -6) },
-      { id: "e5", kind: "easy", text: "Water bottle filled and beside the bed", done: false, createdOn: addDays(today, -2) },
-    ],
+    envChanges: [],
     coach: [],
-    seededAt: new Date().toISOString(),
+    seededAt: opts.demo ? new Date().toISOString() : undefined,
     createdAt: new Date().toISOString(),
   };
 }
