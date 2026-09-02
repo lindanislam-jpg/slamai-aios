@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  LayoutDashboard, Bot, Users, Zap, Globe, Megaphone,
+  LayoutDashboard, Bot, Users, Zap, Globe, Megaphone, Compass,
   Mic, FileText, BarChart3, Kanban, Store,
   Sparkles, LogOut, Settings, ChevronRight
 } from "lucide-react";
@@ -22,6 +22,7 @@ const nav = [
   { href: "/projects",     label: "Projects",        icon: Kanban },
   { href: "/marketplace",  label: "Marketplace",     icon: Store },
   { href: "/website",      label: "Website Builder", icon: Globe },
+  { href: "/life",         label: "Elite Life OS",   icon: Compass },
 ];
 
 export default function Sidebar() {

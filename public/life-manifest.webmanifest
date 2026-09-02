@@ -1,0 +1,21 @@
+{
+  "name": "Elite Life OS",
+  "short_name": "Life OS",
+  "description": "A personal operating system built on eight habits. Win tomorrow tonight.",
+  "start_url": "/life",
+  "scope": "/life",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#06070a",
+  "theme_color": "#06070a",
+  "categories": ["productivity", "lifestyle", "health"],
+  "icons": [
+    { "src": "/life-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/life-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Morning Mode", "url": "/life/morning" },
+    { "name": "Journal", "url": "/life/journal" },
+    { "name": "Night Routine", "url": "/life/night" }
+  ]
+}
