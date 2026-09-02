@@ -1,0 +1,10 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 794, "h": 1123, "title": "Flyer — Editorial (A4)", "print": "fixed" },
+    { "file": "DirectionB.dc.html", "x": 900, "y": 0, "w": 794, "h": 1123, "title": "Direction B — Bold navy (A4)", "print": "fixed" }
+  ],
+  "annotations": [
+    { "id": "brief", "x": 0, "y": -150, "w": 500, "text": "Two directions, same content, real A4 (794x1123 @ 96dpi).\nLeft = editorial serif on warm off-white. Right = bold navy poster.\nSwap [YOUR EMAIL] and [YOUR WEBSITE] for the real ones before printing." }
+  ],
+  "launch": { "view": "canvas" }
+}
