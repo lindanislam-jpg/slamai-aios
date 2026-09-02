@@ -155,6 +155,19 @@ Every dashboard page reads and writes real records scoped to the signed-in user.
 | Integrations | Each provider's OAuth credentials. Toggling one records your choice; no data syncs yet. |
 | Website builder | Records and tracks sites. It does not yet generate or host the site itself. |
 
+### Where this deploys
+
+The Vercel project is **slamai-aios**, connected to `lindanislam-jpg/slamai-aios`,
+building from `main`. Every push to `main` deploys automatically; there is no
+manual step. It serves `slamai-aios.vercel.app`.
+
+Note this is a *different* Vercel project from the one serving slamai.ie. When
+you point the domain here, also change `NEXTAUTH_URL` to `https://slamai.ie`,
+or sign-in redirects and Stripe returns will send people to the wrong address.
+
+Redeploying an old deployment from the Vercel dashboard rebuilds *that commit*,
+not the latest code — push to `main` instead.
+
 ### Connecting the phone agent
 
 1. Buy a number in Twilio.
