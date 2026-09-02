@@ -4,32 +4,30 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Header from "@/components/dashboard/Header";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Bot, Users, FileText, Megaphone, Zap, TrendingUp, ArrowUpRight, Sparkles, Clock, BarChart3, Kanban } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Bot, Users, FileText, Megaphone, TrendingUp, ArrowUpRight, ArrowDownRight, Sparkles, Clock, BarChart3, Kanban, Inbox } from "lucide-react";
+import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 import axios from "axios";
+
+type ActivityKind = "contact" | "agent" | "document" | "campaign" | "project";
+
+interface ActivityItem { kind: ActivityKind; label: string; at: string }
 
 interface Stats {
   agents: number; contacts: number; documents: number; campaigns: number;
-  projects: number; conversations: number; totalRevenue: number; totalDeals: number;
+  projects: number; conversations: number; totalRevenue: number; totalDeals: number; wonDeals: number;
+  series: { label: string; revenue: number; leads: number; aiMessages: number }[];
+  changes: { revenue: number | null; leads: number | null };
+  activity: ActivityItem[];
 }
 
-const chartData = [
-  { month: "Jan", revenue: 4200, leads: 24, aiUsage: 340 },
-  { month: "Feb", revenue: 5800, leads: 31, aiUsage: 420 },
-  { month: "Mar", revenue: 7200, leads: 45, aiUsage: 580 },
-  { month: "Apr", revenue: 6400, leads: 38, aiUsage: 510 },
-  { month: "May", revenue: 9100, leads: 62, aiUsage: 720 },
-  { month: "Jun", revenue: 11400, leads: 78, aiUsage: 890 },
-];
-
-const recentActivity = [
-  { icon: Bot,      label: "Sales Agent qualified 3 new leads",     time: "2 min ago",  color: "text-purple-400" },
-  { icon: Users,    label: "New contact added: Sarah Johnson",       time: "15 min ago", color: "text-blue-400"   },
-  { icon: Megaphone,label: "LinkedIn campaign published",            time: "1 hr ago",   color: "text-pink-400"   },
-  { icon: FileText, label: "Invoice PDF analyzed and summarized",    time: "2 hrs ago",  color: "text-green-400"  },
-  { icon: Zap,      label: "Workflow: new customer onboarded",       time: "3 hrs ago",  color: "text-yellow-400" },
-];
+const activityStyle: Record<ActivityKind, { icon: typeof Bot; color: string }> = {
+  contact:  { icon: Users,     color: "text-blue-400"   },
+  agent:    { icon: Bot,       color: "text-purple-400" },
+  document: { icon: FileText,  color: "text-green-400"  },
+  campaign: { icon: Megaphone, color: "text-pink-400"   },
+  project:  { icon: Kanban,    color: "text-yellow-400" },
+};
 
 const quickActions = [
   { href: "/agents",    label: "Deploy Agent",    icon: Bot,       color: "from-purple-600 to-indigo-600" },
@@ -50,6 +48,7 @@ export default function DashboardPage() {
       .catch(() => {});
   }, []);
 
+  const hasRevenue = Boolean(stats?.series?.some(s => s.revenue > 0));
   const firstName = session?.user?.name?.split(" ")[0] || "there";
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -74,19 +73,22 @@ export default function DashboardPage() {
         {/* Stats grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "AI Agents",      value: stats?.agents       ?? 0, icon: Bot,       change: "+2",   color: "text-purple-400", bg: "bg-purple-500/10" },
-            { label: "CRM Contacts",   value: stats?.contacts     ?? 0, icon: Users,     change: "+12%", color: "text-blue-400",   bg: "bg-blue-500/10"   },
-            { label: "Documents",      value: stats?.documents    ?? 0, icon: FileText,  change: "+5",   color: "text-green-400",  bg: "bg-green-500/10"  },
-            { label: "Total Revenue",  value: formatCurrency(stats?.totalRevenue ?? 0), icon: TrendingUp, change: "+18%", color: "text-yellow-400", bg: "bg-yellow-500/10" },
+            { label: "AI Agents",      value: stats?.agents    ?? 0, icon: Bot,      change: null,                       color: "text-purple-400", bg: "bg-purple-500/10" },
+            { label: "CRM Contacts",   value: stats?.contacts  ?? 0, icon: Users,    change: stats?.changes.leads ?? null, color: "text-blue-400",  bg: "bg-blue-500/10"   },
+            { label: "Documents",      value: stats?.documents ?? 0, icon: FileText, change: null,                       color: "text-green-400",  bg: "bg-green-500/10"  },
+            { label: "Revenue (won)",  value: formatCurrency(stats?.totalRevenue ?? 0), icon: TrendingUp, change: stats?.changes.revenue ?? null, color: "text-yellow-400", bg: "bg-yellow-500/10" },
           ].map(s => (
             <div key={s.label} className="glass rounded-xl p-5 card-hover">
               <div className="flex items-start justify-between mb-3">
                 <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center`}>
                   <s.icon className={`w-5 h-5 ${s.color}`} />
                 </div>
-                <span className="text-xs text-green-400 flex items-center gap-0.5 font-medium">
-                  <ArrowUpRight className="w-3 h-3" />{s.change}
-                </span>
+                {s.change !== null && (
+                  <span className={`text-xs flex items-center gap-0.5 font-medium ${s.change >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {s.change >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                    {s.change >= 0 ? "+" : ""}{s.change}%
+                  </span>
+                )}
               </div>
               <div className="text-2xl font-bold text-slate-100">{s.value}</div>
               <div className="text-sm text-slate-500 mt-0.5">{s.label}</div>
@@ -97,48 +99,65 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Revenue chart */}
           <div className="lg:col-span-2 glass rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-1">
               <h3 className="font-semibold">Revenue Overview</h3>
-              <select className="bg-slam-dark border border-slam-border rounded-lg px-3 py-1.5 text-sm text-slate-400 focus:outline-none focus:border-brand-500">
-                <option>Last 6 months</option>
-                <option>Last year</option>
-              </select>
+              <Link href="/analytics" className="text-xs text-brand-400 hover:text-brand-300 font-medium">
+                Full analytics →
+              </Link>
             </div>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a4a" />
-                <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `€${v/1000}k`} />
-                <Tooltip contentStyle={{ background: "#1a1a2e", border: "1px solid #2a2a4a", borderRadius: 8, color: "#f1f5f9" }} formatter={(v) => [`€${v}`, "Revenue"]} />
-                <Area type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={2} fill="url(#revGrad)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <p className="text-xs text-slate-500 mb-4">Won deals over the last 6 months.</p>
+            {hasRevenue ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={stats!.series} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a4a" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} width={56}
+                         tickFormatter={v => (v >= 1000 ? `€${v / 1000}k` : `€${v}`)} />
+                  <Tooltip contentStyle={{ background: "#1a1a2e", border: "1px solid #2a2a4a", borderRadius: 8, color: "#f1f5f9" }}
+                           cursor={{ fill: "rgba(99,102,241,0.08)" }}
+                           formatter={(v: number) => [formatCurrency(v), "Revenue"]} />
+                  <Bar dataKey="revenue" fill="#3987e5" radius={[4, 4, 0, 0]} maxBarSize={44} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex flex-col items-center justify-center text-center gap-2">
+                <Inbox className="w-6 h-6 text-slate-600" />
+                <p className="text-sm text-slate-500 max-w-xs">
+                  No won deals yet. Close a deal in the CRM and revenue will show up here.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Activity */}
           <div className="glass rounded-2xl p-6">
             <h3 className="font-semibold mb-4">Recent Activity</h3>
-            <div className="space-y-4">
-              {recentActivity.map((a, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slam-dark border border-slam-border flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <a.icon className={`w-3.5 h-3.5 ${a.color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-300 leading-snug">{a.label}</p>
-                    <p className="text-xs text-slate-600 flex items-center gap-1 mt-1">
-                      <Clock className="w-3 h-3" />{a.time}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {stats && stats.activity.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center gap-2 py-10">
+                <Inbox className="w-6 h-6 text-slate-600" />
+                <p className="text-sm text-slate-500">Nothing has happened yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {(stats?.activity ?? []).map((a, i) => {
+                  const style = activityStyle[a.kind];
+                  const Icon = style.icon;
+                  return (
+                    <div key={`${a.kind}-${i}`} className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-slam-dark border border-slam-border flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Icon className={`w-3.5 h-3.5 ${style.color}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-300 leading-snug">{a.label}</p>
+                        <p className="text-xs text-slate-600 flex items-center gap-1 mt-1">
+                          <Clock className="w-3 h-3" />{formatRelativeTime(a.at)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

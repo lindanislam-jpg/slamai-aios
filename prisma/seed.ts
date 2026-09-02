@@ -37,8 +37,37 @@ async function main() {
     { name: "Aoife O'Brien",  email: "aoife@dublintech.ie",  company: "Dublin Tech",  stage: "prospect",  score: 60 },
   ];
 
-  for (const c of contacts) {
-    await db.contact.create({ data: { ...c, userId: user.id } });
+  // Spread demo records over the past months so the analytics charts have a
+  // shape to draw rather than a single spike at seed time.
+  const monthsAgo = (n: number, day = 12) => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth() - n, day);
+  };
+
+  const createdContacts = [];
+  for (let i = 0; i < contacts.length; i++) {
+    createdContacts.push(
+      await db.contact.create({
+        data: { ...contacts[i], userId: user.id, createdAt: monthsAgo(5 - i, 6 + i * 3) },
+      })
+    );
+  }
+
+  // Demo deals, some won across earlier months and some still open.
+  const deals = [
+    { title: "TechCorp platform rollout", value: 8400,  stage: "won",      closeDate: monthsAgo(4), contactIdx: 0 },
+    { title: "Startups.io pilot",         value: 5200,  stage: "won",      closeDate: monthsAgo(3), contactIdx: 1 },
+    { title: "GrowthCo retainer",         value: 3600,  stage: "won",      closeDate: monthsAgo(1), contactIdx: 2 },
+    { title: "Enterprise IE expansion",   value: 12500, stage: "won",      closeDate: monthsAgo(0), contactIdx: 3 },
+    { title: "Dublin Tech automation",    value: 7400,  stage: "proposal", closeDate: null,         contactIdx: 4 },
+    { title: "TechCorp phase two",        value: 9800,  stage: "prospect", closeDate: null,         contactIdx: 0 },
+  ];
+
+  for (const d of deals) {
+    const { contactIdx, ...rest } = d;
+    await db.deal.create({
+      data: { ...rest, contactId: createdContacts[contactIdx].id, createdAt: rest.closeDate ?? monthsAgo(2) },
+    });
   }
 
   // Demo AI agents
@@ -47,8 +76,34 @@ async function main() {
     { name: "Sales Agent",            type: "sales",            description: "Qualifies leads",        systemPrompt: "You are an expert sales agent." },
   ];
 
+  const createdAgents = [];
   for (const a of agents) {
-    await db.aIAgent.create({ data: { ...a, userId: user.id } });
+    createdAgents.push(await db.aIAgent.create({ data: { ...a, userId: user.id } }));
+  }
+
+  // A few conversations so agent-usage analytics is not empty.
+  const conversations = [
+    { agentIdx: 0, title: "Refund request from a customer",   replies: 6, month: 2 },
+    { agentIdx: 0, title: "Shipping delay follow-up",          replies: 4, month: 1 },
+    { agentIdx: 1, title: "Qualify inbound lead from website", replies: 5, month: 1 },
+    { agentIdx: 1, title: "Pricing questions for enterprise",  replies: 3, month: 0 },
+  ];
+
+  for (const c of conversations) {
+    const at = monthsAgo(c.month, 14);
+    const conv = await db.conversation.create({
+      data: { title: c.title, agentId: createdAgents[c.agentIdx].id, userId: user.id, createdAt: at },
+    });
+    for (let i = 0; i < c.replies; i++) {
+      await db.message.create({
+        data: {
+          role: i % 2 === 0 ? "user" : "assistant",
+          content: i % 2 === 0 ? "Demo question" : "Demo assistant reply",
+          conversationId: conv.id,
+          createdAt: new Date(at.getTime() + i * 60_000),
+        },
+      });
+    }
   }
 
   // Demo project
@@ -79,7 +134,7 @@ async function main() {
   }
 
   console.log("✅ Seed complete");
-  console.log("📧 Login: lindanislam@gmail.com / Sandiso@1988");
+  console.log(`📧 Admin account: ${ADMIN_EMAIL} (password from SEED_ADMIN_PASSWORD)`);
 }
 
 main().catch(console.error).finally(() => db.$disconnect());
