@@ -4,7 +4,7 @@
     { "file": "DirectionB.dc.html", "x": 900, "y": 0, "w": 794, "h": 1123, "title": "Direction B — Bold navy (A4)", "print": "fixed" }
   ],
   "annotations": [
-    { "id": "brief", "x": 0, "y": -160, "w": 520, "text": "Two directions, same content, real A4 (794x1123 @ 96dpi).\nLeft = light editorial, photo panel right. Right = dark poster, photo panel left.\nPhotos were recovered from your original flyer screenshot, so they are\nsoft at print size - send the original image files for a sharper result.\nSwap [YOUR EMAIL] and [YOUR WEBSITE] before sharing." }
+    { "id": "brief", "x": 0, "y": -160, "w": 520, "text": "Two directions, same content, real A4 (794x1123 @ 96dpi).\nLeft = light editorial, photo panel right. Right = dark poster, photo panel left.\nPhotos were recovered from your original flyer screenshot, so they are\nsoft at print size - send the original image files for a sharper result.\nPhone is the only contact detail, by request." }
   ],
   "launch": { "view": "canvas" }
 }
