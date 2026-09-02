@@ -215,4 +215,8 @@ export interface LifeState {
 }
 
 export const STORAGE_KEY = "elite-life-os:v1";
-export const STATE_VERSION = 1;
+/**
+ * 2 — the seeded sample people, places and environment changes shipped by v1 are
+ * removed on load. Nothing invented survives an upgrade.
+ */
+export const STATE_VERSION = 2;

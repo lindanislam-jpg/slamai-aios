@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { clamp, getDay, streak } from "@/lib/life/engine";
+import { getDay, streak } from "@/lib/life/engine";
 import { lastNDays, shortDate } from "@/lib/life/date";
 import { useLife } from "@/lib/life/store";
 import { Ring } from "@/components/life/charts";
@@ -12,18 +12,7 @@ import type { JournalEntry } from "@/lib/life/types";
 
 const EMPTY: JournalEntry = { brainDump: "", gratitude: ["", "", ""] };
 
-/**
- * A motivational read on how much of the noise has left your head — words
- * written, priorities chosen, gratitude named. It is a UI metric, not a
- * measurement of anything clinical, and the page says so.
- */
-function clearness(entry: JournalEntry, prioritiesSet: number): number {
-  const words = entry.brainDump.trim().split(/\s+/).filter(Boolean).length;
-  const dump = clamp(words / 90, 0, 1) * 55;
-  const gratitude = entry.gratitude.filter((g) => g.trim()).length * 10;
-  const priorities = prioritiesSet * 7.5;
-  return Math.round(clamp(dump + gratitude + priorities, 0, 100));
-}
+const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
 export default function JournalPage() {
   const { state, today, patchDay, setHabit, notify } = useLife();
@@ -32,7 +21,10 @@ export default function JournalPage() {
   const [saved, setSaved] = useState(false);
 
   const prioritiesSet = day.priorities.filter((p) => p.title.trim()).length;
-  const score = clearness(entry, prioritiesSet);
+  const words = countWords(entry.brainDump);
+  const gratitudeSet = entry.gratitude.filter((g) => g.trim()).length;
+  // Three sections, each either done or not. Nothing here is estimated.
+  const sectionsDone = (words > 0 ? 1 : 0) + (prioritiesSet === 2 ? 1 : 0) + (gratitudeSet === 3 ? 1 : 0);
 
   const history = useMemo(
     () =>
@@ -55,7 +47,12 @@ export default function JournalPage() {
     }));
     setHabit("journal", true);
     setSaved(true);
-    notify({ title: "Mind cleared", body: `Clearness ${score}%. Head down, day open.`, tone: "success", xp: 15 });
+    notify({
+      title: "Journal saved",
+      body: `${words} word${words === 1 ? "" : "s"} out of your head. Head down, day open.`,
+      tone: "success",
+      xp: 15,
+    });
   };
 
   return (
@@ -71,8 +68,8 @@ export default function JournalPage() {
             <Kicker>Journal streak</Kicker>
             <div className="num mt-1 text-[26px]">{streak(state, "journal")}</div>
           </div>
-          <Ring value={score} size={92} thickness={6} glow={false}>
-            <div className="num text-[20px]">{score}%</div>
+          <Ring value={(sectionsDone / 3) * 100} size={92} thickness={6} glow={false}>
+            <div className="num text-[20px]">{sectionsDone}/3</div>
           </Ring>
         </div>
       </header>
@@ -83,7 +80,7 @@ export default function JournalPage() {
           <span className="num text-[13px] text-[var(--ink-4)]">01</span>
           <span className="kicker">Brain dump</span>
           <span className="ml-auto text-[11px] text-[var(--ink-4)]">
-            {entry.brainDump.trim().split(/\s+/).filter(Boolean).length} words
+            {words} word{words === 1 ? "" : "s"}
           </span>
         </div>
         <textarea
@@ -139,14 +136,23 @@ export default function JournalPage() {
       <Panel className="rise flex flex-wrap items-center justify-between gap-5 p-6">
         <div>
           <div className="flex items-baseline gap-3">
-            <span className="kicker">Mind clearness</span>
+            <span className="kicker">Today&apos;s entry</span>
             {day.journal?.completedAt ? <Chip tone="accent">Completed today</Chip> : null}
           </div>
-          <div className="num mt-2 text-[34px] leading-none">{score}%</div>
-          <p className="mt-2 max-w-md text-[12px] leading-relaxed text-[var(--ink-4)]">
-            A motivational read on how much you have offloaded — words written, priorities chosen, gratitude named.
-            It is a UI metric, nothing more.
-          </p>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-7 gap-y-2">
+            <span>
+              <span className="num text-[30px] leading-none">{words}</span>
+              <span className="ml-2 text-[12px] text-[var(--ink-4)]">word{words === 1 ? "" : "s"}</span>
+            </span>
+            <span>
+              <span className="num text-[30px] leading-none">{prioritiesSet}/2</span>
+              <span className="ml-2 text-[12px] text-[var(--ink-4)]">priorities</span>
+            </span>
+            <span>
+              <span className="num text-[30px] leading-none">{gratitudeSet}/3</span>
+              <span className="ml-2 text-[12px] text-[var(--ink-4)]">gratitude</span>
+            </span>
+          </div>
         </div>
         <Btn variant="accent" size="lg" icon="Check" onClick={finish} disabled={!entry.brainDump.trim()}>
           {saved || day.journal?.completedAt ? "Journal saved" : "Complete journal"}

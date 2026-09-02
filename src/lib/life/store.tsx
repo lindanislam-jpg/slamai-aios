@@ -111,10 +111,29 @@ interface LifeContext {
   deleteDemoHistory: () => void;
 }
 
-/** Fixed ids used by the old seed, so its samples can be cleaned up later. */
+/** Fixed ids used by the old seed, so its samples can be told apart from real
+ *  entries — anything you added yourself carries a UUID. */
 const LEGACY_PERSON_IDS = new Set(["p1", "p2", "p3", "p4", "p5"]);
 const LEGACY_PLACE_IDS = new Set(["pl1", "pl2", "pl3", "pl4", "pl5", "pl6"]);
 const LEGACY_ENV_IDS = new Set(["e1", "e2", "e3", "e4", "e5"]);
+
+/**
+ * Removes everything the app invented — generated days, sample people, sample
+ * environment changes, and the assessments written onto the starting places.
+ * Your own entries are untouched.
+ */
+export function stripSamples(state: LifeState): LifeState {
+  return {
+    ...state,
+    days: Object.fromEntries(Object.entries(state.days).filter(([, v]) => !v.seeded)),
+    seededAt: undefined,
+    people: state.people.filter((p) => !LEGACY_PERSON_IDS.has(p.id)),
+    envChanges: state.envChanges.filter((c) => !LEGACY_ENV_IDS.has(c.id)),
+    places: state.places.map((p) =>
+      LEGACY_PLACE_IDS.has(p.id) ? { ...p, status: "needs-work" as const, note: "" } : p,
+    ),
+  };
+}
 
 const Ctx = createContext<LifeContext | null>(null);
 
@@ -128,12 +147,16 @@ function migrate(raw: unknown): LifeState | null {
   if (!raw || typeof raw !== "object") return null;
   const parsed = raw as Partial<LifeState>;
   if (!parsed.days || !parsed.settings) return null;
-  return {
+  const merged = {
     ...createInitialState(),
     ...parsed,
     version: STATE_VERSION,
     settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
   } as LifeState;
+
+  // v1 shipped invented people, places and history to every install. Clear them
+  // on the way in, so nobody has to find a button to stop seeing strangers.
+  return (parsed.version ?? 1) < 2 ? stripSamples(merged) : merged;
 }
 
 export function LifeProvider({ children }: { children: React.ReactNode }) {
@@ -399,22 +422,7 @@ export function LifeProvider({ children }: { children: React.ReactNode }) {
       },
 
       deleteDemoHistory() {
-        const days = Object.fromEntries(Object.entries(state.days).filter(([, v]) => !v.seeded));
-        dispatch({
-          type: "patch",
-          patch: {
-            days,
-            seededAt: undefined,
-            // Earlier versions also seeded invented people and environment changes.
-            // Those carried fixed ids; anything the user added has a UUID, so this
-            // clears the samples without touching real entries.
-            people: state.people.filter((p) => !LEGACY_PERSON_IDS.has(p.id)),
-            envChanges: state.envChanges.filter((c) => !LEGACY_ENV_IDS.has(c.id)),
-            places: state.places.map((p) =>
-              LEGACY_PLACE_IDS.has(p.id) ? { ...p, status: "needs-work" as const, note: "" } : p,
-            ),
-          },
-        });
+        dispatch({ type: "reset", state: stripSamples(state) });
       },
     };
   }, [state, ready, today, notices, notify, dismiss, markAllRead, patchDay]);
