@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Header from "@/components/dashboard/Header";
-import { Kanban, Plus, Check, Circle, AlertCircle, Loader2, X, Calendar, User } from "lucide-react";
+import { Kanban, Plus, Check, Circle, AlertCircle, Loader2, X, Calendar, User, Save } from "lucide-react";
+import RowMenu from "@/components/dashboard/RowMenu";
+import ConfirmDialog from "@/components/dashboard/ConfirmDialog";
 import toast from "react-hot-toast";
 import axios from "axios";
 
@@ -29,6 +31,10 @@ export default function ProjectsPage() {
   const [name,     setName]     = useState("");
   const [desc,     setDesc]     = useState("");
   const [saving,   setSaving]   = useState(false);
+  // Non-null while the modal is editing an existing project.
+  const [editing,  setEditing]  = useState<Project | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { fetchProjects(); }, []);
 
@@ -41,19 +47,56 @@ export default function ProjectsPage() {
     finally { setLoading(false); }
   }
 
-  async function createProject() {
-    if (!name) return;
+  function openNew() {
+    setEditing(null);
+    setName(""); setDesc("");
+    setShowNew(true);
+  }
+
+  function openEdit(p: Project) {
+    setEditing(p);
+    setName(p.name); setDesc(p.description ?? "");
+    setShowNew(true);
+  }
+
+  async function saveProject() {
+    if (!name.trim()) return;
     setSaving(true);
     try {
-      const r = await axios.post("/api/projects", { name, description: desc });
-      const newProj = { ...r.data, tasks: [] };
-      setProjects(p => [newProj, ...p]);
-      setActive(newProj);
+      if (editing) {
+        const r = await axios.patch(`/api/projects/${editing.id}`, { name, description: desc });
+        setProjects(ps => ps.map(p => (p.id === editing.id ? r.data : p)));
+        setActive(a => (a?.id === editing.id ? r.data : a));
+        toast.success("Project updated");
+      } else {
+        const r = await axios.post("/api/projects", { name, description: desc });
+        const newProj = { ...r.data, tasks: [] };
+        setProjects(p => [newProj, ...p]);
+        setActive(newProj);
+        toast.success("Project created");
+      }
       setShowNew(false);
+      setEditing(null);
       setName(""); setDesc("");
-      toast.success("Project created!");
-    } catch { toast.error("Failed to create project"); }
-    finally { setSaving(false); }
+    } catch {
+      toast.error(editing ? "Failed to update project" : "Failed to create project");
+    } finally { setSaving(false); }
+  }
+
+  async function deleteProject() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await axios.delete(`/api/projects/${pendingDelete.id}`);
+      const remaining = projects.filter(p => p.id !== pendingDelete.id);
+      setProjects(remaining);
+      // Deleting the open project leaves the board with nothing selected.
+      setActive(a => (a?.id === pendingDelete.id ? remaining[0] ?? null : a));
+      toast.success("Project deleted");
+      setPendingDelete(null);
+    } catch {
+      toast.error("Failed to delete project");
+    } finally { setDeleting(false); }
   }
 
   const tasksByStatus = (tasks: Task[], status: string) => tasks.filter(t => t.status === status);
@@ -67,7 +110,7 @@ export default function ProjectsPage() {
         <div className="w-56 border-r border-slam-border bg-slam-card flex flex-col">
           <div className="p-4 border-b border-slam-border flex items-center justify-between">
             <span className="text-sm font-semibold">Projects</span>
-            <button onClick={() => setShowNew(true)} className="w-6 h-6 rounded-md bg-brand-600 flex items-center justify-center hover:bg-brand-700">
+            <button onClick={openNew} aria-label="New project" className="w-6 h-6 rounded-md bg-brand-600 flex items-center justify-center hover:bg-brand-700">
               <Plus className="w-3.5 h-3.5 text-white" />
             </button>
           </div>
@@ -77,10 +120,13 @@ export default function ProjectsPage() {
             ) : projects.length === 0 ? (
               <div className="px-4 py-6 text-center text-xs text-slate-600">No projects yet</div>
             ) : projects.map(p => (
-              <button key={p.id} onClick={() => setActive(p)} className={`w-full text-left px-4 py-3 transition-colors hover:bg-slam-dark/50 ${active?.id === p.id ? "bg-brand-600/10 border-l-2 border-brand-500" : ""}`}>
-                <div className="text-sm font-medium text-slate-200 truncate">{p.name}</div>
-                <div className="text-xs text-slate-500 mt-0.5">{p.tasks.length} tasks</div>
-              </button>
+              <div key={p.id} className={`group flex items-center gap-1 pr-2 transition-colors hover:bg-slam-dark/50 ${active?.id === p.id ? "bg-brand-600/10 border-l-2 border-brand-500" : ""}`}>
+                <button onClick={() => setActive(p)} className="flex-1 min-w-0 text-left px-4 py-3">
+                  <div className="text-sm font-medium text-slate-200 truncate">{p.name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{p.tasks.length} tasks</div>
+                </button>
+                <RowMenu label={p.name} onEdit={() => openEdit(p)} onDelete={() => setPendingDelete(p)} />
+              </div>
             ))}
           </div>
         </div>
@@ -91,7 +137,7 @@ export default function ProjectsPage() {
             <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-600">
               <Kanban className="w-16 h-16" />
               <p>Select or create a project to view the board</p>
-              <button onClick={() => setShowNew(true)} className="btn-primary"><Plus className="w-4 h-4 mr-2 inline" />New Project</button>
+              <button onClick={openNew} className="btn-primary"><Plus className="w-4 h-4 mr-2 inline" />New Project</button>
             </div>
           ) : (
             <div>
@@ -154,8 +200,8 @@ export default function ProjectsPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-slam-border">
-              <h2 className="font-bold">New Project</h2>
-              <button onClick={() => setShowNew(false)}><X className="w-5 h-5 text-slate-500" /></button>
+              <h2 className="font-bold">{editing ? "Edit Project" : "New Project"}</h2>
+              <button onClick={() => { setShowNew(false); setEditing(null); }} aria-label="Close"><X className="w-5 h-5 text-slate-500" /></button>
             </div>
             <div className="p-5 space-y-4">
               <div>
@@ -167,15 +213,25 @@ export default function ProjectsPage() {
                 <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="What is this project about?" className="input-field min-h-[80px] resize-none" />
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setShowNew(false)} className="btn-secondary flex-1">Cancel</button>
-                <button onClick={createProject} disabled={!name || saving} className="btn-primary flex-1 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}Create
+                <button onClick={() => { setShowNew(false); setEditing(null); }} className="btn-secondary flex-1">Cancel</button>
+                <button onClick={saveProject} disabled={!name.trim() || saving} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editing ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  {editing ? "Save Changes" : "Create"}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete project?"
+        message={`${pendingDelete?.name ?? "This project"} and all of its tasks will be permanently removed.`}
+        busy={deleting}
+        onConfirm={deleteProject}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

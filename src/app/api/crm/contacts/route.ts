@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { parseBody, requireUserId, unauthorized } from "@/lib/api";
+import { contactCreateSchema } from "@/lib/schemas";
 
 export async function GET() {
   const userId = await requireUserId();
@@ -15,24 +15,11 @@ export async function GET() {
   return NextResponse.json(contacts);
 }
 
-// Only these fields are accepted; spreading the raw body would let a client
-// set ids, timestamps, or another user's ownership.
-const schema = z.object({
-  name:    z.string().min(1, "Name required"),
-  email:   z.string().email("Invalid email").optional().or(z.literal("")),
-  phone:   z.string().optional(),
-  company: z.string().optional(),
-  stage:   z.string().optional(),
-  score:   z.number().int().min(0).max(100).optional(),
-  tags:    z.string().optional(),
-  notes:   z.string().optional(),
-});
-
 export async function POST(req: NextRequest) {
   const userId = await requireUserId();
   if (!userId) return unauthorized();
 
-  const { data, error } = await parseBody(req, schema);
+  const { data, error } = await parseBody(req, contactCreateSchema);
   if (error) return error;
 
   const contact = await db.contact.create({

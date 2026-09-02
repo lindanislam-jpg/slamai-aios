@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/dashboard/Header";
-import { Megaphone, Sparkles, Copy, Check, Loader2, Linkedin, Twitter, Instagram, Mail, FileText, Video, Mic2, MousePointerClick } from "lucide-react";
+import { Megaphone, Sparkles, Copy, Check, Loader2, Linkedin, Twitter, Instagram, Mail, FileText, Video, Mic2, MousePointerClick, Trash2, Clock } from "lucide-react";
+import ConfirmDialog from "@/components/dashboard/ConfirmDialog";
+import { formatRelativeTime } from "@/lib/utils";
 import toast from "react-hot-toast";
 import axios from "axios";
 
@@ -19,6 +21,10 @@ const contentTypes = [
 
 const tones = ["Professional", "Casual", "Humorous", "Inspirational", "Urgent", "Educational"];
 
+interface Campaign {
+  id: string; name: string; type: string; status: string; content: string | null; createdAt: string;
+}
+
 export default function MarketingPage() {
   const [type,      setType]     = useState("linkedin");
   const [topic,     setTopic]    = useState("");
@@ -27,6 +33,15 @@ export default function MarketingPage() {
   const [content,   setContent]  = useState("");
   const [loading,   setLoading]  = useState(false);
   const [copied,    setCopied]   = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<Campaign | null>(null);
+  const [deleting,  setDeleting] = useState(false);
+
+  useEffect(() => {
+    axios.get<Campaign[]>("/api/marketing/campaigns")
+      .then(r => setCampaigns(r.data))
+      .catch(() => {});
+  }, []);
 
   async function generate() {
     if (!topic) { toast.error("Enter a topic first"); return; }
@@ -35,8 +50,28 @@ export default function MarketingPage() {
     try {
       const r = await axios.post("/api/marketing/generate", { type, topic, tone, audience });
       setContent(r.data.content);
-    } catch { toast.error("Failed to generate content"); }
+      // Saved as a draft campaign server-side; reflect that without a refetch.
+      if (r.data.campaign) setCampaigns(c => [r.data.campaign, ...c]);
+    } catch (err) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      toast.error(status === 503
+        ? "AI is not configured on the server yet"
+        : "Failed to generate content");
+    }
     finally { setLoading(false); }
+  }
+
+  async function deleteCampaign() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await axios.delete(`/api/marketing/campaigns/${pendingDelete.id}`);
+      setCampaigns(c => c.filter(x => x.id !== pendingDelete.id));
+      toast.success("Campaign deleted");
+      setPendingDelete(null);
+    } catch {
+      toast.error("Failed to delete campaign");
+    } finally { setDeleting(false); }
   }
 
   function copyContent() {
@@ -150,30 +185,70 @@ export default function MarketingPage() {
           </div>
         </div>
 
-        {/* Recent campaigns */}
+        {/* Saved campaigns */}
         <div>
-          <h3 className="font-semibold mb-4">Recent Campaigns</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { name: "Q1 LinkedIn Series",  platform: "LinkedIn",  status: "Published", reach: "4.2K", engagement: "8.3%", color: "bg-blue-500/20 text-blue-400" },
-              { name: "Summer Email Blast",  platform: "Email",     status: "Scheduled", reach: "1.8K", engagement: "24%",  color: "bg-green-500/20 text-green-400" },
-              { name: "Product Launch Ads",  platform: "Facebook",  status: "Draft",     reach: "—",    engagement: "—",    color: "bg-yellow-500/20 text-yellow-400" },
-            ].map(c => (
-              <div key={c.name} className="glass rounded-xl p-4 card-hover">
-                <div className="flex items-start justify-between mb-3">
-                  <h4 className="font-medium text-sm">{c.name}</h4>
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${c.color}`}>{c.status}</span>
-                </div>
-                <div className="text-xs text-slate-500 space-y-1">
-                  <div className="flex justify-between"><span>Platform</span><span className="text-slate-300">{c.platform}</span></div>
-                  <div className="flex justify-between"><span>Reach</span><span className="text-slate-300">{c.reach}</span></div>
-                  <div className="flex justify-between"><span>Engagement</span><span className="text-slate-300">{c.engagement}</span></div>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-baseline justify-between mb-1">
+            <h3 className="font-semibold">Saved Campaigns</h3>
+            <span className="text-xs text-slate-600">{campaigns.length} saved</span>
           </div>
+          <p className="text-xs text-slate-500 mb-4">Everything you generate is kept here as a draft.</p>
+          {campaigns.length === 0 ? (
+            <div className="glass rounded-xl p-8 text-center text-sm text-slate-600">
+              Nothing generated yet. Your campaigns will appear here once you create one.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {campaigns.map(c => {
+                const meta = contentTypes.find(t => t.type === c.type);
+                const Icon = meta?.icon ?? Megaphone;
+                return (
+                  <div key={c.id} className="glass rounded-xl p-4 card-hover flex flex-col">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Icon className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
+                        <h4 className="font-medium text-sm truncate">{c.name}</h4>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-yellow-500/20 text-yellow-400 capitalize flex-shrink-0">
+                        {c.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 line-clamp-3 flex-1">{c.content?.slice(0, 160)}</p>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-slam-border/60">
+                      <span className="text-xs text-slate-600 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />{formatRelativeTime(c.createdAt)}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { setContent(c.content ?? ""); setTopic(c.name); }}
+                          className="text-xs text-brand-400 hover:text-brand-300 px-1.5 py-0.5"
+                        >
+                          Open
+                        </button>
+                        <button
+                          onClick={() => setPendingDelete(c)}
+                          aria-label={`Delete ${c.name}`}
+                          className="text-slate-600 hover:text-red-400 transition-colors p-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete campaign?"
+        message={`${pendingDelete?.name ?? "This campaign"} and its generated copy will be permanently removed.`}
+        busy={deleting}
+        onConfirm={deleteCampaign}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

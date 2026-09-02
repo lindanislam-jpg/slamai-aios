@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import Header from "@/components/dashboard/Header";
-import { Bot, Plus, Send, Loader2, Sparkles, Trash2, MessageSquare, X, Brain, Headphones, TrendingUp, Search, DollarSign, Users, Settings2, Cpu } from "lucide-react";
+import { Bot, Plus, Send, Loader2, Sparkles, MessageSquare, X, Brain, Headphones, TrendingUp, Search, DollarSign, Users, Settings2, Cpu, Save } from "lucide-react";
+import RowMenu from "@/components/dashboard/RowMenu";
+import ConfirmDialog from "@/components/dashboard/ConfirmDialog";
 import toast from "react-hot-toast";
 import axios from "axios";
 
-interface Agent { id: string; name: string; type: string; description?: string; isActive: boolean; }
+interface Agent { id: string; name: string; type: string; description?: string; systemPrompt?: string; isActive: boolean; }
 interface Message { role: string; content: string; }
 
 const agentTemplates = [
@@ -33,6 +35,11 @@ export default function AgentsPage() {
   const [selected,    setSelected]    = useState<typeof agentTemplates[0] | null>(null);
   const [customName,  setCustomName]  = useState("");
   const [customPrompt,setCustomPrompt]= useState("");
+  const [editing,     setEditing]     = useState<Agent | null>(null);
+  const [editForm,    setEditForm]    = useState({ name: "", systemPrompt: "", isActive: true });
+  const [savingEdit,  setSavingEdit]  = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Agent | null>(null);
+  const [deleting,    setDeleting]    = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { fetchAgents(); }, []);
@@ -79,6 +86,44 @@ export default function AgentsPage() {
     finally { setChatLoading(false); }
   }
 
+  function openEdit(agent: Agent) {
+    setEditing(agent);
+    setEditForm({
+      name: agent.name,
+      systemPrompt: agent.systemPrompt ?? "",
+      isActive: agent.isActive,
+    });
+  }
+
+  async function saveAgent() {
+    if (!editing || !editForm.name.trim()) return;
+    setSavingEdit(true);
+    try {
+      const r = await axios.patch(`/api/agents/${editing.id}`, editForm);
+      setAgents(prev => prev.map(a => (a.id === editing.id ? r.data : a)));
+      setActiveAgent(a => (a?.id === editing.id ? r.data : a));
+      toast.success("Agent updated");
+      setEditing(null);
+    } catch {
+      toast.error("Failed to update agent");
+    } finally { setSavingEdit(false); }
+  }
+
+  async function deleteAgent() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await axios.delete(`/api/agents/${pendingDelete.id}`);
+      setAgents(prev => prev.filter(a => a.id !== pendingDelete.id));
+      // Close the chat panel if it was open on the deleted agent.
+      setActiveAgent(a => (a?.id === pendingDelete.id ? null : a));
+      toast.success("Agent deleted");
+      setPendingDelete(null);
+    } catch {
+      toast.error("Failed to delete agent");
+    } finally { setDeleting(false); }
+  }
+
   function openChat(agent: Agent) {
     setActiveAgent(agent);
     setMessages([{ role: "assistant", content: `Hi! I'm ${agent.name}. How can I help you today?` }]);
@@ -120,9 +165,14 @@ export default function AgentsPage() {
                       <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${tpl.color} flex items-center justify-center`}>
                         <tpl.icon className="w-5 h-5 text-white" />
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                        <span className="text-xs text-green-400">Active</span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-2 h-2 rounded-full ${agent.isActive ? "bg-green-400 animate-pulse" : "bg-slate-600"}`} />
+                          <span className={`text-xs ${agent.isActive ? "text-green-400" : "text-slate-500"}`}>
+                            {agent.isActive ? "Active" : "Paused"}
+                          </span>
+                        </div>
+                        <RowMenu label={agent.name} onEdit={() => openEdit(agent)} onDelete={() => setPendingDelete(agent)} />
                       </div>
                     </div>
                     <h3 className="font-semibold mb-1">{agent.name}</h3>
@@ -236,8 +286,67 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* Suppress unused import warning */}
-      <div className="hidden"><Trash2 /></div>
+      {/* Edit agent modal */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass rounded-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b border-slam-border">
+              <h2 className="font-bold">Edit Agent</h2>
+              <button onClick={() => setEditing(null)} aria-label="Close"><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label htmlFor="agent-name" className="text-sm font-medium text-slate-300 mb-1.5 block">Name</label>
+                <input
+                  id="agent-name"
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label htmlFor="agent-prompt" className="text-sm font-medium text-slate-300 mb-1.5 block">System prompt</label>
+                <textarea
+                  id="agent-prompt"
+                  value={editForm.systemPrompt}
+                  onChange={e => setEditForm(f => ({ ...f, systemPrompt: e.target.value }))}
+                  placeholder="How should this agent behave?"
+                  className="input-field min-h-[120px] resize-none text-sm"
+                />
+              </div>
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editForm.isActive}
+                  onChange={e => setEditForm(f => ({ ...f, isActive: e.target.checked }))}
+                  className="w-4 h-4 rounded border-slam-border bg-slam-dark accent-brand-600"
+                />
+                <span className="text-sm text-slate-300">Active</span>
+              </label>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setEditing(null)} className="btn-secondary flex-1">Cancel</button>
+                <button
+                  onClick={saveAgent}
+                  disabled={!editForm.name.trim() || savingEdit}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete agent?"
+        message={`${pendingDelete?.name ?? "This agent"} and its conversation history will be permanently removed.`}
+        busy={deleting}
+        onConfirm={deleteAgent}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

@@ -2,11 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Header from "@/components/dashboard/Header";
-import { Users, Plus, Search, Phone, Mail, Building2, TrendingUp, Star, MoreVertical, Loader2, X, ChevronRight } from "lucide-react";
+import { Users, Plus, Search, Phone, Mail, Building2, TrendingUp, Star, Loader2, X, ChevronRight, Save } from "lucide-react";
+import RowMenu from "@/components/dashboard/RowMenu";
+import ConfirmDialog from "@/components/dashboard/ConfirmDialog";
 import toast from "react-hot-toast";
 import axios from "axios";
 
-interface Contact { id: string; name: string; email?: string; phone?: string; company?: string; stage: string; score: number; deals: { value: number }[]; createdAt: string; }
+interface Deal { value: number; stage: string }
+interface Contact { id: string; name: string; email?: string; phone?: string; company?: string; stage: string; score: number; deals: Deal[]; createdAt: string; }
+
+/** Open pipeline excludes closed deals, matching the analytics page. */
+const isOpen = (d: Deal) => d.stage !== "won" && d.stage !== "lost";
 
 const stages = ["lead", "prospect", "qualified", "proposal", "negotiation", "won", "lost"];
 const stageColors: Record<string, string> = {
@@ -26,7 +32,12 @@ export default function CRMPage() {
   const [filter,   setFilter]   = useState("all");
   const [showAdd,  setShowAdd]  = useState(false);
   const [saving,   setSaving]   = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", stage: "lead" });
+  // Set while editing an existing contact; null means the form creates one.
+  const [editing,  setEditing]  = useState<Contact | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Contact | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const emptyForm = { name: "", email: "", phone: "", company: "", stage: "lead" };
+  const [form, setForm] = useState(emptyForm);
 
   useEffect(() => { fetchContacts(); }, []);
 
@@ -36,17 +47,60 @@ export default function CRMPage() {
     finally { setLoading(false); }
   }
 
-  async function addContact() {
-    if (!form.name) return;
+  function openAdd() {
+    setEditing(null);
+    setForm(emptyForm);
+    setShowAdd(true);
+  }
+
+  function openEdit(c: Contact) {
+    setEditing(c);
+    setForm({
+      name: c.name,
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+      company: c.company ?? "",
+      stage: c.stage,
+    });
+    setShowAdd(true);
+  }
+
+  async function saveContact() {
+    if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const r = await axios.post("/api/crm/contacts", form);
-      setContacts(prev => [{ ...r.data, deals: [] }, ...prev]);
+      if (editing) {
+        const r = await axios.patch(`/api/crm/contacts/${editing.id}`, form);
+        setContacts(prev => prev.map(c => (c.id === editing.id ? { ...c, ...r.data } : c)));
+        toast.success("Contact updated");
+      } else {
+        const r = await axios.post("/api/crm/contacts", form);
+        setContacts(prev => [{ ...r.data, deals: [] }, ...prev]);
+        toast.success("Contact added");
+      }
       setShowAdd(false);
-      setForm({ name: "", email: "", phone: "", company: "", stage: "lead" });
-      toast.success("Contact added!");
-    } catch { toast.error("Failed to add contact"); }
-    finally { setSaving(false); }
+      setEditing(null);
+      setForm(emptyForm);
+    } catch {
+      toast.error(editing ? "Failed to update contact" : "Failed to add contact");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteContact() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await axios.delete(`/api/crm/contacts/${pendingDelete.id}`);
+      setContacts(prev => prev.filter(c => c.id !== pendingDelete.id));
+      toast.success("Contact deleted");
+      setPendingDelete(null);
+    } catch {
+      toast.error("Failed to delete contact");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const filtered = contacts.filter(c => {
@@ -57,7 +111,7 @@ export default function CRMPage() {
     return matchSearch && matchFilter;
   });
 
-  const totalValue = contacts.flatMap(c => c.deals).reduce((s, d) => s + d.value, 0);
+  const openPipeline = contacts.flatMap(c => c.deals).filter(isOpen).reduce((s, d) => s + d.value, 0);
 
   return (
     <div className="flex flex-col h-full">
@@ -70,7 +124,7 @@ export default function CRMPage() {
             { label: "Total Contacts", value: contacts.length,                                   color: "text-blue-400",   bg: "bg-blue-500/10",   icon: Users },
             { label: "Active Leads",   value: contacts.filter(c => c.stage === "lead").length,    color: "text-purple-400", bg: "bg-purple-500/10", icon: Star },
             { label: "Won Deals",      value: contacts.filter(c => c.stage === "won").length,     color: "text-green-400",  bg: "bg-green-500/10",  icon: TrendingUp },
-            { label: "Pipeline Value", value: `€${totalValue.toLocaleString()}`,                  color: "text-yellow-400", bg: "bg-yellow-500/10", icon: TrendingUp },
+            { label: "Open Pipeline",  value: `€${openPipeline.toLocaleString()}`,                color: "text-yellow-400", bg: "bg-yellow-500/10", icon: TrendingUp },
           ].map(s => (
             <div key={s.label} className="glass rounded-xl p-4">
               <div className={`w-9 h-9 rounded-lg ${s.bg} flex items-center justify-center mb-3`}><s.icon className={`w-4 h-4 ${s.color}`} /></div>
@@ -94,7 +148,7 @@ export default function CRMPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts…" className="bg-slam-card border border-slam-border rounded-lg pl-9 pr-4 py-2 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-brand-500 w-52" />
             </div>
-            <button onClick={() => setShowAdd(true)} className="btn-primary text-sm flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" />Add Contact</button>
+            <button onClick={openAdd} className="btn-primary text-sm flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" />Add Contact</button>
           </div>
         </div>
 
@@ -141,10 +195,14 @@ export default function CRMPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-300">
-                    €{c.deals.reduce((s, d) => s + d.value, 0).toLocaleString()}
+                    €{c.deals.filter(isOpen).reduce((s, d) => s + d.value, 0).toLocaleString()}
                   </td>
                   <td className="px-4 py-3">
-                    <button className="text-slate-500 hover:text-slate-300"><MoreVertical className="w-4 h-4" /></button>
+                    <RowMenu
+                      label={c.name}
+                      onEdit={() => openEdit(c)}
+                      onDelete={() => setPendingDelete(c)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -175,8 +233,10 @@ export default function CRMPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-slam-border">
-              <h2 className="font-bold">Add Contact</h2>
-              <button onClick={() => setShowAdd(false)}><X className="w-5 h-5 text-slate-500" /></button>
+              <h2 className="font-bold">{editing ? "Edit Contact" : "Add Contact"}</h2>
+              <button onClick={() => { setShowAdd(false); setEditing(null); }} aria-label="Close">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
             </div>
             <div className="p-5 space-y-4">
               {[
@@ -200,16 +260,25 @@ export default function CRMPage() {
                 </select>
               </div>
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowAdd(false)} className="btn-secondary flex-1">Cancel</button>
-                <button onClick={addContact} disabled={!form.name || saving} className="btn-primary flex-1 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  Add Contact
+                <button onClick={() => { setShowAdd(false); setEditing(null); }} className="btn-secondary flex-1">Cancel</button>
+                <button onClick={saveContact} disabled={!form.name.trim() || saving} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editing ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  {editing ? "Save Changes" : "Add Contact"}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete contact?"
+        message={`${pendingDelete?.name ?? "This contact"} and any deals attached to them will be permanently removed.`}
+        busy={deleting}
+        onConfirm={deleteContact}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

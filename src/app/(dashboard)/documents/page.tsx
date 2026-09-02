@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import Header from "@/components/dashboard/Header";
-import { FileText, Upload, Search, Loader2, Sparkles, Copy, Check, Brain, FileSearch, ListFilter, MessageSquare } from "lucide-react";
+import { FileText, Upload, Search, Loader2, Sparkles, Copy, Check, Brain, FileSearch, ListFilter, MessageSquare, Trash2, Clock } from "lucide-react";
+import ConfirmDialog from "@/components/dashboard/ConfirmDialog";
+import { formatRelativeTime } from "@/lib/utils";
 import toast from "react-hot-toast";
 import axios from "axios";
 
@@ -14,6 +16,10 @@ const modes = [
   { id: "qa",        label: "Q&A",          icon: MessageSquare, desc: "Ask questions about the doc" },
 ];
 
+interface SavedDocument {
+  id: string; name: string; mode: string; size: number; summary: string | null; createdAt: string;
+}
+
 export default function DocumentsPage() {
   const [text,     setText]    = useState("");
   const [fileName, setFileName]= useState("");
@@ -22,6 +28,15 @@ export default function DocumentsPage() {
   const [result,   setResult]  = useState("");
   const [loading,  setLoading] = useState(false);
   const [copied,   setCopied]  = useState(false);
+  const [history,  setHistory] = useState<SavedDocument[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<SavedDocument | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    axios.get<SavedDocument[]>("/api/documents")
+      .then(r => setHistory(r.data))
+      .catch(() => {});
+  }, []);
 
   const onDrop = useCallback((files: File[]) => {
     const file = files[0];
@@ -47,10 +62,30 @@ export default function DocumentsPage() {
     setLoading(true);
     setResult("");
     try {
-      const r = await axios.post("/api/documents/analyze", { text, mode, question });
+      const r = await axios.post("/api/documents/analyze", { text, mode, question, name: fileName });
       setResult(r.data.result);
-    } catch { toast.error("Analysis failed"); }
+      // The analysis is saved server-side; show it in the history immediately.
+      if (r.data.document) setHistory(h => [r.data.document, ...h]);
+    } catch (err) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      toast.error(status === 503
+        ? "AI is not configured on the server yet"
+        : "Analysis failed");
+    }
     finally { setLoading(false); }
+  }
+
+  async function deleteDocument() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await axios.delete(`/api/documents/${pendingDelete.id}`);
+      setHistory(h => h.filter(d => d.id !== pendingDelete.id));
+      toast.success("Analysis deleted");
+      setPendingDelete(null);
+    } catch {
+      toast.error("Failed to delete analysis");
+    } finally { setDeleting(false); }
   }
 
   function copy() {
@@ -152,6 +187,44 @@ export default function DocumentsPage() {
           </div>
         </div>
 
+        {/* Saved analyses */}
+        <div className="glass rounded-2xl p-6">
+          <h3 className="font-semibold mb-1">Saved analyses</h3>
+          <p className="text-xs text-slate-500 mb-4">Every analysis you run is kept here.</p>
+          {history.length === 0 ? (
+            <p className="text-sm text-slate-600 py-6 text-center">
+              Nothing analysed yet. Your results will be listed here once you run one.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slam-border/60">
+              {history.map(d => (
+                <li key={d.id} className="py-3 flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slam-dark border border-slam-border flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <FileText className="w-3.5 h-3.5 text-green-400" />
+                  </div>
+                  <button
+                    onClick={() => setResult(d.summary ?? "")}
+                    className="flex-1 min-w-0 text-left group"
+                  >
+                    <div className="text-sm text-slate-200 truncate group-hover:text-brand-300 transition-colors">{d.name}</div>
+                    <div className="text-xs text-slate-600 flex items-center gap-2 mt-0.5">
+                      <span className="capitalize">{d.mode}</span>
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(d.createdAt)}</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setPendingDelete(d)}
+                    aria-label={`Delete analysis of ${d.name}`}
+                    className="text-slate-600 hover:text-red-400 transition-colors p-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* Features */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
@@ -168,6 +241,15 @@ export default function DocumentsPage() {
           ))}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Delete analysis?"
+        message={`The saved analysis of ${pendingDelete?.name ?? "this document"} will be permanently removed.`}
+        busy={deleting}
+        onConfirm={deleteDocument}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

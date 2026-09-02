@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { parseBody, requireUserId, unauthorized } from "@/lib/api";
+import { projectCreateSchema } from "@/lib/schemas";
 
 export async function GET() {
   const userId = await requireUserId();
@@ -15,16 +15,11 @@ export async function GET() {
   return NextResponse.json(projects);
 }
 
-const schema = z.object({
-  name: z.string().min(1, "Name required"),
-  description: z.string().optional(),
-});
-
 export async function POST(req: NextRequest) {
   const userId = await requireUserId();
   if (!userId) return unauthorized();
 
-  const { data, error } = await parseBody(req, schema);
+  const { data, error } = await parseBody(req, projectCreateSchema);
   if (error) return error;
 
   const project = await db.project.create({

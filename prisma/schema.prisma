@@ -134,8 +134,10 @@ model Document {
   name      String
   type      String
   size      Int      @default(0)
-  url       String
+  // Optional: analysed text is stored inline today, with no file store behind it.
+  url       String?
   summary   String?
+  mode      String   @default("summarize")
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

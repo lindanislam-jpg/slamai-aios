@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { db } from "@/lib/db";
 import { getOpenAI } from "@/lib/openai";
 import { aiError, openAIUnavailable, parseBody, requireUserId, unauthorized } from "@/lib/api";
 
@@ -14,10 +15,10 @@ const prompts: Record<string, string> = {
 };
 
 const schema = z.object({
-  type:  z.string().min(1, "type and topic required"),
-  topic: z.string().min(1, "type and topic required"),
-  tone:     z.string().optional(),
-  audience: z.string().optional(),
+  type:  z.string().trim().min(1, "type and topic required"),
+  topic: z.string().trim().min(1, "type and topic required"),
+  tone:     z.string().trim().optional(),
+  audience: z.string().trim().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -35,14 +36,30 @@ export async function POST(req: NextRequest) {
   const systemMsg  = `You are an expert marketing copywriter. Create compelling, conversion-focused content.`;
   const userMsg    = `${basePrompt} about: "${topic}". Tone: ${tone || "professional"}. Target audience: ${audience || "general business"}. Make it engaging and action-oriented.`;
 
+  let content: string;
   try {
     const completion = await getOpenAI().chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "system", content: systemMsg }, { role: "user", content: userMsg }],
       max_tokens: 1500,
     });
-    return NextResponse.json({ content: completion.choices[0]?.message?.content || "" });
+    content = completion.choices[0]?.message?.content || "";
   } catch (err) {
     return aiError(err, "marketing/generate");
   }
+
+  // Saved as a draft campaign so generated copy survives a reload.
+  const campaign = await db.campaign.create({
+    data: {
+      name: topic.slice(0, 120),
+      type,
+      platform: type,
+      status: "draft",
+      content,
+      userId,
+    },
+    select: { id: true, name: true, type: true, status: true, content: true, createdAt: true },
+  });
+
+  return NextResponse.json({ content, campaign });
 }

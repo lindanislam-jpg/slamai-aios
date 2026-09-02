@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { parseBody, requireUserId, unauthorized } from "@/lib/api";
+import { agentCreateSchema } from "@/lib/schemas";
 
 export async function GET() {
   const userId = await requireUserId();
@@ -14,19 +14,11 @@ export async function GET() {
   return NextResponse.json(agents);
 }
 
-const schema = z.object({
-  name: z.string().min(1, "Name and type required"),
-  type: z.string().min(1, "Name and type required"),
-  description:  z.string().optional(),
-  systemPrompt: z.string().optional(),
-  model:        z.string().optional(),
-});
-
 export async function POST(req: NextRequest) {
   const userId = await requireUserId();
   if (!userId) return unauthorized();
 
-  const { data, error } = await parseBody(req, schema);
+  const { data, error } = await parseBody(req, agentCreateSchema);
   if (error) return error;
 
   const agent = await db.aIAgent.create({
