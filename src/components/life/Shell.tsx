@@ -13,6 +13,7 @@ import { CommandPalette, type Command } from "./CommandPalette";
 import { Icon } from "./icons";
 import { MobileNav, Sidebar } from "./Sidebar";
 import { IconBtn } from "./ui";
+import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ *
  * Toasts — the surface for every micro-interaction reward
@@ -73,6 +74,38 @@ function Toasts() {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * Sync state at a glance. Deliberately quiet: nothing at all when sync is off,
+ * because a permanent icon implying "connected" on a device that syncs nothing
+ * is exactly the kind of decoration this app avoids.
+ */
+function SyncBadge() {
+  const { sync } = useLife();
+  if (sync.status === "off") return null;
+
+  const look = {
+    idle: { icon: "Check", tint: "var(--ink-4)", label: "Synced to your account" },
+    syncing: { icon: "RotateCcw", tint: "var(--accent)", label: "Syncing…" },
+    offline: { icon: "Shield", tint: "var(--warn)", label: "Offline — saved on this device" },
+    error: { icon: "Shield", tint: "var(--warn)", label: sync.error ?? "Sync problem" },
+  }[sync.status];
+
+  return (
+    <Link
+      href="/life/settings"
+      aria-label={look.label}
+      title={look.label}
+      className="grid h-9 w-9 place-items-center rounded-full border border-[var(--hair)] bg-[var(--panel)]"
+    >
+      <Icon
+        name={look.icon}
+        className={cn("h-4 w-4", sync.status === "syncing" && "animate-spin")}
+        style={{ color: look.tint }}
+      />
+    </Link>
   );
 }
 
@@ -170,6 +203,7 @@ function TopBar({
         </button>
 
         <div className="relative flex items-center gap-2">
+          <SyncBadge />
           <IconBtn
             icon={state.settings.theme === "dark" ? "Sunrise" : "MoonStar"}
             label="Toggle theme"

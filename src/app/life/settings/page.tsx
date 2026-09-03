@@ -5,6 +5,7 @@ import { useLife } from "@/lib/life/store";
 import { visibleDays } from "@/lib/life/engine";
 import { Icon } from "@/components/life/icons";
 import { Btn, Chip, Field, Kicker, Modal, Panel, SectionHeader, TextArea, Toggle } from "@/components/life/ui";
+import { SyncPanel } from "@/components/life/SyncPanel";
 import type { AccentId } from "@/lib/life/types";
 
 const ACCENTS: { id: AccentId; label: string; hue: number }[] = [
@@ -29,7 +30,8 @@ const SHORTCUTS = [
 ];
 
 export default function SettingsPage() {
-  const { state, update, updateSettings, exportJson, importJson, resetAll, deleteDemoHistory, notify } = useLife();
+  const { state, update, updateSettings, exportJson, importJson, resetAll, deleteDemoHistory, notify, sync } =
+    useLife();
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [profile, setProfile] = useState(state.profile);
@@ -66,7 +68,15 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader kicker="System" title="Settings" sub="Everything is stored on this device. Nothing leaves it unless you export it." />
+      <SectionHeader
+        kicker="System"
+        title="Settings"
+        sub={
+          sync.status === "off"
+            ? "Everything is stored on this device. Nothing leaves it unless you export it."
+            : "Stored on this device and synced to your account, so the same day follows you between devices."
+        }
+      />
 
       <section className="grid gap-5 lg:grid-cols-2">
         <Panel className="rise p-6">
@@ -181,6 +191,8 @@ export default function SettingsPage() {
         </div>
       </Panel>
 
+      <SyncPanel />
+
       <Panel className="rise p-6">
         <Kicker>Data</Kicker>
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -261,10 +273,23 @@ export default function SettingsPage() {
             <Kicker>Where your data lives</Kicker>
             <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-[var(--ink-3)]">
               Everything — habits, journal entries, priorities, the whole log — is kept in this browser&apos;s local
-              storage on this device. It is never uploaded. Clearing site data or switching browser will lose it, so
-              export a backup regularly. The AI Coach is the one exception: when a model key is configured, the question
-              and a compact metrics snapshot are sent to that model to answer. Without a key, the coach runs entirely
-              on-device.
+              storage on this device, and the app keeps working with no network at all.
+              {sync.status === "off" ? (
+                <>
+                  {" "}
+                  It is not uploaded anywhere. Clearing site data or switching browser will lose it, so export a backup
+                  regularly.
+                </>
+              ) : (
+                <>
+                  {" "}
+                  Because you are signed in, a copy is also stored on the server against your account so your other
+                  devices can read it — including your journal. Sign out above to stop that, or use{" "}
+                  <b>Reset everything</b> to delete the stored copy as well.
+                </>
+              )}{" "}
+              The AI Coach is separate: when a model key is configured, the question and a compact metrics snapshot are
+              sent to that model to answer. Without a key, the coach runs entirely on-device.
             </p>
           </div>
         </div>
@@ -276,6 +301,12 @@ export default function SettingsPage() {
           This deletes every habit, journal entry, priority and setting on this device. Export a backup first if there
           is anything worth keeping.
         </p>
+        {sync.status !== "off" ? (
+          <p className="mt-3 text-[12.5px] leading-relaxed text-[var(--ink-4)]">
+            Sync is on, so the stored copy is cleared too. Any other device still open and signed in keeps its own copy
+            and will share it back — close Life OS there, or reset it as well.
+          </p>
+        ) : null}
         <div className="mt-6 flex flex-wrap justify-end gap-2">
           <Btn variant="ghost" onClick={() => setConfirmReset(false)}>
             Cancel

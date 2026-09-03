@@ -13,6 +13,7 @@ import React, {
 import { dateKey, nowClock } from "./date";
 import { emptyDay } from "./engine";
 import { createInitialState, DEFAULT_SETTINGS } from "./seed";
+import { useSync, type SyncInfo } from "./useSync";
 import type {
   CoachMessage,
   DayRecord,
@@ -42,14 +43,16 @@ function reducer(state: LifeState, action: Action): LifeState {
     case "hydrate":
     case "reset":
       return action.state;
+    // Every write is timestamped so two devices can be merged later without
+    // guessing which copy is the newer one. See sync.ts.
     case "patch":
-      return { ...state, ...action.patch };
+      return { ...state, ...action.patch, touchedAt: Date.now() };
     case "settings":
-      return { ...state, settings: { ...state.settings, ...action.patch } };
+      return { ...state, settings: { ...state.settings, ...action.patch }, touchedAt: Date.now() };
     case "patchDay": {
       const existing = state.days[action.date] ?? emptyDay(action.date, state.settings);
       const next = action.patch({ ...existing, seeded: false });
-      return { ...state, days: { ...state.days, [action.date]: next } };
+      return { ...state, days: { ...state.days, [action.date]: { ...next, updatedAt: Date.now() } } };
     }
     default:
       return state;
@@ -104,6 +107,8 @@ interface LifeContext {
   removeEnvChange: (id: string) => void;
   pushCoach: (m: Omit<CoachMessage, "id" | "at">) => void;
   clearCoach: () => void;
+  /* sync */
+  sync: SyncInfo;
   /* data */
   exportJson: () => string;
   importJson: (raw: string) => { ok: boolean; error?: string };
@@ -165,6 +170,10 @@ export function LifeProvider({ children }: { children: React.ReactNode }) {
   const [today, setToday] = useState<ISODate>(() => dateKey());
   const [notices, setNotices] = useState<Notice[]>([]);
   const hydrated = useRef(false);
+
+  /* Cross-device sync. Signed out this is inert and the app is unchanged. */
+  const onMerged = useCallback((next: LifeState) => dispatch({ type: "hydrate", state: next }), []);
+  const sync = useSync({ state, ready, onMerged });
 
   /* Load once on the client. The server render always shows the shell skeleton,
      so there is no hydration mismatch from localStorage. */
@@ -402,6 +411,8 @@ export function LifeProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: "patch", patch: { coach: [] } });
       },
 
+      sync,
+
       exportJson() {
         return JSON.stringify(state, null, 2);
       },
@@ -410,7 +421,10 @@ export function LifeProvider({ children }: { children: React.ReactNode }) {
         try {
           const migrated = migrate(JSON.parse(raw));
           if (!migrated) return { ok: false, error: "That file isn't an Elite Life OS backup." };
-          dispatch({ type: "reset", state: migrated });
+          const restored = { ...migrated, touchedAt: Date.now() };
+          dispatch({ type: "reset", state: restored });
+          // A restore is a deliberate replacement, not one more edit to merge.
+          sync.overwrite(restored);
           return { ok: true };
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : "Could not read that file." };
@@ -418,14 +432,19 @@ export function LifeProvider({ children }: { children: React.ReactNode }) {
       },
 
       resetAll(withDemo) {
-        dispatch({ type: "reset", state: createInitialState(dateKey(), { demo: withDemo }) });
+        const fresh = { ...createInitialState(dateKey(), { demo: withDemo }), touchedAt: Date.now() };
+        dispatch({ type: "reset", state: fresh });
+        // Without this the next pull would merge the cleared days back in.
+        sync.overwrite(fresh);
       },
 
       deleteDemoHistory() {
-        dispatch({ type: "reset", state: stripSamples(state) });
+        const cleaned = { ...stripSamples(state), touchedAt: Date.now() };
+        dispatch({ type: "reset", state: cleaned });
+        sync.overwrite(cleaned);
       },
     };
-  }, [state, ready, today, notices, notify, dismiss, markAllRead, patchDay]);
+  }, [state, ready, today, notices, notify, dismiss, markAllRead, patchDay, sync]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

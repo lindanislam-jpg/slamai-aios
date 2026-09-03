@@ -44,6 +44,27 @@ model User {
   voiceAgent    VoiceAgent?
   websites      Website[]
   installs      AgentInstall[]
+  lifeState     LifeSnapshot?
+}
+
+/**
+ * One row per user: the whole Life OS state as a single JSON document, exactly
+ * as the browser holds it. It is a sync point, not a query surface — every
+ * score is still derived on the client from the day log — so there is nothing
+ * to gain from shredding it into tables, and a schema change would otherwise
+ * have to be migrated in two places.
+ *
+ * `revision` guards against two devices writing at once: a push carries the
+ * revision it was based on, and a mismatch sends the client back to merge.
+ */
+model LifeSnapshot {
+  userId    String   @id
+  data      Json
+  revision  Int      @default(0)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Account {

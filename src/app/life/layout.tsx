@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./life.css";
+import SessionProvider from "@/components/SessionProvider";
 import { LifeProvider } from "@/lib/life/store";
 import { Shell } from "@/components/life/Shell";
 
@@ -24,9 +25,13 @@ export const viewport: Viewport = {
 };
 
 export default function LifeLayout({ children }: { children: React.ReactNode }) {
+  // No `session` prop: /life must render for signed-out visitors, so the layout
+  // stays static and the provider fetches the session on the client instead.
   return (
-    <LifeProvider>
-      <Shell>{children}</Shell>
-    </LifeProvider>
+    <SessionProvider>
+      <LifeProvider>
+        <Shell>{children}</Shell>
+      </LifeProvider>
+    </SessionProvider>
   );
 }
