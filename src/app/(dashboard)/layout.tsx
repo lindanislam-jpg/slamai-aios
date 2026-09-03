@@ -38,7 +38,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider session={null}>
+    <SessionProvider>
       <DashboardContent>{children}</DashboardContent>
     </SessionProvider>
   );
