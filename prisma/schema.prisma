@@ -186,7 +186,7 @@ model Task {
 
 model MarketplaceAgent {
   id          String   @id @default(cuid())
-  name        String
+  name        String   @unique
   description String
   category    String
   icon        String?
@@ -194,6 +194,11 @@ model MarketplaceAgent {
   rating      Float    @default(0)
   installs    Int      @default(0)
   isActive    Boolean  @default(true)
+  // Comma-separated capability list shown on the listing card.
+  features    String?
+  // Copied onto the user's agent when installed, so an install is usable.
+  systemPrompt String?
+  agentType   String   @default("custom")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

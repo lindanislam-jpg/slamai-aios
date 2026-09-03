@@ -2,23 +2,8 @@
 
 import { useState } from "react";
 import Header from "@/components/dashboard/Header";
+import PreviewNotice from "@/components/dashboard/PreviewNotice";
 import { Mic, Phone, PhoneIncoming, Volume2, MessageSquare, Clock, TrendingUp, Calendar, CheckCircle, PlayCircle, PauseCircle } from "lucide-react";
-
-const callLogs = [
-  { caller: "+353 1 234 5678", duration: "3:42", status: "qualified",  outcome: "Demo booked",      time: "10:24 AM" },
-  { caller: "+353 86 901 2345",duration: "1:15", status: "transferred",outcome: "Transferred to sales","time": "10:18 AM" },
-  { caller: "+44 20 1234 5678",duration: "5:21", status: "resolved",   outcome: "Issue resolved",    time: "9:55 AM"  },
-  { caller: "+353 1 987 6543", duration: "0:48", status: "voicemail",  outcome: "Callback scheduled",time: "9:30 AM"  },
-  { caller: "+353 87 765 4321",duration: "2:10", status: "booked",     outcome: "Appointment set",   time: "9:12 AM"  },
-];
-
-const statusColors: Record<string, string> = {
-  qualified:   "bg-green-500/20 text-green-400",
-  transferred: "bg-blue-500/20 text-blue-400",
-  resolved:    "bg-teal-500/20 text-teal-400",
-  voicemail:   "bg-yellow-500/20 text-yellow-400",
-  booked:      "bg-purple-500/20 text-purple-400",
-};
 
 export default function VoiceAIPage() {
   const [isActive, setIsActive] = useState(false);
@@ -28,17 +13,19 @@ export default function VoiceAIPage() {
       <Header title="Voice AI" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
+        <PreviewNotice feature="Voice AI" />
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Calls Today",       value: "47",   icon: Phone,       color: "text-blue-400",   bg: "bg-blue-500/10"   },
-            { label: "Avg. Handle Time",  value: "2:48", icon: Clock,       color: "text-green-400",  bg: "bg-green-500/10"  },
-            { label: "Appointments Set",  value: "12",   icon: Calendar,    color: "text-purple-400", bg: "bg-purple-500/10" },
-            { label: "Resolution Rate",   value: "89%",  icon: TrendingUp,  color: "text-yellow-400", bg: "bg-yellow-500/10" },
+            { label: "Calls Today",       value: "—", icon: Phone,       color: "text-blue-400",   bg: "bg-blue-500/10"   },
+            { label: "Avg. Handle Time",  value: "—", icon: Clock,       color: "text-green-400",  bg: "bg-green-500/10"  },
+            { label: "Appointments Set",  value: "—", icon: Calendar,    color: "text-purple-400", bg: "bg-purple-500/10" },
+            { label: "Resolution Rate",   value: "—", icon: TrendingUp,  color: "text-yellow-400", bg: "bg-yellow-500/10" },
           ].map(s => (
             <div key={s.label} className="glass rounded-xl p-4">
               <div className={`w-9 h-9 rounded-lg ${s.bg} flex items-center justify-center mb-3`}><s.icon className={`w-4 h-4 ${s.color}`} /></div>
-              <div className="text-2xl font-bold">{s.value}</div>
+              <div className="text-2xl font-bold text-slate-600">{s.value}</div>
               <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
             </div>
           ))}
@@ -114,25 +101,13 @@ export default function VoiceAIPage() {
         <div className="glass rounded-2xl p-6">
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-semibold">Recent Calls</h3>
-            <button className="text-sm text-brand-400 hover:text-brand-300">View All</button>
           </div>
-          <div className="space-y-2">
-            {callLogs.map((c, i) => (
-              <div key={i} className="flex items-center gap-4 p-3 bg-slam-dark rounded-xl border border-slam-border hover:border-slate-600 transition-colors">
-                <div className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center flex-shrink-0">
-                  <PhoneIncoming className="w-4 h-4 text-brand-400" />
-                </div>
-                <div className="flex-1">
-                  <div className="font-medium text-sm">{c.caller}</div>
-                  <div className="text-xs text-slate-500">{c.outcome}</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-600 flex items-center gap-1"><Clock className="w-3 h-3" />{c.duration}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${statusColors[c.status] || "bg-slate-500/20 text-slate-400"}`}>{c.status}</span>
-                  <span className="text-xs text-slate-600">{c.time}</span>
-                </div>
-              </div>
-            ))}
+          <div className="bg-slam-dark rounded-xl border border-dashed border-slam-border py-10 text-center">
+            <PhoneIncoming className="w-6 h-6 text-slate-700 mx-auto mb-2" />
+            <p className="text-sm text-slate-500">No calls yet.</p>
+            <p className="text-xs text-slate-600 mt-1">
+              Call records will appear here once telephony is connected.
+            </p>
           </div>
         </div>
 

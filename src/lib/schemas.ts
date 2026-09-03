@@ -34,6 +34,22 @@ export const projectCreateSchema = z.object({
   status:      z.string().trim().optional(),
 });
 
+export const taskCreateSchema = z.object({
+  title:       nonEmpty("Title required"),
+  description: z.string().optional(),
+  status:      z.enum(["todo", "in_progress", "done"]).optional(),
+  priority:    z.enum(["low", "medium", "high"]).optional(),
+  // Accepts an ISO date string or null to clear it.
+  dueDate:     z.string().datetime().nullable().optional(),
+});
+
+export const dealCreateSchema = z.object({
+  title:     nonEmpty("Title required"),
+  value:     z.number().min(0, "Value cannot be negative"),
+  stage:     z.enum(["prospect", "proposal", "negotiation", "won", "lost"]).optional(),
+  closeDate: z.string().datetime().nullable().optional(),
+});
+
 /** Turn a create schema into a PATCH schema: all optional, but not empty. */
 function toUpdateSchema<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
   return schema.partial().refine(
@@ -45,3 +61,5 @@ function toUpdateSchema<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
 export const contactUpdateSchema = toUpdateSchema(contactCreateSchema);
 export const agentUpdateSchema   = toUpdateSchema(agentCreateSchema);
 export const projectUpdateSchema = toUpdateSchema(projectCreateSchema);
+export const taskUpdateSchema    = toUpdateSchema(taskCreateSchema);
+export const dealUpdateSchema    = toUpdateSchema(dealCreateSchema);

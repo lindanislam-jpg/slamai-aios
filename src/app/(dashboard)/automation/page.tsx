@@ -1,6 +1,7 @@
 "use client";
 
 import Header from "@/components/dashboard/Header";
+import PreviewNotice from "@/components/dashboard/PreviewNotice";
 import { Zap, Plus, Play, Pause, Settings, CheckCircle, Clock, TrendingUp, Mail, MessageSquare, Database, FileText, ShoppingBag, CreditCard } from "lucide-react";
 
 const integrations = [
@@ -13,11 +14,11 @@ const integrations = [
 ];
 
 const workflows = [
-  { name: "New Lead → Welcome Email",       status: "active",   runs: 142, saved: "8h",   trigger: "CRM",   icon: Mail       },
-  { name: "Invoice Created → PDF + Slack",  status: "active",   runs: 67,  saved: "3.5h", trigger: "Finance",icon: CreditCard },
-  { name: "Support Ticket → AI Response",   status: "active",   runs: 891, saved: "44h",  trigger: "Support",icon: MessageSquare },
-  { name: "New Order → Update Sheets",      status: "paused",   runs: 23,  saved: "1.2h", trigger: "Shopify",icon: ShoppingBag   },
-  { name: "Monthly Report Generator",       status: "scheduled",runs: 6,   saved: "12h",  trigger: "Cron",   icon: FileText   },
+  { name: "New Lead → Welcome Email",       status: "active",   trigger: "CRM",   icon: Mail       },
+  { name: "Invoice Created → PDF + Slack",  status: "active",   trigger: "Finance",icon: CreditCard },
+  { name: "Support Ticket → AI Response",   status: "active",   trigger: "Support",icon: MessageSquare },
+  { name: "New Order → Update Sheets",      status: "paused",   trigger: "Shopify",icon: ShoppingBag   },
+  { name: "Monthly Report Generator",       status: "scheduled",trigger: "Cron",   icon: FileText   },
 ];
 
 export default function AutomationPage() {
@@ -26,17 +27,19 @@ export default function AutomationPage() {
       <Header title="Automation Center" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
+        <PreviewNotice feature="Automation" />
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Active Workflows",   value: "3",     icon: Zap,         color: "text-yellow-400", bg: "bg-yellow-500/10" },
-            { label: "Total Runs Today",   value: "1,129", icon: Play,        color: "text-green-400",  bg: "bg-green-500/10"  },
-            { label: "Hours Saved",        value: "68.7h", icon: Clock,       color: "text-blue-400",   bg: "bg-blue-500/10"   },
-            { label: "Connected Apps",     value: "4",     icon: TrendingUp,  color: "text-purple-400", bg: "bg-purple-500/10" },
+            { label: "Active Workflows",   value: "—", icon: Zap,         color: "text-yellow-400", bg: "bg-yellow-500/10" },
+            { label: "Total Runs Today",   value: "—", icon: Play,        color: "text-green-400",  bg: "bg-green-500/10"  },
+            { label: "Hours Saved",        value: "—", icon: Clock,       color: "text-blue-400",   bg: "bg-blue-500/10"   },
+            { label: "Connected Apps",     value: "—", icon: TrendingUp,  color: "text-purple-400", bg: "bg-purple-500/10" },
           ].map(s => (
             <div key={s.label} className="glass rounded-xl p-4">
               <div className={`w-9 h-9 rounded-lg ${s.bg} flex items-center justify-center mb-3`}><s.icon className={`w-4 h-4 ${s.color}`} /></div>
-              <div className="text-2xl font-bold">{s.value}</div>
+              <div className="text-2xl font-bold text-slate-600">{s.value}</div>
               <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
             </div>
           ))}
@@ -64,7 +67,7 @@ export default function AutomationPage() {
         {/* Workflows */}
         <div className="glass rounded-2xl p-6">
           <div className="flex items-center justify-between mb-5">
-            <h3 className="font-semibold">Automation Workflows</h3>
+            <h3 className="font-semibold">Planned workflows</h3>
             <button className="btn-primary text-sm flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" />New Workflow</button>
           </div>
           <div className="space-y-3">
@@ -75,7 +78,7 @@ export default function AutomationPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm">{w.name}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">Trigger: {w.trigger} · {w.runs} runs · {w.saved} saved</div>
+                  <div className="text-xs text-slate-500 mt-0.5">Trigger: {w.trigger}</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${

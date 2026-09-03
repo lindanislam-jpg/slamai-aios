@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Header from "@/components/dashboard/Header";
-import { Users, Plus, Search, Phone, Mail, Building2, TrendingUp, Star, Loader2, X, ChevronRight, Save } from "lucide-react";
+import { Users, Plus, Search, Phone, Mail, Building2, TrendingUp, Star, Loader2, X, ChevronRight, ChevronDown, Save, Trash2, Euro } from "lucide-react";
 import RowMenu from "@/components/dashboard/RowMenu";
 import ConfirmDialog from "@/components/dashboard/ConfirmDialog";
 import toast from "react-hot-toast";
 import axios from "axios";
 
-interface Deal { value: number; stage: string }
+interface Deal { id: string; title: string; value: number; stage: string; closeDate?: string | null }
 interface Contact { id: string; name: string; email?: string; phone?: string; company?: string; stage: string; score: number; deals: Deal[]; createdAt: string; }
 
 /** Open pipeline excludes closed deals, matching the analytics page. */
@@ -38,6 +38,12 @@ export default function CRMPage() {
   const [deleting, setDeleting] = useState(false);
   const emptyForm = { name: "", email: "", phone: "", company: "", stage: "lead" };
   const [form, setForm] = useState(emptyForm);
+  // Row expansion reveals that contact's deals.
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [dealForm, setDealForm] = useState({ title: "", value: "" });
+  const [addingDeal, setAddingDeal] = useState(false);
+  const [pendingDealDelete, setPendingDealDelete] = useState<Deal | null>(null);
+  const [deletingDeal, setDeletingDeal] = useState(false);
 
   useEffect(() => { fetchContacts(); }, []);
 
@@ -101,6 +107,55 @@ export default function CRMPage() {
     } finally {
       setDeleting(false);
     }
+  }
+
+  function replaceDeals(contactId: string, update: (deals: Deal[]) => Deal[]) {
+    setContacts(cs => cs.map(c => (c.id === contactId ? { ...c, deals: update(c.deals) } : c)));
+  }
+
+  async function addDeal(contactId: string) {
+    const value = Number(dealForm.value);
+    if (!dealForm.title.trim() || Number.isNaN(value) || value < 0) {
+      toast.error("Enter a title and a value");
+      return;
+    }
+    setAddingDeal(true);
+    try {
+      const r = await axios.post(`/api/crm/contacts/${contactId}/deals`, {
+        title: dealForm.title.trim(),
+        value,
+        stage: "prospect",
+      });
+      replaceDeals(contactId, ds => [...ds, r.data]);
+      setDealForm({ title: "", value: "" });
+      toast.success("Deal added");
+    } catch {
+      toast.error("Failed to add deal");
+    } finally { setAddingDeal(false); }
+  }
+
+  async function setDealStage(contactId: string, deal: Deal, stage: string) {
+    replaceDeals(contactId, ds => ds.map(d => (d.id === deal.id ? { ...d, stage } : d)));
+    try {
+      const r = await axios.patch(`/api/crm/deals/${deal.id}`, { stage });
+      replaceDeals(contactId, ds => ds.map(d => (d.id === deal.id ? r.data : d)));
+    } catch {
+      replaceDeals(contactId, ds => ds.map(d => (d.id === deal.id ? deal : d)));
+      toast.error("Failed to update deal");
+    }
+  }
+
+  async function deleteDeal() {
+    if (!pendingDealDelete || !expanded) return;
+    setDeletingDeal(true);
+    try {
+      await axios.delete(`/api/crm/deals/${pendingDealDelete.id}`);
+      replaceDeals(expanded, ds => ds.filter(d => d.id !== pendingDealDelete.id));
+      toast.success("Deal deleted");
+      setPendingDealDelete(null);
+    } catch {
+      toast.error("Failed to delete deal");
+    } finally { setDeletingDeal(false); }
   }
 
   const filtered = contacts.filter(c => {
@@ -168,9 +223,18 @@ export default function CRMPage() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={6} className="text-center py-12 text-slate-500">No contacts found</td></tr>
               ) : filtered.map(c => (
-                <tr key={c.id} className="border-b border-slam-border/50 hover:bg-slam-dark/30 transition-colors">
+                <Fragment key={c.id}>
+                <tr className="border-b border-slam-border/50 hover:bg-slam-dark/30 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setExpanded(e => (e === c.id ? null : c.id))}
+                        aria-label={`${expanded === c.id ? "Hide" : "Show"} deals for ${c.name}`}
+                        aria-expanded={expanded === c.id}
+                        className="text-slate-600 hover:text-slate-300 p-0.5 flex-shrink-0"
+                      >
+                        {expanded === c.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </button>
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
                         {c.name.charAt(0).toUpperCase()}
                       </div>
@@ -205,6 +269,73 @@ export default function CRMPage() {
                     />
                   </td>
                 </tr>
+
+                {expanded === c.id && (
+                  <tr className="border-b border-slam-border/50 bg-slam-dark/40">
+                    <td colSpan={6} className="px-4 py-4">
+                      <div className="pl-8 space-y-2">
+                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                          Deals for {c.name}
+                        </h4>
+
+                        {c.deals.length === 0 ? (
+                          <p className="text-xs text-slate-600 py-1">No deals yet.</p>
+                        ) : c.deals.map(d => (
+                          <div key={d.id} className="flex items-center gap-3 bg-slam-card border border-slam-border rounded-lg px-3 py-2">
+                            <span className="text-sm text-slate-200 flex-1 min-w-0 truncate">{d.title}</span>
+                            <span className="text-sm text-slate-300 font-medium">€{d.value.toLocaleString()}</span>
+                            <select
+                              value={d.stage}
+                              onChange={e => setDealStage(c.id, d, e.target.value)}
+                              aria-label={`Stage for ${d.title}`}
+                              className="bg-slam-dark border border-slam-border rounded px-2 py-1 text-xs text-slate-300 capitalize focus:outline-none focus:border-brand-500"
+                            >
+                              {["prospect", "proposal", "negotiation", "won", "lost"].map(st => (
+                                <option key={st} value={st}>{st}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => setPendingDealDelete(d)}
+                              aria-label={`Delete ${d.title}`}
+                              className="text-slate-600 hover:text-red-400 p-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            value={dealForm.title}
+                            onChange={e => setDealForm(f => ({ ...f, title: e.target.value }))}
+                            placeholder="New deal title"
+                            className="flex-1 bg-slam-card border border-slam-border rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-brand-500"
+                          />
+                          <div className="relative">
+                            <Euro className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600" />
+                            <input
+                              value={dealForm.value}
+                              onChange={e => setDealForm(f => ({ ...f, value: e.target.value }))}
+                              onKeyDown={e => { if (e.key === "Enter") addDeal(c.id); }}
+                              inputMode="decimal"
+                              placeholder="0"
+                              className="w-28 bg-slam-card border border-slam-border rounded-lg pl-8 pr-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-brand-500"
+                            />
+                          </div>
+                          <button
+                            onClick={() => addDeal(c.id)}
+                            disabled={addingDeal}
+                            className="btn-primary text-xs py-2 px-4 disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {addingDeal ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                            Add deal
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -278,6 +409,15 @@ export default function CRMPage() {
         busy={deleting}
         onConfirm={deleteContact}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDealDelete)}
+        title="Delete deal?"
+        message={`"${pendingDealDelete?.title ?? "This deal"}" will be permanently removed, including from your revenue figures.`}
+        busy={deletingDeal}
+        onConfirm={deleteDeal}
+        onCancel={() => setPendingDealDelete(null)}
       />
     </div>
   );

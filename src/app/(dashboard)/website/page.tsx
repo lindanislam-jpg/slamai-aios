@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Header from "@/components/dashboard/Header";
+import PreviewNotice from "@/components/dashboard/PreviewNotice";
 import { Globe, Layout, ShoppingBag, BookOpen, Briefcase, Plus, Eye, Edit3, Smartphone, Monitor, Tablet, Sparkles, BarChart3, Search, MessageSquare, type LucideIcon } from "lucide-react";
 
 const templates = [
@@ -26,6 +27,8 @@ export default function WebsiteBuilderPage() {
     <div className="flex flex-col h-full">
       <Header title="Website Builder" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+        <PreviewNotice feature="The website builder" />
 
         {/* Toolbar */}
         <div className="flex items-center justify-between">

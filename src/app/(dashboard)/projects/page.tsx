@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Header from "@/components/dashboard/Header";
-import { Kanban, Plus, Check, Circle, AlertCircle, Loader2, X, Calendar, User, Save } from "lucide-react";
+import { Kanban, Plus, Check, Circle, AlertCircle, Loader2, X, Calendar, Save, Trash2, ChevronRight } from "lucide-react";
 import RowMenu from "@/components/dashboard/RowMenu";
 import ConfirmDialog from "@/components/dashboard/ConfirmDialog";
 import toast from "react-hot-toast";
@@ -35,6 +35,13 @@ export default function ProjectsPage() {
   const [editing,  setEditing]  = useState<Project | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Inline "add task" composer, opened per board column.
+  const [composerCol, setComposerCol] = useState<string | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskPriority, setTaskPriority] = useState("medium");
+  const [addingTask, setAddingTask] = useState(false);
+  const [pendingTaskDelete, setPendingTaskDelete] = useState<Task | null>(null);
+  const [deletingTask, setDeletingTask] = useState(false);
 
   useEffect(() => { fetchProjects(); }, []);
 
@@ -101,6 +108,58 @@ export default function ProjectsPage() {
 
   const tasksByStatus = (tasks: Task[], status: string) => tasks.filter(t => t.status === status);
 
+  /** Apply a change to the active project in both the list and the board. */
+  function replaceTasks(projectId: string, update: (tasks: Task[]) => Task[]) {
+    setProjects(ps => ps.map(p => (p.id === projectId ? { ...p, tasks: update(p.tasks) } : p)));
+    setActive(a => (a && a.id === projectId ? { ...a, tasks: update(a.tasks) } : a));
+  }
+
+  async function addTask(status: string) {
+    if (!active || !taskTitle.trim()) return;
+    setAddingTask(true);
+    try {
+      const r = await axios.post(`/api/projects/${active.id}/tasks`, {
+        title: taskTitle.trim(),
+        status,
+        priority: taskPriority,
+      });
+      replaceTasks(active.id, ts => [...ts, r.data]);
+      setTaskTitle("");
+      setComposerCol(null);
+      toast.success("Task added");
+    } catch {
+      toast.error("Failed to add task");
+    } finally { setAddingTask(false); }
+  }
+
+  /** Click a task to walk it through todo -> in progress -> done -> todo. */
+  async function cycleStatus(task: Task) {
+    if (!active) return;
+    const order = ["todo", "in_progress", "done"];
+    const next = order[(order.indexOf(task.status) + 1) % order.length];
+    replaceTasks(active.id, ts => ts.map(t => (t.id === task.id ? { ...t, status: next } : t)));
+    try {
+      await axios.patch(`/api/tasks/${task.id}`, { status: next });
+    } catch {
+      // Put it back if the server rejected the move.
+      replaceTasks(active.id, ts => ts.map(t => (t.id === task.id ? { ...t, status: task.status } : t)));
+      toast.error("Failed to move task");
+    }
+  }
+
+  async function deleteTask() {
+    if (!pendingTaskDelete || !active) return;
+    setDeletingTask(true);
+    try {
+      await axios.delete(`/api/tasks/${pendingTaskDelete.id}`);
+      replaceTasks(active.id, ts => ts.filter(t => t.id !== pendingTaskDelete.id));
+      toast.success("Task deleted");
+      setPendingTaskDelete(null);
+    } catch {
+      toast.error("Failed to delete task");
+    } finally { setDeletingTask(false); }
+  }
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Project Management" />
@@ -163,33 +222,100 @@ export default function ProjectsPage() {
                       </div>
                       <div className="space-y-2 min-h-[100px]">
                         {tasks.map(t => (
-                          <div key={t.id} className="bg-slam-dark border border-slam-border rounded-lg p-3 text-sm hover:border-slate-600 transition-colors cursor-pointer">
+                          <div key={t.id} className="bg-slam-dark border border-slam-border rounded-lg p-3 text-sm hover:border-slate-600 transition-colors group/task">
                             <div className="flex items-start gap-2">
-                              {t.status === "done" ? <Check className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" /> : t.priority === "high" ? <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" /> : <Circle className="w-4 h-4 text-slate-600 flex-shrink-0 mt-0.5" />}
-                              <div className="flex-1">
-                                <p className="text-slate-200 leading-snug">{t.title}</p>
+                              <button
+                                onClick={() => cycleStatus(t)}
+                                title="Move to the next column"
+                                aria-label={`Move ${t.title} out of ${col.label}`}
+                                className="flex-shrink-0 mt-0.5"
+                              >
+                                {t.status === "done"
+                                  ? <Check className="w-4 h-4 text-green-400" />
+                                  : t.priority === "high"
+                                    ? <AlertCircle className="w-4 h-4 text-red-400" />
+                                    : <Circle className="w-4 h-4 text-slate-600 hover:text-slate-400" />}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className={`leading-snug ${t.status === "done" ? "text-slate-500 line-through" : "text-slate-200"}`}>{t.title}</p>
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`text-xs ${priorityColors[t.priority] || "text-slate-500"}`}>{t.priority}</span>
                                   {t.dueDate && <span className="text-xs text-slate-600 flex items-center gap-0.5"><Calendar className="w-3 h-3" />{new Date(t.dueDate).toLocaleDateString()}</span>}
                                 </div>
                               </div>
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover/task:opacity-100 transition-opacity flex-shrink-0">
+                                <button
+                                  onClick={() => cycleStatus(t)}
+                                  aria-label={`Advance ${t.title}`}
+                                  className="text-slate-600 hover:text-brand-400 p-0.5"
+                                >
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setPendingTaskDelete(t)}
+                                  aria-label={`Delete ${t.title}`}
+                                  className="text-slate-600 hover:text-red-400 p-0.5"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
-                        {tasks.length === 0 && <div className="text-xs text-slate-700 text-center py-4">No tasks</div>}
+
+                        {composerCol === col.id ? (
+                          <div className="bg-slam-dark border border-brand-500/40 rounded-lg p-3 space-y-2">
+                            <input
+                              autoFocus
+                              value={taskTitle}
+                              onChange={e => setTaskTitle(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") addTask(col.id);
+                                if (e.key === "Escape") { setComposerCol(null); setTaskTitle(""); }
+                              }}
+                              placeholder="What needs doing?"
+                              className="w-full bg-transparent text-sm text-slate-200 placeholder-slate-600 focus:outline-none"
+                            />
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={taskPriority}
+                                onChange={e => setTaskPriority(e.target.value)}
+                                aria-label="Priority"
+                                className="bg-slam-card border border-slam-border rounded px-2 py-1 text-xs text-slate-400 focus:outline-none"
+                              >
+                                <option value="low">low</option>
+                                <option value="medium">medium</option>
+                                <option value="high">high</option>
+                              </select>
+                              <button
+                                onClick={() => addTask(col.id)}
+                                disabled={!taskTitle.trim() || addingTask}
+                                className="ml-auto text-xs bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white px-3 py-1 rounded"
+                              >
+                                {addingTask ? "Adding…" : "Add"}
+                              </button>
+                              <button
+                                onClick={() => { setComposerCol(null); setTaskTitle(""); }}
+                                className="text-xs text-slate-500 hover:text-slate-300 px-1"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setComposerCol(col.id); setTaskTitle(""); }}
+                            className="w-full text-xs text-slate-600 hover:text-brand-400 border border-dashed border-slam-border hover:border-brand-500/40 rounded-lg py-2 transition-colors flex items-center justify-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" /> Add task
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Demo tasks notice */}
-              {active.tasks.length === 0 && (
-                <div className="mt-6 glass rounded-xl p-4 flex items-center gap-3">
-                  <User className="w-5 h-5 text-brand-400" />
-                  <p className="text-sm text-slate-400">Add tasks to this project using the API or via the task creation form — coming in the next update.</p>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -231,6 +357,15 @@ export default function ProjectsPage() {
         busy={deleting}
         onConfirm={deleteProject}
         onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingTaskDelete)}
+        title="Delete task?"
+        message={`"${pendingTaskDelete?.title ?? "This task"}" will be permanently removed.`}
+        busy={deletingTask}
+        onConfirm={deleteTask}
+        onCancel={() => setPendingTaskDelete(null)}
       />
     </div>
   );
