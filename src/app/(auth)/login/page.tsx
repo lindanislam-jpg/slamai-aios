@@ -2,37 +2,52 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { signIn, getSession } from "next-auth/react";
 import { Sparkles, Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email,   setEmail]   = useState("");
   const [password,setPassword]= useState("");
   const [show,    setShow]    = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sessionStuck, setSessionStuck] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     const res = await signIn("credentials", { email, password, redirect: false });
-    setLoading(false);
-    if (res?.ok) {
-      toast.success("Welcome back!");
 
-      // If they picked a plan before signing up, take them straight to checkout.
-      let pendingPlan: string | null = null;
-      try {
-        pendingPlan = sessionStorage.getItem("pendingPlan");
-        if (pendingPlan) sessionStorage.removeItem("pendingPlan");
-      } catch { /* private mode — skip */ }
-
-      router.push(pendingPlan ? "/settings" : "/dashboard");
-    } else {
+    if (!res?.ok) {
+      setLoading(false);
       toast.error("Invalid email or password");
+      return;
     }
+
+    // The credentials call set the cookie, but the session has to be readable
+    // before we leave: navigating first can mount the dashboard while the
+    // session is still unknown, and its guard then bounces straight back here.
+    const session = await getSession();
+    setLoading(false);
+
+    if (!session?.user) {
+      toast.error("Signed in, but your session could not be read back.");
+      setSessionStuck(true);
+      return;
+    }
+
+    toast.success("Welcome back!");
+
+    // If they picked a plan before signing up, take them straight to checkout.
+    let pendingPlan: string | null = null;
+    try {
+      pendingPlan = sessionStorage.getItem("pendingPlan");
+      if (pendingPlan) sessionStorage.removeItem("pendingPlan");
+    } catch { /* private mode — skip */ }
+
+    // A full navigation rather than a client-side push, so the next page starts
+    // from a clean load with the session cookie already in place.
+    window.location.assign(pendingPlan ? "/settings" : "/dashboard");
   }
 
   return (
@@ -66,7 +81,12 @@ export default function LoginPage() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-300 mb-1.5 block">Password</label>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <label className="text-sm font-medium text-slate-300">Password</label>
+                <Link href="/forgot-password" className="text-xs text-brand-400 hover:text-brand-300 font-medium">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
@@ -86,6 +106,17 @@ export default function LoginPage() {
               {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in…</> : "Sign In"}
             </button>
           </form>
+
+          {sessionStuck && (
+            <div className="mt-5 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm">
+              <p className="text-yellow-300 font-medium mb-1">Your details were correct.</p>
+              <p className="text-slate-300 leading-relaxed">
+                The sign-in succeeded but the session could not be read back, so the dashboard
+                would send you straight here again. This is a server configuration problem, not
+                your password — usually a missing or mismatched <code className="text-slate-200">AUTH_SECRET</code>.
+              </p>
+            </div>
+          )}
 
           <div className="mt-6 text-center text-sm text-slate-500">
             Don&apos;t have an account?{" "}
