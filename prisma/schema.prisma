@@ -44,6 +44,21 @@ model User {
   voiceAgent    VoiceAgent?
   websites      Website[]
   installs      AgentInstall[]
+  passwordResets PasswordResetToken[]
+}
+
+/// Single-use, time-limited token backing the "forgot password" flow.
+/// Only the SHA-256 hash is stored, so a database leak cannot be replayed.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Account {
