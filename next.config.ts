@@ -2,13 +2,14 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    domains: ["avatars.githubusercontent.com", "lh3.googleusercontent.com"],
+    remotePatterns: [
+      { protocol: "https", hostname: "avatars.githubusercontent.com" },
+      { protocol: "https", hostname: "lh3.googleusercontent.com" },
+    ],
   },
-  experimental: {
-    serverActions: {
-      allowedOrigins: ["localhost:3005"],
-    },
-  },
+  // The experimental serverActions.allowedOrigins block was removed: the app
+  // uses no server actions, and it allow-listed only localhost:3005, which
+  // would have rejected them from the deployed domain if any were added.
 };
 
 export default nextConfig;
