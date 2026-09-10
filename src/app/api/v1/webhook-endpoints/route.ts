@@ -5,7 +5,7 @@ import { webhookEndpointSchema } from "@/lib/voice/validation";
 import { generateSecret } from "@/lib/voice/signing";
 import { planAllows } from "@/lib/voice/plans";
 import { recordAudit } from "@/lib/voice/audit";
-import { isPrivateHost } from "@/lib/voice/extract";
+import { approveUrl, BlockedAddressError } from "@/lib/voice/egress";
 
 export async function GET() {
   const gate = await requireTenant({ permission: "integrations.read" });
@@ -38,13 +38,14 @@ export async function POST(req: Request) {
   const body = await parseBody(req, webhookEndpointSchema);
   if (!body.ok) return body.response;
 
-  // A webhook URL is a server-side fetch target, so it must be public.
+  // A webhook URL is a server-side fetch target, so it must resolve to a
+  // public address. Checking the hostname string is not a control: a name an
+  // attacker registers can point anywhere.
   try {
-    if (isPrivateHost(new URL(body.data.url).hostname)) {
-      return forbidden("Use a publicly reachable https address.");
-    }
-  } catch {
-    return forbidden("That URL isn't valid.");
+    await approveUrl(body.data.url);
+  } catch (err) {
+    if (err instanceof BlockedAddressError) return forbidden(err.message);
+    return forbidden("That URL could not be checked. Use a publicly reachable https address.");
   }
 
   try {

@@ -101,21 +101,51 @@ creation. Deliveries carry a timestamp so receivers can reject replays. See
 
 ## SSRF
 
-Two places take a URL from a tenant and fetch it server-side: knowledge web
-sources and outbound webhook endpoints. Both refuse:
+Three places take a URL from a tenant and fetch it server-side: knowledge web
+sources, registered webhook endpoints, and notification rules on the webhook
+channel. The knowledge one is the sharpest, because whatever comes back is
+**stored and readable through the API** — a full-read surface, not a blind one.
 
-- anything that is not `http` or `https`
-- `localhost`, `*.local`, `*.internal`, bare hostnames
-- loopback, link-local and RFC1918 ranges (10/8, 127/8, 192.168/16,
-  172.16–31/12, 169.254/16)
-- IPv6 literals
+**Checking the hostname string is not a control.** `169.254.169.254.nip.io` is
+an ordinary public name that resolves to cloud metadata, and so is any name an
+attacker registers pointing at RFC1918 space. Numeric spellings are worse: the
+resolver reads `0177.0.0.1` as octal loopback and `0x7f.1` as hex, neither of
+which a dotted-quad check catches.
 
-Knowledge fetches also refuse to follow redirects (a redirect is a classic way
-around a host allowlist) and time out after 15 seconds.
+So the rule in `src/lib/voice/egress.ts` is **resolve first, judge the address,
+then pin the connection to the address that was judged**:
 
-`isPrivateHost()` in `src/lib/voice/extract.ts` is the single implementation.
+1. Only `http:` and `https:` are accepted.
+2. The hostname is resolved with `all: true`, and the request is refused if
+   **any** returned address is non-public — otherwise which record gets picked
+   would decide whether the request is safe.
+3. Refused ranges (`src/lib/voice/ip.ts`): loopback, `0.0.0.0/8`, all RFC1918,
+   link-local including `169.254.169.254`, carrier-grade NAT `100.64/10`,
+   IETF protocol assignments, benchmarking, multicast and reserved space, plus
+   IPv6 loopback, unique-local, link-local and multicast, and IPv4-mapped IPv6.
+   Anything not a well-formed address is refused: the classifier fails closed.
+4. The connection is **pinned** to the approved address via undici's
+   `connect.lookup` hook, so a name that resolves again to something internal
+   between the check and the connect (DNS rebinding) cannot win the race. TLS
+   SNI and the `Host` header keep the original hostname, so certificates still
+   validate.
+5. Redirects are never followed — a redirect is the simplest way around a host
+   check — and every fetch has a timeout.
 
----
+Registered webhook endpoints and notification rules are checked when they are
+saved **and** again at delivery, because a hostname that was public when the
+rule was created can be repointed afterwards.
+
+Notification targets are also validated for the shape their channel needs: an
+email address for `email`, an E.164 number for `sms`, an `http(s)` URL for
+`webhook`. Previously `target` was a bare string, which let a webhook rule
+name any host and port.
+
+`tests/egress.test.ts` pins the address classifier, and the attack itself is
+worth re-running against a deployment: point a knowledge source and a
+notification webhook at loopback, cloud metadata (both by literal address and
+via a public DNS name that resolves there), an RFC1918 host, and a
+non-`http` scheme. All should be refused.
 
 ## Rate limiting
 

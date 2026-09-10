@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   signupSchema, agentSchema, appointmentSchema, e164, webhookEndpointSchema, leadSchema,
+  notificationRuleSchema,
 } from "../src/lib/voice/validation";
 
 test("signup requires a real email and a long password", () => {
@@ -77,4 +78,29 @@ test("a lead score outside 0-100 is rejected", () => {
 test("a lead status must be one we recognise", () => {
   assert.equal(leadSchema.safeParse({ status: "qualified" }).success, true);
   assert.equal(leadSchema.safeParse({ status: "maybe" }).success, false);
+});
+
+test("a notification target must match the shape its channel needs", () => {
+  const ok = (channel: string, target: string) =>
+    notificationRuleSchema.safeParse({ event: "lead.created", channel, target }).success;
+
+  assert.equal(ok("email", "owner@business.ie"), true);
+  assert.equal(ok("email", "not-an-email"), false);
+
+  assert.equal(ok("sms", "+353871234567"), true);
+  assert.equal(ok("sms", "087 123 4567"), false);
+
+  assert.equal(ok("webhook", "https://example.com/hook"), true);
+  assert.equal(ok("webhook", "definitely not a url"), false);
+});
+
+test("a notification webhook cannot smuggle in a non-http scheme", () => {
+  // The server fetches this target, so file:// and friends must not reach it.
+  for (const target of ["file:///etc/passwd", "gopher://internal:70/", "ftp://internal/"]) {
+    assert.equal(
+      notificationRuleSchema.safeParse({ event: "lead.created", channel: "webhook", target }).success,
+      false,
+      `${target} should be rejected`
+    );
+  }
 });

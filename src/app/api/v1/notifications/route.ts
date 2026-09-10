@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
 import { requireTenant } from "@/lib/voice/tenant";
-import { ok, serverError, parseBody } from "@/lib/voice/http";
+import { ok, badRequest, serverError, parseBody } from "@/lib/voice/http";
 import { notificationRuleSchema } from "@/lib/voice/validation";
 import { isEmailConfigured, isSmsConfigured } from "@/lib/voice/notifications";
 import { recordAudit } from "@/lib/voice/audit";
+import { approveUrl, BlockedAddressError } from "@/lib/voice/egress";
 
 export async function GET() {
   const gate = await requireTenant({ permission: "business.read" });
@@ -38,6 +39,18 @@ export async function POST(req: Request) {
 
   const body = await parseBody(req, notificationRuleSchema);
   if (!body.ok) return body.response;
+
+  // A webhook rule is a URL the server will fetch, so it is held to the same
+  // egress rule as a registered endpoint. Refusing it here rather than at
+  // send time also means the owner finds out while they are looking at it.
+  if (body.data.channel === "webhook") {
+    try {
+      await approveUrl(body.data.target);
+    } catch (err) {
+      if (err instanceof BlockedAddressError) return badRequest(err.message);
+      return badRequest("That URL could not be checked. Use a publicly reachable https address.");
+    }
+  }
 
   try {
     const rule = await db.notificationRule.upsert({

@@ -131,12 +131,38 @@ export const inviteSchema = z.object({
   role: z.enum(ROLES as unknown as [string, ...string[]]),
 });
 
-export const notificationRuleSchema = z.object({
-  event: z.enum(EVENTS as unknown as [string, ...string[]]),
-  channel: z.enum(["email", "sms", "webhook"]),
-  target: z.string().trim().min(3).max(400),
-  isActive: z.boolean().default(true),
-});
+/**
+ * A notification target is whatever the channel actually needs, and a webhook
+ * target is a URL the server will fetch. Typing it as a bare string let a
+ * tenant point the server at an internal address, so each channel is checked
+ * for the shape it means.
+ */
+export const notificationRuleSchema = z
+  .object({
+    event: z.enum(EVENTS as unknown as [string, ...string[]]),
+    channel: z.enum(["email", "sms", "webhook"]),
+    target: z.string().trim().min(3).max(400),
+    isActive: z.boolean().default(true),
+  })
+  .superRefine((value, ctx) => {
+    const fail = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["target"], message });
+
+    if (value.channel === "email" && !z.string().email().safeParse(value.target).success) {
+      fail("Enter a valid email address.");
+    }
+    if (value.channel === "sms" && !e164.safeParse(value.target).success) {
+      fail("Enter a mobile number in international format, e.g. +353871234567.");
+    }
+    if (value.channel === "webhook") {
+      const url = z.string().url().safeParse(value.target);
+      if (!url.success) {
+        fail("Enter a valid https address.");
+      } else if (!/^https?:$/.test(new URL(value.target).protocol)) {
+        fail("Only http and https addresses can be used.");
+      }
+    }
+  });
 
 export const webhookEndpointSchema = z.object({
   name: z.string().trim().min(2).max(120),

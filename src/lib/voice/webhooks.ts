@@ -4,6 +4,7 @@ import type { EventKey } from "./events";
 import {
   signPayload, SIGNATURE_HEADER, TIMESTAMP_HEADER,
 } from "./signing";
+import { safeFetch } from "./egress";
 
 /**
  * Outbound webhook delivery — the integration surface for n8n, Zapier and
@@ -64,10 +65,12 @@ export async function dispatchEvent(
   await Promise.all(
     subscribed.map(async (endpoint) => {
       try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 8000);
-        const response = await fetch(endpoint.url, {
+        // Checked again at delivery, not only when the endpoint was created:
+        // a hostname that was public then can be repointed at an internal
+        // address later.
+        const response = await safeFetch(endpoint.url, {
           method: "POST",
+          timeoutMs: 8000,
           headers: {
             "Content-Type": "application/json",
             [TIMESTAMP_HEADER]: String(timestamp),
@@ -75,9 +78,7 @@ export async function dispatchEvent(
             "X-SlamAI-Event": event,
           },
           body,
-          signal: controller.signal,
         });
-        clearTimeout(timer);
 
         await db.webhookEndpoint.update({
           where: { id: endpoint.id },

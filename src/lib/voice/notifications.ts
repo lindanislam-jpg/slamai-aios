@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import type { EventKey } from "./events";
 import { EVENT_LABELS } from "./events";
 import { dispatchEvent } from "./webhooks";
+import { safeFetch } from "./egress";
 
 /**
  * Fan-out for a platform event: outbound webhooks always, plus whatever
@@ -79,7 +80,11 @@ export async function notify(input: NotifyInput): Promise<void> {
         // Ad-hoc URL rules post the same envelope as a registered endpoint,
         // unsigned — registered endpoints in Settings → Integrations are the
         // signed path and the one to use for anything that matters.
-        await fetch(rule.target, {
+        //
+        // The URL came from a tenant, so it goes through safeFetch: the
+        // address is resolved and judged at dispatch time, not just when the
+        // rule was saved, because a name can be repointed afterwards.
+        await safeFetch(rule.target, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-SlamAI-Event": input.event },
           body: JSON.stringify({ event: input.event, ...input.data, title: input.title, body: input.body }),
