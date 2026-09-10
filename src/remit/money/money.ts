@@ -161,11 +161,21 @@ export class Money {
     return `${negative ? "-" : ""}${whole}${fraction}`;
   }
 
-  /** Localised display string, e.g. "€305.00" or "R5,932.11". */
+  /**
+   * Localised display string, e.g. "€305.00" or "R5,948.24".
+   *
+   * `narrowSymbol` matters here: the default would render ZAR as "ZAR 5,948.24"
+   * for a European locale, and the whole point of the recipient line is that it
+   * reads like money the recipient recognises.
+   *
+   * Formatting goes through Number, which is safe: this is a display string
+   * built from an already-exact decimal, and it is never read back for maths.
+   */
   format(locale = "en-IE"): string {
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: this.currency,
+      currencyDisplay: "narrowSymbol",
       minimumFractionDigits: this.minorUnits,
       maximumFractionDigits: this.minorUnits,
     }).format(Number(this.toDecimalString()));

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { Money } from "@/remit/money/money";
+import { Decimal, Money } from "@/remit/money/money";
 import { createQuote } from "@/remit/server/quote-service";
 import {
   ComplianceBlockedError,
@@ -559,6 +559,38 @@ describe("business analytics", () => {
     expect(Number(kpis.providerCosts.amount)).toBeGreaterThan(0);
     expect(Number(kpis.grossMargin.amount)).toBeLessThan(5);
     expect(kpis.successRate).toBe(1);
+  });
+
+  it("counts each provider cost exactly once, on both legs", async () => {
+    const customer = await makeCustomer();
+    const recipient = await makeRecipient(customer.id);
+    const quote = await quoteFor(customer.id);
+    const { transfer } = await createTransfer({
+      customer,
+      quoteId: quote.id,
+      recipientId: recipient.id,
+      idempotencyKey: "key-costs",
+    });
+    await runToCompletion(transfer.id);
+
+    const settled = await db.remitTransfer.findUniqueOrThrow({
+      where: { id: transfer.id },
+      include: { payments: true, payouts: true },
+    });
+
+    // Pay-in cost is in EUR and lands as-is. Payout cost is charged in ZAR and
+    // is converted back at this transfer's own rate for reporting.
+    const payInCost = settled.payments[0].providerFeeMinor;
+    const payOutCostZar = settled.payouts[0].providerCostMinor;
+    const payOutCostEur = Money.fromMinor(payOutCostZar, "ZAR").convert(
+      new Decimal(1).dividedBy(new Decimal(settled.customerRate.toString())),
+      "EUR",
+    );
+
+    expect(settled.providerCostMinor).toBe(payInCost + payOutCostEur.minor);
+    // And neither leg is missing: both must actually contribute.
+    expect(payInCost).toBeGreaterThan(0n);
+    expect(payOutCostEur.minor).toBeGreaterThan(0n);
   });
 });
 

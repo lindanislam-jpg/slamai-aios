@@ -97,3 +97,57 @@ body {
 @layer utilities {
   .text-balance { text-wrap: balance; }
 }
+
+/* ===========================================================================
+   Remittance product theme
+   ---------------------------------------------------------------------------
+   The rest of this app is dark. The money-transfer product is deliberately
+   bright: in a product whose whole proposition is "you can see exactly what
+   this costs", the interface should feel open rather than shadowy.
+
+   Scoped to [data-app="send"] so it cannot leak into the existing pages.
+   ======================================================================== */
+
+[data-app="send"] {
+  background-color: #F5F8FA;
+  color: #0B1B2B;
+  min-height: 100vh;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+[data-app="send"] ::selection {
+  background: #0E7C66;
+  color: #fff;
+}
+
+/* Tabular figures everywhere an amount is shown, so digits line up and a
+   changing number does not jitter as the customer types. */
+[data-app="send"] .tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+[data-app="send"] .send-card {
+  background: #fff;
+  border: 1px solid #E2E9F0;
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(11, 27, 43, 0.04), 0 8px 24px -16px rgba(11, 27, 43, 0.18);
+}
+
+[data-app="send"] .send-hero {
+  background:
+    radial-gradient(ellipse 70% 60% at 15% 0%, rgba(14, 124, 102, 0.10), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 95% 10%, rgba(240, 162, 2, 0.12), transparent 60%),
+    #F5F8FA;
+}
+
+/* Respect a reduced-motion preference: the tracking screen animates. */
+@media (prefers-reduced-motion: reduce) {
+  [data-app="send"] *,
+  [data-app="send"] *::before,
+  [data-app="send"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { Money } from "../money/money";
+import { Decimal, Money } from "../money/money";
 import { isQuoteExpired } from "../quotes/quote-calculator";
 import { assertTransition, isCancellable, type TransferStatus } from "../transfers/status";
 import { getPaymentProvider, getPayoutProvider } from "../providers/registry";
@@ -372,10 +372,12 @@ export async function initiatePayment(
     },
   });
 
+  // The collection cost is recorded on the payment row now, but only added to
+  // the transfer's cost total when the provider confirms the outcome — see
+  // `markPaymentReceived`. Counting it here as well would double it.
   await transition(transfer.id, "PROCESSING", SYSTEM, {
     reason: `Payment initiated with ${provider.info.displayName}`,
     metadata: { providerRef: result.providerRef, sandbox: !provider.info.isLive },
-    data: { providerCostMinor: { increment: result.providerFee?.minor ?? 0n } },
   });
 
   return {
@@ -489,9 +491,17 @@ export async function convertAndSend(transferId: string): Promise<RemitTransfer>
       },
     });
 
+    // The payout partner charges us in the destination currency. Reporting is
+    // in the source currency, so convert at this transfer's own rate — leaving
+    // it out would quietly overstate the margin on every transfer.
+    const payoutCost = result.providerCost
+      ? toSourceCurrency(result.providerCost, transfer.customerRate.toString(), transfer.sourceCurrency)
+      : null;
+
     return transition(transfer.id, "SENT", SYSTEM, {
       reason: `Sent to ${provider.info.displayName}`,
       metadata: { providerRef: result.providerRef, sandbox: !provider.info.isLive },
+      data: payoutCost ? { providerCostMinor: { increment: payoutCost.minor } } : undefined,
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Payout could not be created";
@@ -640,6 +650,16 @@ export async function cancelTransfer(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Convert a destination-currency amount back to the source currency at the
+ * transfer's own rate. Used for cost reporting only — never for anything the
+ * customer is shown or charged.
+ */
+function toSourceCurrency(amount: Money, customerRate: string, sourceCurrency: string): Money {
+  const inverse = new Decimal(1).dividedBy(new Decimal(customerRate));
+  return amount.convert(inverse, sourceCurrency);
+}
 
 export class QuoteExpiredError extends Error {
   constructor() {

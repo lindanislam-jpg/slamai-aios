@@ -164,8 +164,11 @@ export function buildTimeline(
     const index = TIMELINE.indexOf(step);
     let state: TimelineState;
     if (at && index !== currentIndex) state = "done";
-    else if (index === currentIndex) state = failed ? "stopped" : "current";
-    else if (failed && index > currentIndex) state = "skipped";
+    else if (index === currentIndex) {
+      // On a COMPLETED transfer the final step is finished, not in progress —
+      // showing it as "current" leaves the customer waiting on nothing.
+      state = failed ? "stopped" : status === "COMPLETED" ? "done" : "current";
+    } else if (failed && index > currentIndex) state = "skipped";
     else if (at) state = "done";
     else state = "upcoming";
     return { ...step, state, at };

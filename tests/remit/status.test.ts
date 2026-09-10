@@ -118,6 +118,7 @@ describe("customer timeline", () => {
       { toStatus: "COMPLETED", createdAt: at(5) },
     ]);
     expect(timeline.find((step) => step.key === "received")?.at).toEqual(at(2));
-    expect(timeline.every((step) => step.state === "done" || step.state === "current")).toBe(true);
+    // A completed transfer has no step still in progress — including the last.
+    expect(timeline.every((step) => step.state === "done")).toBe(true);
   });
 });
