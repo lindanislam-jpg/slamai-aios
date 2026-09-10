@@ -64,14 +64,16 @@ flag on the user, and each page checks the specific permission it needs.
 npm test
 ```
 
-97 tests. Unit tests cover money arithmetic, the fee engine, FX pricing, quote
+115 tests. Unit tests cover money arithmetic, the fee engine, FX pricing, quote
 calculation and expiry, the state machine, the customer timeline, risk scoring,
-recipient validation, webhook signature verification and rate limiting.
+recipient validation, webhook signature verification, rate limiting, the
+deployment preflight checks and the Resend payload.
 
 Integration tests run against a real Postgres and cover the full transfer
 journey, quote consumption, concurrent duplicate submission, compliance
 approval and rejection, screening blocks, cancellation rules, notifications,
-the audit trail and gross-margin arithmetic.
+the audit trail, gross-margin arithmetic, and email verification including code
+supersession, attempt limits and expiry.
 
 ## Deploying
 
@@ -98,6 +100,22 @@ It pushes the schema, seeds reference data, verifies the result and prints what
 is still missing. Idempotent — safe to re-run. It also labels whether each value
 came from your shell or a local `.env`, because a secret in your `.env` says
 nothing about whether your deployment has one.
+
+#### Or run it from GitHub instead
+
+If you would rather not run anything locally, the **Set up money-transfer
+database** workflow does the same thing on a runner:
+
+1. Add your connection string as a repository secret named
+   `REMIT_DATABASE_URL` (Settings → Secrets and variables → Actions). Put it
+   there, not in a chat, an issue or a commit.
+2. Actions → *Set up money-transfer database* → **Run workflow**.
+
+It is manual-dispatch only. Seeding touches a real database, so running it on
+every push would make an accidental force-push a database event.
+
+The workflow cannot set your deployment's environment variables — no CI job
+can. It finishes by listing what is still required.
 
 ### Checking a deployment
 
