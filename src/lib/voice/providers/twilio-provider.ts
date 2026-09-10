@@ -137,6 +137,20 @@ export class TwilioVoiceProvider implements VoiceProvider {
    * this must pass before a handler acts on anything in the body.
    */
   async verifyWebhook(req: Request): Promise<Record<string, string> | null> {
+    const form = await req.formData();
+    const params: Record<string, string> = {};
+    for (const [key, value] of form.entries()) {
+      if (typeof value === "string") params[key] = value;
+    }
+
+    // Development escape hatch, checked first so a local call can be simulated
+    // with no carrier account at all. Hard-gated on NODE_ENV: there is no way
+    // to reach this branch in production, whatever the environment says.
+    if (process.env.NODE_ENV !== "production" && process.env.VOICE_SKIP_SIGNATURE_CHECK === "true") {
+      console.warn("[twilio] signature validation skipped (VOICE_SKIP_SIGNATURE_CHECK, development only).");
+      return params;
+    }
+
     const token = this.authToken;
     if (!token) {
       console.error("[twilio] no auth token — refusing to trust this webhook.");
@@ -144,19 +158,6 @@ export class TwilioVoiceProvider implements VoiceProvider {
     }
 
     const signature = req.headers.get("x-twilio-signature");
-    const form = await req.formData();
-    const params: Record<string, string> = {};
-    for (const [key, value] of form.entries()) {
-      if (typeof value === "string") params[key] = value;
-    }
-
-    // Local tunnels rewrite the host, so the signed URL cannot be rebuilt.
-    // Opting out is development-only and can never apply in production.
-    if (process.env.VOICE_SKIP_SIGNATURE_CHECK === "true" && process.env.NODE_ENV !== "production") {
-      console.warn("[twilio] signature validation skipped (VOICE_SKIP_SIGNATURE_CHECK).");
-      return params;
-    }
-
     if (!signature) return null;
 
     if (!validateRequest(token, signature, publicWebhookUrl(req), params)) {

@@ -125,7 +125,22 @@ export async function POST(req: Request) {
   }
 
   if (result.action.type === "hangup") {
-    await closeCall(call.id, null, elapsed, "completed", result.captured);
+    // A call the AI could not take is not an answered call — recording it as
+    // one would hide a broken deployment behind healthy-looking numbers.
+    const unavailable = result.action.reason === "ai_unavailable";
+    if (unavailable) {
+      await db.voiceCall.update({
+        where: { id: call.id },
+        data: { outcome: "failed", aiHandled: false },
+      });
+    }
+    await closeCall(
+      call.id,
+      unavailable ? "The AI provider was unavailable, so the call could not be handled." : null,
+      elapsed,
+      unavailable ? "failed" : "completed",
+      result.captured
+    );
     return twiml(hangup(result.reply, speech));
   }
 

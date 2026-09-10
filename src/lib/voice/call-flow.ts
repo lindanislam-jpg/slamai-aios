@@ -107,7 +107,11 @@ export async function finaliseCall(
   };
   const scored = scoreLead(signals);
 
-  const outcome = resolveOutcome(call.transferred, booked > 0, Boolean(phone && name), captured, analysis);
+  // A call already marked failed or missed keeps that outcome — the analysis
+  // must not upgrade a broken call into a healthy-looking one.
+  const outcome = ["failed", "missed"].includes(call.outcome)
+    ? call.outcome
+    : resolveOutcome(call.transferred, booked > 0, Boolean(phone && name), captured, analysis);
 
   await db.voiceCall.update({
     where: { id: callId },

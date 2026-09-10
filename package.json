@@ -15,7 +15,8 @@
     "db:seed:voice": "tsx prisma/seed-voice.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "tsx --test tests/e2e/*.test.ts",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "simulate:call": "tsx scripts/simulate-call.mts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

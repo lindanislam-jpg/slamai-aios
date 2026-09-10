@@ -104,3 +104,133 @@ Schema pushed to Postgres and verified.
   dashboard can say exactly what is missing rather than implying delivery.
 
 TypeScript: clean.
+
+---
+
+## Phase 4–17 — The application
+
+### API layer (`/api/v1`, `/api/webhooks`, `/api/admin`, `/api/public`)
+
+Around 40 route files. Every tenant route opens with `requireTenant()`, which
+resolves the workspace from the caller's **membership row** and checks the
+role's permission before any query runs. No handler reads a `businessId` from a
+request body.
+
+**Decisions made:**
+
+- **Cross-tenant access returns 404, not 403.** Confirming a record exists is
+  itself a leak.
+- **Mutations use `updateMany`/`deleteMany` scoped to `{ id, businessId }`**
+  rather than `update({ where: { id } })`. Another tenant's id matches nothing,
+  so a mistake fails closed rather than open.
+- **Uploads are extracted, not stored.** Text is pulled out at upload time and
+  the binary discarded. The agent only needs the words, and not holding
+  customers' documents removes a class of storage and breach problems.
+- **SSRF is blocked in one place.** `isPrivateHost()` guards both places a
+  tenant URL is fetched server-side (knowledge sources, webhook endpoints).
+  Redirects are not followed.
+- **The admin panel re-reads the role from the database**, not the JWT — a token
+  minted before a demotion still carries the old claim.
+- **Post-call processing is idempotent** on `Lead.callId`, so a retried carrier
+  webhook cannot create a second lead.
+
+### Dashboard (`/app`)
+
+Server-guarded shell, a shared component kit, and pages for the dashboard, the
+agent builder, knowledge, calls, transcripts, leads, appointments, the test
+console, analytics, billing, settings (eight tabs), onboarding and admin.
+
+**Decisions made:**
+
+- **The layout guard runs on the server.** No protected markup is generated for
+  a signed-out visitor, and there is no redirect flash.
+- **The onboarding wizard reuses the settings components** rather than keeping
+  simplified copies that would drift apart.
+- **The test console runs the real engine** with `persist: false`. What an owner
+  hears while testing is what a caller gets.
+- **Revenue is labelled an estimate everywhere it appears.** It is the sum of
+  values the owner set on their own leads.
+- **Server-only modules were split where a client page needed a constant**
+  (`metrics.ts`, `signing.ts`, `labels.ts`), rather than dropping `server-only`
+  from a module that touches the database.
+
+### Marketing site (`/voice`)
+
+Landing page, pricing with a full comparison table, and a demo request form
+backed by a real, rate-limited endpoint that files into the admin panel.
+
+The hero shows the agent handling an actual emergency call — establish urgency,
+take the address, offer a real slot — because that is the product, and a static
+screenshot is not.
+
+## Phase 18 — Testing
+
+**54 unit tests** over the logic that must not drift: lead scoring, timezone and
+opening-hours arithmetic across DST and midnight boundaries, the permission
+matrix, webhook signing and replay rejection, HTML and text chunking, plan
+limits and request validation. No database needed.
+
+**16 end-to-end tests** against a live server and a real database. This is the
+only way to actually prove tenant isolation — a mocked session would be testing
+the mock. They cover cross-tenant reads, writes and deletes, list leakage, agent
+reconfiguration, phone number ownership, per-tenant calendars, workspace
+switching, the hidden admin panel, unsigned webhook rejection and the pagination
+cap.
+
+**A call simulator** (`npm run simulate:call`) posts to the real carrier
+webhooks with no carrier account, exercising tenant resolution, the conversation
+engine, transcript persistence and post-call processing exactly as a live call
+does.
+
+**Verified by running it**, not by assuming:
+
+- Production build: clean, no TypeScript errors, no lint warnings
+- 54 unit tests: pass
+- 16 end-to-end tests against a live server: pass
+- A simulated inbound call: tenant resolved from the dialled number, greeting
+  spoken, turns persisted, call finalised, usage metered
+
+**Fixed while testing:**
+
+- `parseBody` inferred a Zod schema's *input* type instead of its output, so
+  defaults were typed as possibly undefined.
+- `pdf-parse` v2 exposes a `PDFParse` class, not a default export.
+- Webhook signing lived in a `server-only` module and could not be unit tested;
+  extracted to `signing.ts`, which doubles as the reference implementation
+  shipped in the integration docs.
+- The development signature bypass sat *after* the auth-token check, so a call
+  could not be simulated without a carrier account at all. Moved ahead of it and
+  hard-gated on `NODE_ENV`.
+- A call the AI could not take was recorded as `answered`, which would hide a
+  broken deployment behind healthy-looking numbers. It is now `failed`, and
+  post-call analysis can no longer upgrade a failed call.
+
+## Phase 20 — Documentation
+
+`README.md`, `SETUP.md`, `DEPLOYMENT.md`, `VOICE_PROVIDER_SETUP.md`,
+`STRIPE_SETUP.md`, `DATABASE.md`, `API.md`, `N8N_INTEGRATION.md`,
+`SECURITY.md`, `TROUBLESHOOTING.md`, and a complete `.env.example` that states
+what each missing key actually costs you.
+
+---
+
+## What is deliberately not built
+
+Being explicit about this matters more than a longer feature list.
+
+| Not built | Why, and what to do instead |
+|---|---|
+| **Direct calendar sync** (Google, Microsoft) | The appointment model, availability engine and integration table are all in place, but no OAuth flow is wired. Bookings live in SlamAI. Use a webhook into n8n to mirror them into a calendar today. |
+| **Direct CRM integrations** (HubSpot, Salesforce, GoHighLevel) | Same reasoning. The webhook path reaches all of them through n8n or Zapier now. Settings → Integrations lists them as *Planned*, not as available. |
+| **Automatic overage billing to Stripe** | Usage is metered and the overage is calculated and shown. Reporting it to a Stripe metered price is one function call, left undone because you should decide your overage policy before charging for it. |
+| **Automatic retention deletion** | Per-plan retention is defined and documented with the SQL. It is not run on a timer — the platform should not delete a customer's business records without you deciding to. |
+| **Real-time streaming voice** | The current loop is turn-based (speak → listen → reply), which is what a carrier `<Gather>` gives you. It works and it is honest about its latency. `runTurn` is transport agnostic, so a streaming adapter implements the same interface. |
+| **Global rate limiting** | The limiter is per instance. That stops scripted abuse and runaway AI cost. A multi-instance deployment that needs a global limit backs `hit()` with Redis — the signature does not change. |
+| **Email delivery of team invitations** | Invitations are created and hashed correctly; without a mail provider the link is returned to the inviter to send. Better than an invitation that silently never arrives. |
+
+## Open decision for you
+
+`/` still serves the original SlamAI AIOS landing page. SlamAI Voice lives at
+`/voice`. If SlamAI Voice is the business you are selling, `/` should be its
+landing page — that is a one-line redirect, but it changes what your domain
+sells, so it was left for you rather than done quietly.
