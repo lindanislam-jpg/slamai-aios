@@ -14,7 +14,7 @@ import Shell from "@/components/voice/Shell";
  */
 export default async function VoiceAppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session?.user?.id) redirect("/voice/login");
+  if (!session?.user?.id) redirect("/login");
 
   const ctx = await getTenantContext();
   if (!ctx) redirect("/voice/new-workspace");

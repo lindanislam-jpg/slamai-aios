@@ -35,7 +35,7 @@ export default function NewWorkspacePage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-5 py-12">
       <div className="w-full max-w-md">
-        <Link href="/voice" className="mb-8 flex items-center justify-center gap-2.5">
+        <Link href="/" className="mb-8 flex items-center justify-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
             <Phone className="h-4 w-4 text-white" />
           </span>

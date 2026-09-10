@@ -3,15 +3,26 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
-  title: "SlamAI — AI that answers your phone and books the job",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3005"),
+  title: {
+    default: "SlamAI Voice — Your AI Receptionist. 24/7. Never Miss a Customer.",
+    template: "%s — SlamAI Voice",
+  },
   description:
-    "An AI phone agent for Irish service businesses. It answers every call, talks to the customer, books them in, and writes the lead straight into your CRM. Works at 9pm on a Sunday.",
-  keywords: "AI phone agent, AI receptionist, missed calls, voice AI, CRM, Ireland, SlamAI",
+    "SlamAI Voice answers your calls, talks to customers, captures leads, books appointments and keeps your business running around the clock.",
+  keywords:
+    "AI receptionist, AI phone agent, missed calls, voice AI, call answering service, appointment booking, lead capture",
   openGraph: {
-    title: "SlamAI — stop losing jobs to missed calls",
+    title: "SlamAI Voice — Your AI Receptionist",
     description:
-      "An AI that answers your phone, books the customer in, and files the lead in your CRM.",
+      "Answers your calls, talks to customers, captures leads and books appointments. 24 hours a day.",
     type: "website",
+    siteName: "SlamAI Voice",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SlamAI Voice — Your AI Receptionist",
+    description: "Turn every call into an opportunity. Live in under ten minutes.",
   },
 };
 

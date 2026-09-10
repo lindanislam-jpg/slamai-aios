@@ -94,7 +94,7 @@ psql "$DATABASE_URL" -c "UPDATE \"User\" SET role = 'admin' WHERE email = 'you@y
 ## 6. Verify, don't assume
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://yourdomain.com/voice     # 200
+curl -s -o /dev/null -w "%{http_code}\n" https://yourdomain.com/           # 200
 curl -s -o /dev/null -w "%{http_code}\n" https://yourdomain.com/app       # 307 to sign-in
 
 # An unsigned call webhook must be refused.

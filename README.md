@@ -5,8 +5,8 @@ database and one authentication system.
 
 | Product | Where | What it is |
 |---|---|---|
-| **SlamAI Voice** | `/voice`, `/app` | A multi-tenant AI receptionist SaaS. This is the commercial product. |
-| SlamAI AIOS | `/`, `/dashboard`, `/life` | The original single-user AI business suite and Life OS. Untouched. |
+| **SlamAI Voice** | `/` and `/app` | A multi-tenant AI receptionist SaaS. **This is the product this domain sells.** |
+| SlamAI AIOS | `/aios`, `/dashboard`, `/life` | The original single-user AI business suite and Life OS. Still there, no longer the front door. |
 
 ---
 
@@ -69,7 +69,7 @@ npm run db:seed:voice     # a populated ABC Plumbing demo — 267 calls
 npm run dev
 ```
 
-Then open http://localhost:3005/voice.
+Then open http://localhost:3005.
 
 Full instructions, including what each missing API key costs you, are in
 [docs/SETUP.md](./docs/SETUP.md).

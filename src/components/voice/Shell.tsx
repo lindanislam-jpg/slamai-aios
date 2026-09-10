@@ -162,7 +162,7 @@ export default function Shell({
           <div className="truncate text-[11px] text-slate-500">{userEmail}</div>
         </div>
         <button
-          onClick={() => signOut({ callbackUrl: "/voice" })}
+          onClick={() => signOut({ callbackUrl: "/" })}
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-slate-200"
         >
           <LogOut className="h-[17px] w-[17px]" />

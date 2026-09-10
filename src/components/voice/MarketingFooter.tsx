@@ -26,25 +26,25 @@ export default function MarketingFooter() {
           <FooterColumn
             title="Product"
             links={[
-              { href: "/voice#how", label: "How it works" },
-              { href: "/voice#features", label: "Features" },
-              { href: "/voice#industries", label: "Industries" },
-              { href: "/voice/pricing", label: "Pricing" },
+              { href: "/#how", label: "How it works" },
+              { href: "/#features", label: "Features" },
+              { href: "/#industries", label: "Industries" },
+              { href: "/pricing", label: "Pricing" },
             ]}
           />
           <FooterColumn
             title="Get started"
             links={[
-              { href: "/voice/signup", label: "Start free" },
-              { href: "/voice/demo", label: "Book a demo" },
-              { href: "/voice/login", label: "Sign in" },
+              { href: "/signup", label: "Start free" },
+              { href: "/demo", label: "Book a demo" },
+              { href: "/login", label: "Sign in" },
             ]}
           />
           <FooterColumn
             title="Company"
             links={[
-              { href: "/voice#faq", label: "FAQ" },
-              { href: "/", label: "SlamAI platform" },
+              { href: "/#faq", label: "FAQ" },
+              { href: "/aios", label: "SlamAI AIOS" },
             ]}
           />
         </div>

@@ -23,7 +23,7 @@ provider abstraction, no team roles.
 multi-tenant product module inside the same repository, reusing the auth,
 Stripe and Twilio plumbing. Existing AIOS routes are untouched.
 
-- Marketing site: `/voice`
+- Marketing site: `/` (see the note at the end of this log)
 - Product app: `/app/*`
 - Tenant API: `/api/v1/*`
 - Provider webhooks: `/api/webhooks/*`
@@ -154,7 +154,7 @@ console, analytics, billing, settings (eight tabs), onboarding and admin.
   (`metrics.ts`, `signing.ts`, `labels.ts`), rather than dropping `server-only`
   from a module that touches the database.
 
-### Marketing site (`/voice`)
+### Marketing site (`/`)
 
 Landing page, pricing with a full comparison table, and a demo request form
 backed by a real, rate-limited endpoint that files into the admin panel.
@@ -228,9 +228,49 @@ Being explicit about this matters more than a longer feature list.
 | **Global rate limiting** | The limiter is per instance. That stops scripted abuse and runaway AI cost. A multi-instance deployment that needs a global limit backs `hit()` with Redis — the signature does not change. |
 | **Email delivery of team invitations** | Invitations are created and hashed correctly; without a mail provider the link is returned to the inviter to send. Better than an invitation that silently never arrives. |
 
-## Open decision for you
+## Phase 21 — SlamAI Voice becomes the front door
 
-`/` still serves the original SlamAI AIOS landing page. SlamAI Voice lives at
-`/voice`. If SlamAI Voice is the business you are selling, `/` should be its
-landing page — that is a one-line redirect, but it changes what your domain
-sells, so it was left for you rather than done quietly.
+The landing page for SlamAI Voice now serves `/`. It is the real page, not a
+redirect — a redirect costs a hop and splits the domain's SEO across two URLs.
+
+| URL | What it serves |
+|---|---|
+| `/` | The SlamAI Voice landing page |
+| `/pricing` | Pricing and the full plan comparison |
+| `/demo` | Book a demo |
+| `/signup` | Create a workspace |
+| `/login` | Sign in — **one** page for the whole platform |
+| `/app/*` | The product |
+| `/aios` | The original AIOS marketing page, still there |
+| `/dashboard`, `/life` | The original AIOS app, untouched |
+
+**Decisions made:**
+
+- **The old `/voice/*` URLs are permanent (308) redirects**, not deletions.
+  Anything already shared keeps working and search engines are told where the
+  page moved.
+- **One sign-in page, at `/login`.** Two login pages on one domain is a real
+  problem: a customer bookmarks one, signs in, and lands in the wrong product.
+  The page is now styled as SlamAI Voice and decides where to send someone
+  *after* sign-in — a Voice workspace goes to `/app`, an account without one
+  goes to the AIOS dashboard. The AIOS login's "session could not be read back"
+  diagnostic and its pending-plan-to-checkout behaviour were both preserved
+  rather than dropped in the rewrite.
+- **`?next=` is honoured but only for same-site paths.** An absolute URL there
+  would be an open redirect.
+- **The public pages sit in a `(marketing)` route group**, so they share the
+  product's dark ground without adding a path segment.
+- **The AIOS auth pages' logo now links to `/aios`**, not `/` — their logo says
+  "SlamAI AIOS", so sending them to the Voice landing would be a dead end.
+- **Metadata is now a title template.** The root supplies
+  `%s — SlamAI Voice`; `/aios` overrides it absolutely so it is not branded as
+  a Voice page.
+
+**Verified by running it:**
+
+- `/` serves the SlamAI Voice landing with the correct title and hero
+- Every old `/voice/*` URL 308s to its new home
+- `/app` is still guarded; the AIOS app at `/aios`, `/dashboard` and `/life`
+  still works
+- Sign-in routing checked against two real accounts: the demo workspace owner
+  lands on `/app`, an account with no workspace lands on `/dashboard`

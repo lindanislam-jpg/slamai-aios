@@ -70,8 +70,10 @@ npm run dev
 
 | URL | What it is |
 |---|---|
-| http://localhost:3005/voice | The SlamAI Voice marketing site |
-| http://localhost:3005/voice/signup | Create a workspace |
+| http://localhost:3005 | The SlamAI Voice landing page |
+| http://localhost:3005/pricing | Pricing |
+| http://localhost:3005/signup | Create a workspace |
+| http://localhost:3005/login | Sign in (routes to the right product) |
 | http://localhost:3005/app | The product |
 | http://localhost:3005/app/admin | The platform admin panel (needs `User.role = "admin"`) |
 | http://localhost:3005/dashboard | The original SlamAI AIOS app, untouched |

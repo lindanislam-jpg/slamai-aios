@@ -5,11 +5,11 @@ import { useState } from "react";
 import { Menu, Phone, X } from "lucide-react";
 
 const LINKS = [
-  { href: "/voice#how", label: "How it works" },
-  { href: "/voice#features", label: "Features" },
-  { href: "/voice#industries", label: "Industries" },
-  { href: "/voice/pricing", label: "Pricing" },
-  { href: "/voice#faq", label: "FAQ" },
+  { href: "/#how", label: "How it works" },
+  { href: "/#features", label: "Features" },
+  { href: "/#industries", label: "Industries" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/#faq", label: "FAQ" },
 ];
 
 export default function MarketingNav() {
@@ -18,7 +18,7 @@ export default function MarketingNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#08081a]/80 backdrop-blur-xl">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
-        <Link href="/voice" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-900/40">
             <Phone className="h-4 w-4 text-white" />
           </span>
@@ -37,11 +37,11 @@ export default function MarketingNav() {
         </div>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <Link href="/voice/login" className="text-[14px] text-slate-300 transition-colors hover:text-white">
+          <Link href="/login" className="text-[14px] text-slate-300 transition-colors hover:text-white">
             Sign in
           </Link>
           <Link
-            href="/voice/signup"
+            href="/signup"
             className="rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-[14px] font-medium text-white shadow-lg shadow-indigo-900/40 transition-all hover:from-indigo-400 hover:to-violet-500"
           >
             Start Free
@@ -70,10 +70,10 @@ export default function MarketingNav() {
             </Link>
           ))}
           <div className="mt-3 flex gap-2">
-            <Link href="/voice/login" className="flex-1 rounded-xl border border-white/10 py-2.5 text-center text-[14px] text-slate-200">
+            <Link href="/login" className="flex-1 rounded-xl border border-white/10 py-2.5 text-center text-[14px] text-slate-200">
               Sign in
             </Link>
-            <Link href="/voice/signup" className="flex-1 rounded-xl bg-indigo-500 py-2.5 text-center text-[14px] font-medium text-white">
+            <Link href="/signup" className="flex-1 rounded-xl bg-indigo-500 py-2.5 text-center text-[14px] font-medium text-white">
               Start Free
             </Link>
           </div>

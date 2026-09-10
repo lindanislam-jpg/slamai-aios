@@ -37,7 +37,7 @@ function AcceptInvite() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#08081a] px-5 py-12">
       <div className="w-full max-w-md">
-        <Link href="/voice" className="mb-8 flex items-center justify-center gap-2.5">
+        <Link href="/" className="mb-8 flex items-center justify-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
             <Phone className="h-4 w-4 text-white" />
           </span>
@@ -67,7 +67,7 @@ function AcceptInvite() {
               <h1 className="text-[20px] font-semibold text-white">We couldn&apos;t accept that invitation</h1>
               <p className="mt-2 text-[14px] leading-relaxed text-slate-400">{message}</p>
               <p className="mt-4 text-[13px] text-slate-500">
-                If you weren&apos;t signed in, <Link href="/voice/login" className="text-indigo-400 hover:underline">sign in</Link>{" "}
+                If you weren&apos;t signed in, <Link href="/login" className="text-indigo-400 hover:underline">sign in</Link>{" "}
                 first and open the link again.
               </p>
             </>
