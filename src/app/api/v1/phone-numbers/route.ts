@@ -88,6 +88,16 @@ export async function POST(req: Request) {
       }
     }
 
+    // An agent id from the client is only accepted if it belongs to this
+    // tenant — a number must never route a caller to another workspace's agent.
+    if (input.agentId) {
+      const agent = await db.receptionAgent.findFirst({
+        where: { id: input.agentId, businessId: gate.ctx.businessId },
+        select: { id: true },
+      });
+      if (!agent) return badRequest("That AI receptionist doesn't belong to this workspace.");
+    }
+
     const agentId =
       input.agentId ??
       (await db.receptionAgent.findFirst({

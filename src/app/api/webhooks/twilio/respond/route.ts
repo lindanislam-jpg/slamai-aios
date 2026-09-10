@@ -112,9 +112,17 @@ export async function POST(req: Request) {
   });
 
   if (result.action.type === "transfer" && result.action.number) {
+    // Record the AI portion's duration before finalising: metering reads
+    // durationSec, and once the call is bridged the status callback's later
+    // (authoritative) duration arrives after this call has been finalised.
     await db.voiceCall.update({
       where: { id: call.id },
-      data: { transferred: true, outcome: "transferred", aiHandled: false },
+      data: {
+        transferred: true,
+        outcome: "transferred",
+        aiHandled: false,
+        durationSec: Math.max(call.durationSec, elapsed),
+      },
     });
     // Finalise now: once the call is bridged to a person we may not get a
     // clean end-of-call event for the AI portion.

@@ -38,6 +38,9 @@ type Analysis = {
   unansweredQuestion: string | null;
 };
 
+/** Placeholder written while a call is being finalised, to claim it. */
+const FINALISING = "…";
+
 const EMPTY_ANALYSIS: Analysis = {
   summary: "",
   intent: "unknown",
@@ -69,6 +72,15 @@ export async function finaliseCall(
 
   // Already finalised (a duplicate provider callback) — nothing to redo.
   if (call.summary) return;
+
+  // Claim the call atomically. The status and recording callbacks can arrive
+  // at the same moment; without this both would pass the check above and the
+  // tenant would be metered twice for one call.
+  const claim = await db.voiceCall.updateMany({
+    where: { id: callId, summary: null },
+    data: { summary: FINALISING },
+  });
+  if (claim.count === 0) return;
 
   const transcript = call.turns
     .map((t) => `${t.role === "caller" ? "CUSTOMER" : "AI"}: ${t.text}`)
@@ -107,9 +119,10 @@ export async function finaliseCall(
   };
   const scored = scoreLead(signals);
 
-  // A call already marked failed or missed keeps that outcome — the analysis
-  // must not upgrade a broken call into a healthy-looking one.
-  const outcome = ["failed", "missed"].includes(call.outcome)
+  // A call already marked failed, missed or answered by voicemail keeps that
+  // outcome — the analysis must not upgrade a broken or unattended call into a
+  // healthy-looking one.
+  const outcome = ["failed", "missed", "message_taken"].includes(call.outcome)
     ? call.outcome
     : resolveOutcome(call.transferred, booked > 0, Boolean(phone && name), captured, analysis);
 

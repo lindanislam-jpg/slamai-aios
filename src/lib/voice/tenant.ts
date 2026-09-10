@@ -85,7 +85,9 @@ export async function requireTenant(options: RequireTenantOptions = {}): Promise
   }
 
   const suspended = business.status !== "active";
-  if (suspended && (options.write || options.permission)) {
+  // Only mutations are refused. A suspended tenant must still be able to read
+  // its own data — not least the billing page it needs to reach to pay.
+  if (suspended && options.write) {
     return deny("This workspace is suspended. Contact support to reactivate it.", 403);
   }
 

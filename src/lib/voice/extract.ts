@@ -103,16 +103,27 @@ export function isPrivateHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
   if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return true;
   if (!host.includes(".")) return true;
+  if (host.startsWith("[") || host.includes(":")) return true;
 
-  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const [a, b] = ipv4.slice(1).map(Number);
+  // Anything made only of digits and dots is an address, not a name. It is
+  // matched loosely on purpose: the resolver reads a zero-padded octet as
+  // octal (0177.0.0.1 is 127.0.0.1), so a strict dotted-quad match would let
+  // non-canonical spellings of loopback straight through.
+  if (/^[\d.]+$/.test(host)) {
+    const octets = host.split(".");
+    if (octets.length !== 4 || octets.some((o) => o === "" || o.length > 3)) return true;
+    // A leading zero means the resolver will read the octet as octal, so the
+    // decimal value below would not be the address actually dialled.
+    if (octets.some((o) => o.length > 1 && o.startsWith("0"))) return true;
+
+    const [a, b] = octets.map(Number);
     if (a === 10 || a === 127 || a === 0) return true;
     if (a === 192 && b === 168) return true;
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 169 && b === 254) return true;
+    // Carrier-grade NAT, which cloud metadata and internal load balancers use.
+    if (a === 100 && b >= 64 && b <= 127) return true;
   }
-  if (host.startsWith("[") || host.includes(":")) return true;
 
   return false;
 }

@@ -14,6 +14,12 @@ export type ChatMessage = {
   /** Present on tool results. */
   toolCallId?: string;
   name?: string;
+  /**
+   * Present on an assistant message that asked for tools. Providers require
+   * this to be echoed back, otherwise the tool results that follow have
+   * nothing to attach to and the request is rejected.
+   */
+  toolCalls?: ToolCall[];
 };
 
 export type ToolDefinition = {

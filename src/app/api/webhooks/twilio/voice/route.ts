@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { getVoiceProvider, appBaseUrl } from "@/lib/voice/providers";
-import { twiml, sayAndGather, hangup } from "@/lib/voice/twiml";
+import { twiml, sayAndGather, hangup, say, escapeXml } from "@/lib/voice/twiml";
 import { isOpenAt, DEFAULT_HOURS, type HourRow } from "@/lib/voice/hours";
 import { isOverMinutes } from "@/lib/voice/usage";
 import { dispatchEvent } from "@/lib/voice/webhooks";
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     // Forward to a human rather than dropping the caller, if we can.
     if (number.forwardTo) {
       return twiml(
-        `<Say voice="${speech.voice}">One moment please.</Say><Dial>${number.forwardTo}</Dial>`
+        say("One moment please.", speech) + `<Dial>${escapeXml(number.forwardTo)}</Dial>`
       );
     }
     return twiml(
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
   if (await isOverMinutes(number.businessId, subscription?.planId ?? "trial", subscription?.minutesOverride)) {
     const forward = number.forwardTo || agent.transferNumber || agent.fallbackNumber;
     if (forward) {
-      return twiml(`<Say voice="${speech.voice}">One moment please.</Say><Dial>${forward}</Dial>`);
+      return twiml(say("One moment please.", speech) + `<Dial>${escapeXml(forward)}</Dial>`);
     }
     return twiml(
       hangup(
@@ -96,16 +96,12 @@ export async function POST(req: Request) {
   const afterHours = !isOpenAt(hours, number.business.timezone);
 
   // Voicemail-only after hours: take the message and stop paying for AI turns.
-  if (afterHours && agent.afterHoursMode === "voicemail") {
-    return twiml(
-      `<Say voice="${speech.voice}">${agent.greeting} We're closed at the moment. Please leave your name, number and message after the tone, and we'll call you back.</Say>` +
-        `<Record maxLength="120" playBeep="true" transcribe="false" ` +
-        `recordingStatusCallback="${appBaseUrl()}/api/webhooks/twilio/recording" />` +
-        `<Say voice="${speech.voice}">Thank you. Goodbye.</Say><Hangup/>`
-    );
-  }
+  const voicemail = afterHours && agent.afterHoursMode === "voicemail";
 
-  // Upsert keeps a retried webhook from creating a second call record.
+  // Upsert keeps a retried webhook from creating a second call record. This
+  // happens before the voicemail branch returns, because the recording and
+  // status callbacks both look the call up by provider id and drop the event
+  // when there is nothing to attach it to.
   const call = await db.voiceCall.upsert({
     where: { providerCallId },
     update: { status: "in_progress" },
@@ -120,6 +116,10 @@ export async function POST(req: Request) {
       direction: "inbound",
       status: "in_progress",
       afterHours,
+      // Voicemail is the caller talking to a tape, not to the AI. The outcome
+      // is left to the recording callback, so a caller who hangs up without
+      // leaving anything is not recorded as having left a message.
+      ...(voicemail && { aiHandled: false }),
       turns: { create: { role: "agent", text: agent.greeting, offsetSec: 0 } },
     },
   });
@@ -130,6 +130,19 @@ export async function POST(req: Request) {
     to,
     afterHours,
   });
+
+  if (voicemail) {
+    return twiml(
+      say(
+        `${agent.greeting} We're closed at the moment. Please leave your name, number and message after the tone, and we'll call you back.`,
+        speech
+      ) +
+        `<Record maxLength="120" playBeep="true" transcribe="false" ` +
+        `recordingStatusCallback="${escapeXml(`${appBaseUrl()}/api/webhooks/twilio/recording`)}" />` +
+        say("Thank you. Goodbye.", speech) +
+        `<Hangup/>`
+    );
+  }
 
   return twiml(
     sayAndGather(agent.greeting, speech, `${appBaseUrl()}/api/webhooks/twilio/respond?callId=${call.id}`)

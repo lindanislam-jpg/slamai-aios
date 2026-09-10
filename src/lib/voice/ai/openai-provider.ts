@@ -49,6 +49,19 @@ export class OpenAIProvider implements AIProvider {
         if (m.role === "tool") {
           return { role: "tool" as const, content: m.content, tool_call_id: m.toolCallId ?? "" };
         }
+        if (m.role === "assistant" && m.toolCalls?.length) {
+          // The tool results that follow are only valid as a reply to an
+          // assistant message that carries the matching tool_call ids.
+          return {
+            role: "assistant" as const,
+            content: m.content || null,
+            tool_calls: m.toolCalls.map((t) => ({
+              id: t.id,
+              type: "function" as const,
+              function: { name: t.name, arguments: JSON.stringify(t.arguments) },
+            })),
+          };
+        }
         return { role: m.role as "system" | "user" | "assistant", content: m.content };
       }),
     });

@@ -16,7 +16,9 @@ export const maxDuration = 60;
  * what a caller gets — there is no separate mock path to drift out of sync.
  */
 export async function POST(req: Request) {
-  const gate = await requireTenant({ permission: "agent.read" });
+  // Gated as a write even though nothing is persisted: a turn spends AI
+  // tokens, and a workspace is usually suspended for not paying its bill.
+  const gate = await requireTenant({ permission: "agent.read", write: true });
   if (!gate.ok) return gate.response;
 
   const limit = hit(limitKey(`voice:test:${gate.ctx.businessId}`, req), 60, 300);

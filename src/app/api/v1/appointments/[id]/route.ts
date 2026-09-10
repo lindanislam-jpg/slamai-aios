@@ -24,6 +24,15 @@ export async function PATCH(req: Request, { params }: Params) {
     });
     if (!existing) return notFound("That appointment no longer exists.");
 
+    // A service id from the client is only accepted if it belongs to this tenant.
+    if (input.serviceId) {
+      const service = await db.service.findFirst({
+        where: { id: input.serviceId, businessId: gate.ctx.businessId },
+        select: { id: true },
+      });
+      if (!service) return notFound("That service no longer exists.");
+    }
+
     const startsAt = input.startsAt ? new Date(input.startsAt) : existing.startsAt;
     const endsAt = input.endsAt
       ? new Date(input.endsAt)

@@ -5,8 +5,13 @@ import { METRICS, type Metric } from "./metrics";
 
 /**
  * Usage metering. Every billable action writes a UsageEvent row; the usage and
- * billing pages aggregate those rows per period. Recording is append-only so a
- * retried webhook can be made idempotent by passing a stable `refId`.
+ * billing pages aggregate those rows per period.
+ *
+ * Recording is append-only and there is no unique constraint on `refId`, so
+ * this function is NOT idempotent on its own: `refId` only records which
+ * entity a row came from, for reconciliation. Callers that can be re-entered
+ * by a retried webhook must claim the work themselves before metering it —
+ * see `finaliseCall` in ./call-flow.ts.
  */
 
 export { METRICS, METRIC_LABELS } from "./metrics";

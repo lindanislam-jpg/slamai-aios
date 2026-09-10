@@ -273,7 +273,7 @@ export async function runTurn(input: RunTurnInput): Promise<TurnResult> {
       break;
     }
 
-    messages.push({ role: "assistant", content: result.text || "" });
+    messages.push({ role: "assistant", content: result.text || "", toolCalls: result.toolCalls });
 
     for (const call of result.toolCalls) {
       const outcome = await executeTool(call.name, call.arguments, input, ctx, captured);
