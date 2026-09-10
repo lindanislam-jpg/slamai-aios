@@ -38,3 +38,65 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The unit suite needs no database and no API keys: it covers the logic
+      # that must not silently drift — lead scoring, timezone and opening-hours
+      # arithmetic, the permission matrix, webhook signing and replay
+      # rejection, chunking, plan limits and request validation.
+      - name: Unit tests
+        run: npm run test
+
+  # Tenant isolation is the property everything else depends on, so it is
+  # verified against a real server and a real database rather than a mock.
+  # A mocked session would only prove the mock works.
+  isolation:
+    name: Tenant isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: slamai
+          POSTGRES_PASSWORD: slamai
+          POSTGRES_DB: slamai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://slamai:slamai@localhost:5432/slamai
+      DIRECT_URL: postgresql://slamai:slamai@localhost:5432/slamai
+      NEXTAUTH_SECRET: ci-only-secret-not-used-anywhere-else
+      NEXTAUTH_URL: http://localhost:3005
+      NEXT_PUBLIC_APP_URL: http://localhost:3005
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create the schema
+        run: npx prisma db push
+
+      - name: Build
+        run: npm run build
+
+      - name: Start the server
+        run: |
+          npm run start &
+          npx wait-on http://localhost:3005/login --timeout 90000
+
+      - name: Prove one business cannot reach another's data
+        run: npm run test:e2e
