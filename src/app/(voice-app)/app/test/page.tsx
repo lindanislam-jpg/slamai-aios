@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
@@ -36,7 +36,7 @@ const SUGGESTIONS = [
 
 export default function TestPage() {
   const { data, loading } = useApi<{ agents: Agent[] }>("/api/v1/agents");
-  const agents = data?.agents ?? [];
+  const agents = useMemo(() => data?.agents ?? [], [data]);
 
   const [agentId, setAgentId] = useState<string>("");
   const [turns, setTurns] = useState<Turn[]>([]);

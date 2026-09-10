@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getVoicePlan } from "./plans";
+import { METRICS, type Metric } from "./metrics";
 
 /**
  * Usage metering. Every billable action writes a UsageEvent row; the usage and
@@ -8,27 +9,8 @@ import { getVoicePlan } from "./plans";
  * retried webhook can be made idempotent by passing a stable `refId`.
  */
 
-export const METRICS = [
-  "voice_minutes",
-  "calls",
-  "ai_tokens",
-  "knowledge_searches",
-  "sms",
-  "appointments",
-  "transfers",
-] as const;
-
-export type Metric = (typeof METRICS)[number];
-
-export const METRIC_LABELS: Record<Metric, string> = {
-  voice_minutes: "Voice minutes",
-  calls: "Calls",
-  ai_tokens: "AI tokens",
-  knowledge_searches: "Knowledge searches",
-  sms: "SMS sent",
-  appointments: "Appointments booked",
-  transfers: "Calls transferred",
-};
+export { METRICS, METRIC_LABELS } from "./metrics";
+export type { Metric } from "./metrics";
 
 /** The billing period key for a date, in UTC. */
 export function periodKey(date = new Date()): string {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import {
   Bot, Phone, Plus, Save, Sparkles, Trash2, Zap,
@@ -38,7 +38,7 @@ export default function AgentsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const agents = data?.agents ?? [];
+  const agents = useMemo(() => data?.agents ?? [], [data]);
   const selected = agents.find((a) => a.id === selectedId) ?? agents[0] ?? null;
 
   useEffect(() => {
