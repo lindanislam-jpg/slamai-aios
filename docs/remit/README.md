@@ -67,6 +67,52 @@ journey, quote consumption, concurrent duplicate submission, compliance
 approval and rejection, screening blocks, cancellation rules, notifications,
 the audit trail and gross-margin arithmetic.
 
+## Deploying
+
+Set these in your hosting environment. On Vercel they are **per-environment** —
+a preview deployment needs them ticked for **Preview**, not just Production, and
+environment variables are never applied to a build that already exists, so
+redeploy after adding them.
+
+| Variable | Why |
+|---|---|
+| `DATABASE_URL` / `DIRECT_URL` | Postgres connection |
+| `NEXTAUTH_SECRET` | Signs the session cookie. Without it NextAuth refuses to start and **every sign-in fails before the password is checked** — the symptom is an opaque "Server error" page. Generate with `openssl rand -base64 32`. |
+| `REMIT_DEMO_MODE` | `true` to enable the sandbox simulator |
+
+Then point `DATABASE_URL` at that database locally and run `npm run db:push`
+and `npm run db:seed:remit`, or the app will have no corridors, no fee rule and
+no accounts.
+
+### Checking a deployment
+
+`GET /api/remit/health` reports every required check as JSON and returns **503**
+while anything required is missing. It never reports a value, only a status, so
+it is safe to leave reachable.
+
+`/send/setup` is the same report as a page. A misconfigured deployment redirects
+there from `/send` and `/send/login` instead of failing with a blank error.
+
+### Email delivery
+
+By default the sandbox notification provider records emails without sending
+them. That is fine for a local demo — the seeded demo account is already
+verified, and outside production the verification code is handed back and
+pre-filled.
+
+On a deployed URL, **new sign-ups cannot verify their email without a real
+provider**. To send real email:
+
+```
+REMIT_NOTIFICATION_PROVIDER="resend"
+RESEND_API_KEY="re_..."
+REMIT_EMAIL_FROM="Kora Send <no-reply@yourdomain.com>"
+```
+
+The sending domain must be verified in your Resend account. Without the key the
+registry falls back to sandbox and the health endpoint says email is not
+connected.
+
 ## Environment variables
 
 Everything secret comes from the environment. Nothing secret is prefixed

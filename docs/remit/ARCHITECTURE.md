@@ -209,6 +209,7 @@ double, not a sanctions list — real screening needs a licensed data provider.
 | Audit | append-only; no update or delete path exists in the codebase |
 | Enumeration | wrong password and unknown email give the same message |
 | Data minimisation | only the fields the payout network needs are collected |
+| Verification codes | only the SHA-256 hash is stored; the notification log keeps a redacted body, never the plaintext code |
 | Masking | account numbers masked in API output, logs and admin views |
 | No card data | Stripe hosted element; this server never sees a PAN |
 
@@ -250,8 +251,9 @@ This is a safety control, not decoration.
 ## 12. What is deliberately not built
 
 - **Live provider integrations.** The Stripe pay-in adapter is real and works
-  with test keys; payout, FX, KYC and screening are sandbox only. Faking these
-  would be worse than not having them.
+  with test keys, and the Resend email adapter is real and works with an API
+  key; payout, FX, KYC and screening are sandbox only. Faking these would be
+  worse than not having them.
 - **A wallet or stored balance.** That is regulated activity.
 - **Multi-currency reporting.** Analytics only rolls up EUR-denominated
   transfers; a second sending currency needs a reporting-rate policy, which is a

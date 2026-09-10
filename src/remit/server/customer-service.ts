@@ -2,7 +2,9 @@ import "server-only";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { getKycProvider } from "../providers/registry";
+import { getKycProvider, getNotificationProvider } from "../providers/registry";
+import { settings } from "../config/settings";
+import { wordmark } from "../config/brand";
 import { recordAudit } from "./audit";
 import { badRequest, conflict, notFound } from "./api";
 import type { RemitCustomer } from "@prisma/client";
@@ -113,27 +115,66 @@ export async function issueVerificationCode(
     },
   });
 
-  await db.remitNotification.create({
+  const subject = "Your verification code";
+  const body =
+    `Your verification code is ${code}.\n\n` +
+    `It expires in ${CODE_TTL_MINUTES} minutes. If you did not ask for this, ignore this email.\n\n` +
+    `— ${wordmark()}`;
+
+  // The notification row deliberately stores a REDACTED body. Only the SHA-256
+  // hash of the code is persisted (above); writing the plaintext code into the
+  // notification log would undo that hashing entirely and leave a replayable
+  // credential sitting in the database.
+  const notification = await db.remitNotification.create({
     data: {
       customerId: customer.id,
       channel: channel === "EMAIL" ? "EMAIL" : "SMS",
       template: "verification.code",
       destination,
-      subject: "Your verification code",
-      body: `Your verification code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes.`,
-      status: "SENT",
-      provider: "sandbox",
-      sentAt: new Date(),
+      subject,
+      body: body.replace(code, "••••••"),
+      status: "QUEUED",
     },
   });
 
-  // Outside production the code is returned so the flow can be completed
-  // without a live email provider. This is gated on NODE_ENV, not on a
-  // request flag, so it can never be turned on from outside.
-  return {
-    destination,
-    devCode: process.env.NODE_ENV === "production" ? undefined : code,
-  };
+  // Actually hand it to the provider. Previously this row was written straight
+  // to SENT without anyone sending anything, so a configured email provider
+  // still delivered nothing and the log claimed otherwise.
+  let delivered = false;
+  try {
+    const provider = getNotificationProvider();
+    const result = await provider.send({
+      channel: channel === "EMAIL" ? "EMAIL" : "SMS",
+      destination,
+      subject,
+      body,
+      template: "verification.code",
+    });
+    delivered = result.delivered;
+    await db.remitNotification.update({
+      where: { id: notification.id },
+      data: {
+        status: result.delivered ? "SENT" : "FAILED",
+        provider: provider.info.key,
+        error: result.error ?? null,
+        sentAt: result.delivered ? new Date() : null,
+      },
+    });
+  } catch (error) {
+    await db.remitNotification.update({
+      where: { id: notification.id },
+      data: { status: "FAILED", error: error instanceof Error ? error.message : "Send failed" },
+    });
+  }
+
+  // The code is handed back only when it could not have reached the customer
+  // any other way: outside production, or when no real email provider is
+  // connected. Both conditions are server-side environment facts, so no request
+  // can turn this on. With a live provider in production it is never returned.
+  const noRealProvider = settings.providers.notification === "sandbox";
+  const exposeCode = process.env.NODE_ENV !== "production" || (!delivered && noRealProvider);
+
+  return { destination, devCode: exposeCode ? code : undefined };
 }
 
 export async function confirmVerificationCode(

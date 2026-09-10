@@ -8,6 +8,7 @@ import {
   SandboxScreeningProvider,
 } from "./sandbox";
 import { StripePaymentProvider } from "./stripe/payment";
+import { ResendNotificationProvider } from "./resend/notification";
 import {
   ProviderNotConfiguredError,
   type FXProvider,
@@ -55,6 +56,18 @@ const screeningProviders = new Map<string, () => ScreeningProvider>([
 
 const notificationProviders = new Map<string, () => NotificationProvider>([
   ["sandbox", () => new SandboxNotificationProvider()],
+  [
+    "resend",
+    () => {
+      const key = process.env.RESEND_API_KEY;
+      if (!key) throw new ProviderNotConfiguredError("Notification", "resend");
+      return new ResendNotificationProvider(
+        key,
+        process.env.REMIT_EMAIL_FROM ?? "",
+        process.env.REMIT_EMAIL_REPLY_TO || undefined,
+      );
+    },
+  ],
 ]);
 
 function resolve<T>(

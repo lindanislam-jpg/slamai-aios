@@ -4,6 +4,9 @@ import { brand, wordmark } from "@/remit/config/brand";
 import { serializeCorridor } from "@/remit/server/serialize";
 import { RateCalculator, type CorridorOption } from "@/components/remit/RateCalculator";
 import { Footer, LinkButton, SandboxBadge, Wordmark } from "@/components/remit/ui";
+import { redirect } from "next/navigation";
+import { blockingProblems } from "@/remit/config/preflight";
+import { runPreflight } from "@/remit/server/preflight-service";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +18,24 @@ export const dynamic = "force-dynamic";
  * regulatory status — the sandbox state is stated plainly instead.
  */
 export default async function SendLandingPage() {
-  const corridors = await db.remitCorridor.findMany({
-    where: { isActive: true },
-    include: { sourceCountry: true, destCountry: true, paymentOptions: true, payoutOptions: true },
-    orderBy: { createdAt: "asc" },
-  });
-  const options: CorridorOption[] = corridors.map(serializeCorridor);
+  // An unconfigured deployment used to 500 here with no explanation. Fail into
+  // a page that names the missing piece instead.
+  let options: CorridorOption[];
+  try {
+    const corridors = await db.remitCorridor.findMany({
+      where: { isActive: true },
+      include: { sourceCountry: true, destCountry: true, paymentOptions: true, payoutOptions: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (corridors.length === 0) throw new Error("No active corridors");
+    options = corridors.map(serializeCorridor);
+  } catch {
+    // Unconfigured or unseeded: send the operator to the page that names the
+    // missing piece instead of returning a 500 with no explanation.
+    const report = await runPreflight();
+    if (!report.ok || blockingProblems(report.checks).length > 0) redirect("/send/setup");
+    throw new Error("Corridors are configured but could not be loaded");
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
