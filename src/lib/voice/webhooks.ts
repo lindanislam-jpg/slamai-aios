@@ -1,44 +1,20 @@
 import "server-only";
-import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import type { EventKey } from "./events";
+import {
+  signPayload, SIGNATURE_HEADER, TIMESTAMP_HEADER,
+} from "./signing";
 
 /**
- * Outbound webhooks — the integration surface for n8n, Zapier and CRMs.
- *
- * Every delivery is signed with the endpoint's own secret so the receiver can
- * prove the payload came from SlamAI:
- *
- *   X-SlamAI-Timestamp: <unix seconds>
- *   X-SlamAI-Signature: sha256=<hex hmac of "<timestamp>.<body>">
- *
- * Receivers must reject a timestamp older than five minutes to stop replays.
+ * Outbound webhook delivery — the integration surface for n8n, Zapier and
+ * CRMs. The signing primitives live in ./signing.ts; this module handles
+ * fan-out, retries and recording failures.
  */
 
-export const SIGNATURE_HEADER = "x-slamai-signature";
-export const TIMESTAMP_HEADER = "x-slamai-timestamp";
-const MAX_SKEW_SECONDS = 300;
-
-export function generateSecret(): string {
-  return `whsec_${randomBytes(24).toString("hex")}`;
-}
-
-export function signPayload(secret: string, timestamp: number, body: string): string {
-  return `sha256=${createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex")}`;
-}
-
-/** Verifies an inbound signature. Used by the tests and by any receiver we ship. */
-export function verifySignature(
-  secret: string,
-  signature: string,
-  timestamp: number,
-  body: string
-): boolean {
-  if (Math.abs(Math.floor(Date.now() / 1000) - timestamp) > MAX_SKEW_SECONDS) return false;
-  const expected = Buffer.from(signPayload(secret, timestamp, body));
-  const received = Buffer.from(signature);
-  return expected.length === received.length && timingSafeEqual(expected, received);
-}
+export {
+  generateSecret, signPayload, verifySignature,
+  SIGNATURE_HEADER, TIMESTAMP_HEADER,
+} from "./signing";
 
 export type WebhookPayload = {
   event: EventKey;

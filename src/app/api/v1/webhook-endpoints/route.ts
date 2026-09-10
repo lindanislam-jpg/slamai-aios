@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { requireTenant } from "@/lib/voice/tenant";
 import { ok, forbidden, serverError, parseBody } from "@/lib/voice/http";
 import { webhookEndpointSchema } from "@/lib/voice/validation";
-import { generateSecret } from "@/lib/voice/webhooks";
+import { generateSecret } from "@/lib/voice/signing";
 import { planAllows } from "@/lib/voice/plans";
 import { recordAudit } from "@/lib/voice/audit";
 import { isPrivateHost } from "@/lib/voice/extract";

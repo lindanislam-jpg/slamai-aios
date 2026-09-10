@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Bell, Building2, Clock, CreditCard, Plug, ScrollText, Users, Wrench, Phone,
+  Bell, Building2, Clock, Plug, ScrollText, Users, Wrench, Phone,
 } from "lucide-react";
 import { Loading, PageHeader, Tabs } from "@/components/voice/ui";
 import BusinessSettings from "@/components/voice/settings/BusinessSettings";

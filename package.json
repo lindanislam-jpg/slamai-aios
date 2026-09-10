@@ -11,7 +11,11 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "check:defaults": "tsx scripts/check-voice-defaults.mts"
+    "check:defaults": "tsx scripts/check-voice-defaults.mts",
+    "db:seed:voice": "tsx prisma/seed-voice.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "test:e2e": "tsx --test tests/e2e/*.test.ts",
+    "test:all": "npm run test && npm run test:e2e"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
