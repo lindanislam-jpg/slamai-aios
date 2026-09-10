@@ -44,3 +44,41 @@ export async function PATCH(req: Request) {
     return serverError("workspaces.patch", err);
   }
 }
+
+const createSchema = z.object({
+  name: z.string().trim().min(2).max(160),
+  industry: z.string().trim().max(60).default("other"),
+  country: z.string().trim().length(2).default("IE"),
+  timezone: z.string().trim().min(3).max(64).default("Europe/Dublin"),
+});
+
+/** Creates an additional workspace for the signed-in user. */
+export async function POST(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return fail("You need to sign in.", 401);
+
+  const body = await parseBody(req, createSchema);
+  if (!body.ok) return body.response;
+
+  try {
+    const { provisionBusiness } = await import("@/lib/voice/provisioning");
+    const { business } = await provisionBusiness({
+      userId: session.user.id,
+      name: body.data.name,
+      industry: body.data.industry,
+      email: session.user.email ?? null,
+      country: body.data.country,
+      timezone: body.data.timezone,
+    });
+
+    // Land the user in the workspace they just created.
+    await db.membership.updateMany({
+      where: { userId: session.user.id, businessId: { not: business.id } },
+      data: { isDefault: false },
+    });
+
+    return ok({ businessId: business.id, name: business.name }, 201);
+  } catch (err) {
+    return serverError("workspaces.post", err);
+  }
+}
