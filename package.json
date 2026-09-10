@@ -14,7 +14,8 @@
     "check:defaults": "tsx scripts/check-voice-defaults.mts",
     "db:seed:remit": "tsx prisma/remit-seed.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "setup:remit": "tsx scripts/setup-remit.mts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

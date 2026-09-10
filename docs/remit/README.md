@@ -7,13 +7,19 @@ implementation and nothing is connected to a regulated institution.
 
 ```bash
 npm install
-cp .env.example .env.local          # fill in DATABASE_URL and NEXTAUTH_SECRET
-npm run db:push                     # create the schema
-npm run db:seed:remit               # reference data, corridor, €5 fee, demo accounts
+cp .env.example .env                # fill in DATABASE_URL and NEXTAUTH_SECRET
+npm run setup:remit                 # schema + reference data + a report of what is missing
 npm run dev                         # http://localhost:3005/send
 ```
 
-The seed prints the admin and demo credentials it created.
+`setup:remit` pushes the schema, seeds the corridor / €5 fee rule / demo
+accounts, verifies the result and prints anything still missing. It is
+idempotent, so re-running it is safe. The seed prints the admin and demo
+credentials it created.
+
+Sign in with those seeded accounts — **your GitHub or hosting login is not an
+account in this app**. It has its own user table, and a fresh database contains
+only what the seed creates.
 
 ## The demo journey
 
@@ -80,9 +86,18 @@ redeploy after adding them.
 | `NEXTAUTH_SECRET` | Signs the session cookie. Without it NextAuth refuses to start and **every sign-in fails before the password is checked** — the symptom is an opaque "Server error" page. Generate with `openssl rand -base64 32`. |
 | `REMIT_DEMO_MODE` | `true` to enable the sandbox simulator |
 
-Then point `DATABASE_URL` at that database locally and run `npm run db:push`
-and `npm run db:seed:remit`, or the app will have no corridors, no fee rule and
-no accounts.
+Then point `DATABASE_URL` at that database and run setup against it — without
+this the app has no corridors, no fee rule and no accounts, so it renders empty
+even once auth works:
+
+```bash
+DATABASE_URL="postgresql://..." npm run setup:remit
+```
+
+It pushes the schema, seeds reference data, verifies the result and prints what
+is still missing. Idempotent — safe to re-run. It also labels whether each value
+came from your shell or a local `.env`, because a secret in your `.env` says
+nothing about whether your deployment has one.
 
 ### Checking a deployment
 
