@@ -941,7 +941,7 @@ statusCol = sigState == "ACTIVE" ? (sigDir == 1 ? cBull : cBear) : ntReason == "
 
 dpos = dashPos == "Top Right" ? position.top_right : dashPos == "Top Left" ? position.top_left : dashPos == "Bottom Right" ? position.bottom_right : dashPos == "Bottom Left" ? position.bottom_left : position.middle_right
 
-var table dash = table.new(dpos, 2, 19, border_width = 1, border_color = color.new(#2a2a35, 0), frame_width = 1, frame_color = color.new(#2a2a35, 0))
+var table dash = table.new(dpos, 2, 23, border_width = 1, border_color = color.new(#2a2a35, 0), frame_width = 1, frame_color = color.new(#2a2a35, 0))
 
 f_row(t, r, k, v, vc) =>
     table.cell(t, 0, r, k, text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left,  bgcolor = color.new(#12121a, 0))
@@ -969,11 +969,26 @@ if showDash and barstate.islast
     f_row(dash, 13, "VOLATILITY", f_ratioTxt(volatilityRatio, true), f_ratioCol(volatilityRatio, true))
     f_row(dash, 14, "MTF",        f_ratioTxt(dr ? mtfLongRatio : mtfShortRatio, avMtf), f_ratioCol(dr ? mtfLongRatio : mtfShortRatio, avMtf))
     f_row(dash, 15, "R:R",        na(dispRR) ? "-" : "1:" + str.tostring(dispRR, "#.##"), nz(dispRR, 0.0) >= minRR ? cBull : cBear)
-    f_row(dash, 16, "ENTRY", entryTxt, entryCol2)
+    // Trade plan. When a setup is live these are its real levels. When none is
+    // live they are the levels the engine WOULD use if one triggered on this
+    // bar - shown greyed and labelled "plan" so they are never mistaken for a
+    // signal. The panel is never empty.
+    planLive  = sigState == "ACTIVE"
+    planEntry = planLive ? sigEntry : entryPx
+    planSL    = planLive ? sigSL  : (dr ? slLong  : slShort)
+    planT1    = planLive ? sigTP1 : (dr ? tp1Long : tp1Short)
+    planT2    = planLive ? sigTP2 : (dr ? tp2Long : tp2Short)
+    planT3    = planLive ? sigTP3 : (dr ? tp3Long : tp3Short)
+    planGrey  = color.new(#9aa0b5, 0)
+    f_row(dash, 16, planLive ? "ENTRY" : "ENTRY (plan)", (planLive ? (entryLive ? "✅ " : "✗ ") : "") + f_fmt(planEntry), planLive ? entryCol2 : planGrey)
+    f_row(dash, 17, "STOP", f_fmt(planSL), planLive ? cStop : planGrey)
+    f_row(dash, 18, "TP1",  f_fmt(planT1), planLive ? cT1 : planGrey)
+    f_row(dash, 19, "TP2",  f_fmt(planT2), planLive ? cT2 : planGrey)
+    f_row(dash, 20, "TP3",  f_fmt(planT3), planLive ? cT3 : planGrey)
     lastTxt = sigState == "ACTIVE" ? sigSetup : sigState == "NONE" ? ((dr ? longSetupName : shortSetupName) == "" ? "-" : (dr ? longSetupName : shortSetupName)) : sigSetup + " → " + sigState
-    f_row(dash, 17, sigState == "ACTIVE" or sigState == "NONE" ? "SETUP" : "LAST SETUP", lastTxt, color.white)
-    table.cell(dash, 0, 18, "STATUS", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
-    table.cell(dash, 1, 18, statusTxt + (ntReason == "" or sigState == "ACTIVE" ? "" : "\n" + ntReason), text_color = statusCol, text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
+    f_row(dash, 21, sigState == "ACTIVE" or sigState == "NONE" ? "SETUP" : "LAST SETUP", lastTxt, color.white)
+    table.cell(dash, 0, 22, "STATUS", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
+    table.cell(dash, 1, 22, statusTxt + (ntReason == "" or sigState == "ACTIVE" ? "" : "\n" + ntReason), text_color = statusCol, text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
 
 // ----------------------------------------------------------------------------
 // S1. ORDER EXECUTION
