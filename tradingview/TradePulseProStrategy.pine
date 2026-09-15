@@ -69,6 +69,7 @@ enableLong   = input.bool(true, "Enable Long Signals",  group = gSig)
 enableShort  = input.bool(true, "Enable Short Signals", group = gSig)
 cooldownBars = input.int(10, "Minimum Bars Between Signals", minval = 0, group = gSig)
 expireBars   = input.int(50, "Signal Expiry (bars)", minval = 5, group = gSig)
+completeAt   = input.string("TP2", "Setup Completes At", options = ["TP2", "TP3"], group = gSig, tooltip = "Which target ends the setup and frees the engine to look for the next one. Set this to match how you actually exit - if you close the whole position at TP2, leave it on TP2 or the engine will keep the slot occupied while you are already flat.")
 enTrendPB    = input.bool(true, "Setup: Trend Pullback",   group = gSig)
 enBreakout   = input.bool(true, "Setup: Breakout",         group = gSig)
 enRetest     = input.bool(true, "Setup: Breakout Retest",  group = gSig)
@@ -330,24 +331,6 @@ f_nearBelowH(lv, hits, px, minH) =>
         for i = 0 to array.size(lv) - 1
             v = array.get(lv, i)
             if array.get(hits, i) >= minH and v < px and (na(best) or v > best)
-                best := v
-    best
-
-f_nearestAbove(arr, px) =>
-    float best = na
-    if array.size(arr) > 0
-        for i = 0 to array.size(arr) - 1
-            v = array.get(arr, i)
-            if v > px and (na(best) or v < best)
-                best := v
-    best
-
-f_nearestBelow(arr, px) =>
-    float best = na
-    if array.size(arr) > 0
-        for i = 0 to array.size(arr) - 1
-            v = array.get(arr, i)
-            if v < px and (na(best) or v > best)
                 best := v
     best
 
@@ -668,6 +651,8 @@ if barOk and sigState == "ACTIVE"
             if not hitT2 and high >= sigTP2
                 hitT2 := true
                 evT2  := true
+                if completeAt == "TP2"
+                    sigState := "TP2 HIT"
             if not hitT3 and high >= sigTP3
                 hitT3 := true
                 evT3  := true
@@ -686,6 +671,8 @@ if barOk and sigState == "ACTIVE"
             if not hitT2 and low <= sigTP2
                 hitT2 := true
                 evT2  := true
+                if completeAt == "TP2"
+                    sigState := "TP2 HIT"
             if not hitT3 and low <= sigTP3
                 hitT3 := true
                 evT3  := true

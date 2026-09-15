@@ -172,6 +172,12 @@ def main() -> None:
     visuals = between(src, "// === VISUALS START ===", "// === VISUALS END ===")
     # The stats table sits bottom-right; if the user parks the dashboard there
     # too they can move it from the indicator settings.
+    # The backtest exits the whole position at TP2, so the setup has to complete
+    # there as well - otherwise the engine holds its one signal slot open while
+    # the strategy is already flat, and the test silently reports fewer trades
+    # than the indicator would actually produce.
+    engine = engine.replace('completeAt   = input.string("TP3", "Setup Completes At"',
+                            'completeAt   = input.string("TP2", "Setup Completes At"')
     out = HEADER + "\n" + engine + "\n\n" + visuals + "\n" + TAIL
     DST.write_text(out)
     print(f"wrote {DST.relative_to(ROOT)} ({len(out.splitlines())} lines)")
