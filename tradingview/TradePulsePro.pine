@@ -81,7 +81,6 @@ showSR      = input.bool(true, "Show S/R Levels",  group = gVis)
 showPlan    = input.bool(true, "Show Plan Levels When No Signal", group = gVis, tooltip = "Draws where entry, stop and targets WOULD sit if a signal triggered on this bar. Dotted and dimmed so it cannot be confused with a live setup.")
 showLiq     = input.bool(false, "Show Liquidity Sweep Marks", group = gVis)
 showEma     = input.bool(true, "Show EMA Lines", group = gVis)
-srStyle     = input.string("Lines", "S/R Style", options = ["Lines", "Zones"], group = gVis)
 labelStyle  = input.string("Compact", "Signal Panel", options = ["Compact", "Full"], group = gVis)
 showDash    = input.bool(true, "Show Dashboard", group = gVis)
 dashPos     = input.string("Top Right", "Dashboard Position", options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left", "Middle Right"], group = gVis)
@@ -89,7 +88,6 @@ showBigLabel = input.bool(true, "Show Premium Signal Label", group = gVis)
 showArrows  = input.bool(true, "Show BUY / SELL Arrows", group = gVis)
 maxOnChart  = input.int(4, "Max Setups Drawn On Chart", minval = 1, maxval = 20, group = gVis)
 drawExtend  = input.int(30, "Trade Box Width (bars)", minval = 5, group = gVis)
-maxSR       = input.int(3, "Max S/R Levels", minval = 1, maxval = 12, group = gVis)
 minSrHits   = input.int(2, "Min Reactions Per S/R Level", minval = 1, maxval = 6, group = gVis, tooltip = "A level is only drawn once price has actually swung off it this many times. Raise it if the chart still looks busy.")
 srMergeAtr  = input.float(0.9, "S/R Merge Distance (ATR)", minval = 0.1, step = 0.1, group = gVis, tooltip = "Swings within this distance of each other are treated as one level instead of two lines on top of each other.")
 pinLabel    = input.bool(true, "Info Panel Follows Price", group = gVis, tooltip = "ON = the signal panel travels with the candles so it stays next to current price. OFF = it stays anchored to the candle that produced the signal.")
@@ -311,6 +309,26 @@ f_addLevel(lv, hits, price, tol, maxN) =>
             array.shift(lv)
             array.shift(hits)
 
+// Nearest level above / below price that price has genuinely reacted to more
+// than once. A level touched a single time is a swing, not a level.
+f_nearAboveH(lv, hits, px, minH) =>
+    float best = na
+    if array.size(lv) > 0
+        for i = 0 to array.size(lv) - 1
+            v = array.get(lv, i)
+            if array.get(hits, i) >= minH and v > px and (na(best) or v < best)
+                best := v
+    best
+
+f_nearBelowH(lv, hits, px, minH) =>
+    float best = na
+    if array.size(lv) > 0
+        for i = 0 to array.size(lv) - 1
+            v = array.get(lv, i)
+            if array.get(hits, i) >= minH and v < px and (na(best) or v > best)
+                best := v
+    best
+
 f_nearestAbove(arr, px) =>
     float best = na
     if array.size(arr) > 0
@@ -336,8 +354,8 @@ if not na(ph)
 if not na(pl)
     f_addLevel(srLevels, srHits, pl, srTol, srPoolMax)
 
-nearestRes = f_nearestAbove(srLevels, close)
-nearestSup = f_nearestBelow(srLevels, close)
+nearestRes = f_nearAboveH(srLevels, srHits, close, minSrHits)
+nearestSup = f_nearBelowH(srLevels, srHits, close, minSrHits)
 distResAtr = na(nearestRes) or atr == 0 ? na : (nearestRes - close) / atr
 distSupAtr = na(nearestSup) or atr == 0 ? na : (close - nearestSup) / atr
 
@@ -566,8 +584,8 @@ tp3Short = entryPx - riskShort * tp3R
 // at least half the risk distance away can cap the target.
 standoffL  = math.max(atr * 0.25, riskLong  * 0.5)
 standoffS  = math.max(atr * 0.25, riskShort * 0.5)
-blockLong  = f_nearestAbove(srLevels, entryPx + standoffL)
-blockShort = f_nearestBelow(srLevels, entryPx - standoffS)
+blockLong  = f_nearAboveH(srLevels, srHits, entryPx + standoffL, minSrHits)
+blockShort = f_nearBelowH(srLevels, srHits, entryPx - standoffS, minSrHits)
 effTargetLong  = na(blockLong)  ? tp2Long  : math.min(tp2Long,  blockLong)
 effTargetShort = na(blockShort) ? tp2Short : math.max(tp2Short, blockShort)
 rrLong  = riskLong  > 0 ? (effTargetLong  - entryPx) / riskLong  : na
@@ -741,8 +759,6 @@ var array<line>  sigLines  = array.new<line>()
 var array<label> sigLabels = array.new<label>()
 var array<box>   sigBoxes  = array.new<box>()
 var array<box>   srBoxes   = array.new<box>()
-var array<line>  srLines   = array.new<line>()
-var array<label> srLabels  = array.new<label>()
 var array<line>  planLines = array.new<line>()
 var array<label> planLabels = array.new<label>()
 
@@ -902,31 +918,18 @@ plot(showEma ? ema50 : na,  "EMA Slow",  color = color.new(#ffa726, 70), linewid
 plot(showEma ? ema200 : na, "EMA Trend", color = color.new(#bdbdbd, 60), linewidth = 2)
 
 // S/R zones redrawn on the last bar only
-// Draw only levels that price has actually reacted to more than once, and only
-// the few nearest to current price. Everything else is chart noise.
+// Exactly two zones: the nearest resistance above price and the nearest
+// support below it. These are the same two levels the scoring and the R:R
+// check use, so what you see is what the engine is reasoning about.
 if barstate.islast
     f_trimBoxes(srBoxes, 0)
-    f_trimLines(srLines, 0)
-    f_trimLabels(srLabels, 0)
-    if showSR and array.size(srLevels) > 0
-        for i = 0 to array.size(srLevels) - 1
-            v = array.get(srLevels, i)
-            h = array.get(srHits, i)
-            if h >= minSrHits
-                int nearer = 0
-                for j = 0 to array.size(srLevels) - 1
-                    if j != i and array.get(srHits, j) >= minSrHits and math.abs(array.get(srLevels, j) - close) < math.abs(v - close)
-                        nearer += 1
-                if nearer < maxSR
-                    isRes   = v > close
-                    lc      = isRes ? cRes : cSup
-                    active  = nearer == 0
-                    xl      = math.max(bar_index - 90, 0)
-                    if srStyle == "Zones"
-                        array.push(srBoxes, box.new(xl, v + atr * 0.10, bar_index + 6, v - atr * 0.10, border_color = color.new(lc, 60), bgcolor = color.new(lc, 94)))
-                    else
-                        array.push(srLines, line.new(xl, v, bar_index + 6, v, color = color.new(lc, active ? 30 : 70), width = active ? 2 : 1, style = active ? line.style_solid : line.style_dotted))
-                    array.push(srLabels, label.new(bar_index + 6, v, f_fmt(v), style = label.style_label_left, color = color.new(lc, active ? 20 : 55), textcolor = active ? color.white : color.new(color.white, 25), size = size.small))
+    if showSR and atr > 0
+        xl = math.max(bar_index - 120, 0)
+        xr = bar_index + 10
+        if not na(nearestRes)
+            array.push(srBoxes, box.new(xl, nearestRes + atr * 0.18, xr, nearestRes - atr * 0.18, border_color = color.new(cRes, 40), bgcolor = color.new(cRes, 88), text = "RESISTANCE  " + f_fmt(nearestRes), text_color = color.new(cRes, 5), text_size = size.small, text_halign = text.align_right, text_valign = text.align_center))
+        if not na(nearestSup)
+            array.push(srBoxes, box.new(xl, nearestSup + atr * 0.18, xr, nearestSup - atr * 0.18, border_color = color.new(cSup, 40), bgcolor = color.new(cSup, 88), text = "SUPPORT  " + f_fmt(nearestSup), text_color = color.new(cSup, 5), text_size = size.small, text_halign = text.align_right, text_valign = text.align_center))
 
 // ----------------------------------------------------------------------------
 // 16. DASHBOARD
