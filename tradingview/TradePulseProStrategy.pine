@@ -82,6 +82,7 @@ showTP1     = input.bool(true, "Show TP1",       group = gVis)
 showTP2     = input.bool(true, "Show TP2",       group = gVis)
 showTP3     = input.bool(true, "Show TP3",       group = gVis)
 showSR      = input.bool(true, "Show S/R Levels",  group = gVis)
+showPlan    = input.bool(true, "Show Plan Levels When No Signal", group = gVis, tooltip = "Draws where entry, stop and targets WOULD sit if a signal triggered on this bar. Dotted and dimmed so it cannot be confused with a live setup.")
 showLiq     = input.bool(false, "Show Liquidity Sweep Marks", group = gVis)
 showEma     = input.bool(true, "Show EMA Lines", group = gVis)
 srStyle     = input.string("Lines", "S/R Style", options = ["Lines", "Zones"], group = gVis)
@@ -741,6 +742,8 @@ var array<box>   sigBoxes  = array.new<box>()
 var array<box>   srBoxes   = array.new<box>()
 var array<line>  srLines   = array.new<line>()
 var array<label> srLabels  = array.new<label>()
+var array<line>  planLines = array.new<line>()
+var array<label> planLabels = array.new<label>()
 
 // Live references to the CURRENT setup so its lines can follow price to the
 // right edge instead of being stranded back at the bar that produced them.
@@ -989,6 +992,36 @@ if showDash and barstate.islast
     f_row(dash, 21, sigState == "ACTIVE" or sigState == "NONE" ? "SETUP" : "LAST SETUP", lastTxt, color.white)
     table.cell(dash, 0, 22, "STATUS", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
     table.cell(dash, 1, 22, statusTxt + (ntReason == "" or sigState == "ACTIVE" ? "" : "\n" + ntReason), text_color = statusCol, text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
+
+// ----------------------------------------------------------------------------
+// 16b. PLAN LEVELS
+//      Where entry, stop and targets would sit if a signal triggered on this
+//      bar. Dotted, dimmed and tagged "plan" - this is not a signal, and the
+//      engine draws nothing solid until one actually fires.
+// ----------------------------------------------------------------------------
+if barstate.islast
+    f_trimLines(planLines, 0)
+    f_trimLabels(planLabels, 0)
+    if showPlan and sigState != "ACTIVE" and historyOk and atr > 0
+        pUp  = dispDir == 1
+        pE   = entryPx
+        pSL  = pUp ? slLong  : slShort
+        pT1  = pUp ? tp1Long : tp1Short
+        pT2  = pUp ? tp2Long : tp2Short
+        pT3  = pUp ? tp3Long : tp3Short
+        pxl  = math.max(bar_index - 25, 0)
+        pxr  = bar_index + 12
+        dim  = 62
+        array.push(planLines, line.new(pxl, pE,  pxr, pE,  color = color.new(cEntry, dim), width = 1, style = line.style_dashed))
+        array.push(planLines, line.new(pxl, pSL, pxr, pSL, color = color.new(cStop,  dim), width = 1, style = line.style_dotted))
+        array.push(planLines, line.new(pxl, pT1, pxr, pT1, color = color.new(cT1,    dim), width = 1, style = line.style_dotted))
+        array.push(planLines, line.new(pxl, pT2, pxr, pT2, color = color.new(cT2,    dim), width = 1, style = line.style_dotted))
+        array.push(planLines, line.new(pxl, pT3, pxr, pT3, color = color.new(cT3,    dim), width = 1, style = line.style_dotted))
+        array.push(planLabels, label.new(pxr, pE,  "ENTRY " + f_fmt(pE)  + " · plan", style = label.style_label_left, color = color.new(cEntry, 80), textcolor = color.new(cEntry, 15), size = size.tiny))
+        array.push(planLabels, label.new(pxr, pSL, "SL "    + f_fmt(pSL), style = label.style_label_left, color = color.new(cStop, 80), textcolor = color.new(cStop, 15), size = size.tiny))
+        array.push(planLabels, label.new(pxr, pT1, "TP1 "   + f_fmt(pT1), style = label.style_label_left, color = color.new(cT1, 80), textcolor = color.new(cT1, 15), size = size.tiny))
+        array.push(planLabels, label.new(pxr, pT2, "TP2 "   + f_fmt(pT2), style = label.style_label_left, color = color.new(cT2, 80), textcolor = color.new(cT2, 15), size = size.tiny))
+        array.push(planLabels, label.new(pxr, pT3, "TP3 "   + f_fmt(pT3), style = label.style_label_left, color = color.new(cT3, 80), textcolor = color.new(cT3, 15), size = size.tiny))
 
 // ----------------------------------------------------------------------------
 // S1. ORDER EXECUTION
