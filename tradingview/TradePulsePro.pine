@@ -77,14 +77,17 @@ showTP1     = input.bool(true, "Show TP1",       group = gVis)
 showTP2     = input.bool(true, "Show TP2",       group = gVis)
 showTP3     = input.bool(true, "Show TP3",       group = gVis)
 showSR      = input.bool(true, "Show S/R Levels",  group = gVis)
-showLiq     = input.bool(true, "Show Liquidity Sweeps", group = gVis)
+showLiq     = input.bool(false, "Show Liquidity Sweep Marks", group = gVis)
+showEma     = input.bool(true, "Show EMA Lines", group = gVis)
+srStyle     = input.string("Lines", "S/R Style", options = ["Lines", "Zones"], group = gVis)
+labelStyle  = input.string("Compact", "Signal Panel", options = ["Compact", "Full"], group = gVis)
 showDash    = input.bool(true, "Show Dashboard", group = gVis)
 dashPos     = input.string("Top Right", "Dashboard Position", options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left", "Middle Right"], group = gVis)
 showBigLabel = input.bool(true, "Show Premium Signal Label", group = gVis)
 showArrows  = input.bool(true, "Show BUY / SELL Arrows", group = gVis)
 maxOnChart  = input.int(4, "Max Setups Drawn On Chart", minval = 1, maxval = 20, group = gVis)
 drawExtend  = input.int(30, "Trade Box Width (bars)", minval = 5, group = gVis)
-maxSR       = input.int(4, "Max S/R Zones", minval = 1, maxval = 12, group = gVis)
+maxSR       = input.int(3, "Max S/R Levels", minval = 1, maxval = 12, group = gVis)
 minSrHits   = input.int(2, "Min Reactions Per S/R Level", minval = 1, maxval = 6, group = gVis, tooltip = "A level is only drawn once price has actually swung off it this many times. Raise it if the chart still looks busy.")
 srMergeAtr  = input.float(0.9, "S/R Merge Distance (ATR)", minval = 0.1, step = 0.1, group = gVis, tooltip = "Swings within this distance of each other are treated as one level instead of two lines on top of each other.")
 pinLabel    = input.bool(true, "Info Panel Follows Price", group = gVis, tooltip = "ON = the signal panel travels with the candles so it stays next to current price. OFF = it stays anchored to the candle that produced the signal.")
@@ -720,6 +723,8 @@ var array<line>  sigLines  = array.new<line>()
 var array<label> sigLabels = array.new<label>()
 var array<box>   sigBoxes  = array.new<box>()
 var array<box>   srBoxes   = array.new<box>()
+var array<line>  srLines   = array.new<line>()
+var array<label> srLabels  = array.new<label>()
 
 // Live references to the CURRENT setup so its lines can follow price to the
 // right edge instead of being stranded back at the bar that produced them.
@@ -805,7 +810,9 @@ if newSignal
         array.push(sigLabels, lbT3)
 
     if showBigLabel
-        txt = "━━━━━━━━━━━━━━━━\n🔥 TRADEPULSE PRO\n" + sigTier + (sigDir == 1 ? " LONG" : " SHORT") + "\n━━━━━━━━━━━━━━━━\n" + syminfo.ticker + "  ·  " + timeframe.period + "\nSCORE: " + str.tostring(int(sigScoreV)) + "/100\nSETUP: " + sigSetup + "\nENTRY: " + f_fmt(sigEntry) + "\nSL:    " + f_fmt(sigSL) + "\nTP1:   " + f_fmt(sigTP1) + "\nTP2:   " + f_fmt(sigTP2) + "\nTP3:   " + f_fmt(sigTP3) + "\nR:R:   1:" + str.tostring(sigRR, "#.##") + "\nHTF:   " + htfText + "\nREGIME: " + regime + "\n━━━━━━━━━━━━━━━━"
+        full = "━━━━━━━━━━━━━━━━\n🔥 TRADEPULSE PRO\n" + sigTier + (sigDir == 1 ? " LONG" : " SHORT") + "\n━━━━━━━━━━━━━━━━\n" + syminfo.ticker + "  ·  " + timeframe.period + "\nSCORE: " + str.tostring(int(sigScoreV)) + "/100\nSETUP: " + sigSetup + "\nENTRY: " + f_fmt(sigEntry) + "\nSL:    " + f_fmt(sigSL) + "\nTP1:   " + f_fmt(sigTP1) + "\nTP2:   " + f_fmt(sigTP2) + "\nTP3:   " + f_fmt(sigTP3) + "\nR:R:   1:" + str.tostring(sigRR, "#.##") + "\nHTF:   " + htfText + "\nREGIME: " + regime + "\n━━━━━━━━━━━━━━━━"
+        compact = "🔥 " + sigTier + (sigDir == 1 ? " LONG" : " SHORT") + "  " + str.tostring(int(sigScoreV)) + "/100\n" + sigSetup + "  ·  R:R 1:" + str.tostring(sigRR, "#.##")
+        txt = labelStyle == "Compact" ? compact : full
         lbBig := label.new(bar_index, sigDir == 1 ? low - atr * 1.2 : high + atr * 1.2, txt, style = sigDir == 1 ? label.style_label_up : label.style_label_down, color = color.new(cInk, 10), textcolor = dirCol, size = size.small, text_font_family = font.family_monospace)
         array.push(sigLabels, lbBig)
 
@@ -865,15 +872,17 @@ plotshape(showLiq and sweepLow,  title = "Sweep Low",  style = shape.xcross, loc
 plotshape(showLiq and sweepHigh, title = "Sweep High", style = shape.xcross, location = location.abovebar, color = color.new(#ffd54f, 0), size = size.tiny)
 
 // EMA context (thin, off by default via transparency choice)
-plot(ema21,  "EMA Mid",   color = color.new(#42a5f5, 55), linewidth = 1)
-plot(ema50,  "EMA Slow",  color = color.new(#ffa726, 55), linewidth = 1)
-plot(ema200, "EMA Trend", color = color.new(#bdbdbd, 55), linewidth = 2)
+plot(showEma ? ema21 : na,  "EMA Mid",   color = color.new(#42a5f5, 70), linewidth = 1)
+plot(showEma ? ema50 : na,  "EMA Slow",  color = color.new(#ffa726, 70), linewidth = 1)
+plot(showEma ? ema200 : na, "EMA Trend", color = color.new(#bdbdbd, 60), linewidth = 2)
 
 // S/R zones redrawn on the last bar only
 // Draw only levels that price has actually reacted to more than once, and only
 // the few nearest to current price. Everything else is chart noise.
 if barstate.islast
     f_trimBoxes(srBoxes, 0)
+    f_trimLines(srLines, 0)
+    f_trimLabels(srLabels, 0)
     if showSR and array.size(srLevels) > 0
         for i = 0 to array.size(srLevels) - 1
             v = array.get(srLevels, i)
@@ -884,9 +893,15 @@ if barstate.islast
                     if j != i and array.get(srHits, j) >= minSrHits and math.abs(array.get(srLevels, j) - close) < math.abs(v - close)
                         nearer += 1
                 if nearer < maxSR
-                    isRes = v > close
-                    lc    = isRes ? cRes : cSup
-                    array.push(srBoxes, box.new(math.max(bar_index - 90, 0), v + atr * 0.10, bar_index + 8, v - atr * 0.10, border_color = color.new(lc, 55), bgcolor = color.new(lc, 93), text = (isRes ? "R " : "S ") + f_fmt(v) + "  ×" + str.tostring(int(h)), text_color = color.new(lc, 25), text_size = size.tiny, text_halign = text.align_right, text_valign = text.align_center))
+                    isRes   = v > close
+                    lc      = isRes ? cRes : cSup
+                    active  = nearer == 0
+                    xl      = math.max(bar_index - 90, 0)
+                    if srStyle == "Zones"
+                        array.push(srBoxes, box.new(xl, v + atr * 0.10, bar_index + 6, v - atr * 0.10, border_color = color.new(lc, 60), bgcolor = color.new(lc, 94)))
+                    else
+                        array.push(srLines, line.new(xl, v, bar_index + 6, v, color = color.new(lc, active ? 30 : 70), width = active ? 2 : 1, style = active ? line.style_solid : line.style_dotted))
+                    array.push(srLabels, label.new(bar_index + 6, v, f_fmt(v), style = label.style_label_left, color = color.new(cInk, 100), textcolor = color.new(lc, active ? 0 : 45), size = size.tiny))
 
 // ----------------------------------------------------------------------------
 // 16. DASHBOARD
