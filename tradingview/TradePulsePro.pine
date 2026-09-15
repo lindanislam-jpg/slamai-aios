@@ -901,7 +901,7 @@ if barstate.islast
                         array.push(srBoxes, box.new(xl, v + atr * 0.10, bar_index + 6, v - atr * 0.10, border_color = color.new(lc, 60), bgcolor = color.new(lc, 94)))
                     else
                         array.push(srLines, line.new(xl, v, bar_index + 6, v, color = color.new(lc, active ? 30 : 70), width = active ? 2 : 1, style = active ? line.style_solid : line.style_dotted))
-                    array.push(srLabels, label.new(bar_index + 6, v, f_fmt(v), style = label.style_label_left, color = color.new(cInk, 100), textcolor = color.new(lc, active ? 0 : 45), size = size.tiny))
+                    array.push(srLabels, label.new(bar_index + 6, v, f_fmt(v), style = label.style_label_left, color = color.new(lc, active ? 20 : 55), textcolor = active ? color.white : color.new(color.white, 25), size = size.small))
 
 // ----------------------------------------------------------------------------
 // 16. DASHBOARD
