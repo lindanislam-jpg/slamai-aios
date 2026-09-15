@@ -1,0 +1,950 @@
+//@version=6
+// ============================================================================
+//  TRADEPULSE PRO - BEAST STRATEGY (BACKTEST MODE)
+//
+//  GENERATED FILE - DO NOT EDIT BY HAND.
+//  Source of truth: tradingview/TradePulsePro.pine
+//  Regenerate with: python3 scripts/build-tradepulse-strategy.py
+//
+//  Exit model used for the score/regime statistics below:
+//    single target TP2, full stop at SL, flat on invalidation or expiry.
+//  That is a deliberately simple and pessimistic model. It does not scale out
+//  at TP1 and it does not trail. Real results will differ. Nothing here is a
+//  performance promise - it exists to answer one question honestly:
+//  do higher TradePulse scores actually correspond to better setups on this
+//  instrument and timeframe?
+// ============================================================================
+strategy("TradePulse Pro - Beast Strategy", shorttitle = "TradePulse Strategy", overlay = true, initial_capital = 10000, default_qty_type = strategy.percent_of_equity, default_qty_value = 10, commission_type = strategy.commission.percent, commission_value = 0.02, slippage = 2, calc_on_every_tick = false, process_orders_on_close = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500)
+
+// ----------------------------------------------------------------------------
+// 1. INPUTS
+// ----------------------------------------------------------------------------
+gGen = "GENERAL"
+tuning       = input.string("Balanced", "Tuning Mode",    options = ["Balanced", "Scalp", "Swing"], group = gGen, tooltip = "Scalp = EMA 9/21 + RSI 55/45. Swing = EMA 20/50 + RSI 60/40. Balanced = your manual settings below.")
+minScore     = input.int(80,  "Minimum Signal Score",     minval = 0, maxval = 100, group = gGen)
+strongTh     = input.int(80,  "STRONG Threshold",         minval = 0, maxval = 100, group = gGen)
+eliteTh      = input.int(90,  "ELITE Threshold",          minval = 0, maxval = 100, group = gGen)
+beastTh      = input.int(95,  "BEAST Threshold",          minval = 0, maxval = 100, group = gGen)
+confirmClose = input.bool(true, "Confirm Signals On Bar Close", group = gGen, tooltip = "Strongly recommended. Turning this off produces intrabar signals that can disappear before the candle closes.")
+
+gTf = "TIMEFRAMES"
+useHTF       = input.bool(true, "Enable HTF Confirmation", group = gTf)
+htf1In       = input.timeframe("60",  "Higher Timeframe 1", group = gTf)
+useHTF2      = input.bool(true, "Enable Second HTF",       group = gTf)
+htf2In       = input.timeframe("240", "Higher Timeframe 2", group = gTf)
+htfConfirmed = input.bool(true, "Use Only Closed HTF Bars", group = gTf, tooltip = "ON = no repainting (uses the last fully closed higher-timeframe bar). OFF = faster but the HTF bias can change while the HTF candle is still forming.")
+
+gInd = "INDICATORS"
+emaFastIn  = input.int(9,   "EMA Fast",   minval = 2, group = gInd)
+emaMidIn   = input.int(21,  "EMA Mid",    minval = 2, group = gInd)
+emaSlowIn  = input.int(50,  "EMA Slow",   minval = 2, group = gInd)
+emaTrendIn = input.int(200, "EMA Trend",  minval = 2, group = gInd)
+rsiLen     = input.int(14,  "RSI Length", minval = 2, group = gInd)
+rsiLongIn  = input.float(55.0, "RSI Long Threshold",  minval = 50, maxval = 90, group = gInd)
+rsiShortIn = input.float(45.0, "RSI Short Threshold", minval = 10, maxval = 50, group = gInd)
+macdFast   = input.int(12,  "MACD Fast",   minval = 1, group = gInd)
+macdSlow   = input.int(26,  "MACD Slow",   minval = 2, group = gInd)
+macdSigLen = input.int(9,   "MACD Signal", minval = 1, group = gInd)
+atrLen     = input.int(14,  "ATR Length",  minval = 2, group = gInd)
+adxLen     = input.int(14,  "ADX Length",  minval = 2, group = gInd)
+volLen     = input.int(20,  "Volume Average Length", minval = 2, group = gInd)
+useVwap    = input.bool(true, "Use VWAP (intraday only)", group = gInd)
+volOverride = input.bool(false, "Force Volume Scoring OFF", group = gInd, tooltip = "Forex and spot-FX feeds (e.g. OANDA XAUUSD) report TICK volume, not traded volume. It is still useful as an activity proxy, but turn this ON if you do not want volume influencing the score at all.")
+pivotLen   = input.int(5,   "Swing Pivot Strength", minval = 2, maxval = 25, group = gInd, tooltip = "A swing is only confirmed this many bars after it prints. Higher = fewer, more meaningful swings.")
+
+gRisk = "RISK"
+slMethod    = input.string("Hybrid", "Stop Loss Method", options = ["Structure", "ATR", "Hybrid"], group = gRisk)
+atrMult     = input.float(1.5, "ATR Stop Multiplier",  minval = 0.2, step = 0.1, group = gRisk)
+slBuffer    = input.float(0.25, "Structure Stop Buffer (ATR)", minval = 0.0, step = 0.05, group = gRisk)
+minStopAtr  = input.float(0.6, "Min Stop Distance (ATR)", minval = 0.1, step = 0.1, group = gRisk)
+maxStopAtr  = input.float(3.0, "Max Stop Distance (ATR)", minval = 0.5, step = 0.1, group = gRisk)
+minRR       = input.float(2.0, "Minimum R:R",  minval = 0.5, step = 0.1, group = gRisk)
+tp1R        = input.float(1.0, "TP1 (R multiple)", minval = 0.3, step = 0.1, group = gRisk)
+tp2R        = input.float(2.0, "TP2 (R multiple)", minval = 0.5, step = 0.1, group = gRisk)
+tp3R        = input.float(3.0, "TP3 (R multiple)", minval = 0.5, step = 0.1, group = gRisk)
+
+gSig = "SIGNALS"
+enableLong   = input.bool(true, "Enable Long Signals",  group = gSig)
+enableShort  = input.bool(true, "Enable Short Signals", group = gSig)
+cooldownBars = input.int(10, "Minimum Bars Between Signals", minval = 0, group = gSig)
+expireBars   = input.int(50, "Signal Expiry (bars)", minval = 5, group = gSig)
+enTrendPB    = input.bool(true, "Setup: Trend Pullback",   group = gSig)
+enBreakout   = input.bool(true, "Setup: Breakout",         group = gSig)
+enRetest     = input.bool(true, "Setup: Breakout Retest",  group = gSig)
+enSweep      = input.bool(true, "Setup: Liquidity Sweep",  group = gSig)
+maxExtAtr    = input.float(2.5, "Max Extension From EMA Mid (ATR)", minval = 0.5, step = 0.1, group = gSig, tooltip = "Blocks chasing price that has already run too far from its mean.")
+
+gVis = "VISUALS"
+showEntry   = input.bool(true, "Show Entry",     group = gVis)
+showSL      = input.bool(true, "Show Stop Loss", group = gVis)
+showTP1     = input.bool(true, "Show TP1",       group = gVis)
+showTP2     = input.bool(true, "Show TP2",       group = gVis)
+showTP3     = input.bool(true, "Show TP3",       group = gVis)
+showSR      = input.bool(true, "Show S/R Levels",  group = gVis)
+showLiq     = input.bool(true, "Show Liquidity Sweeps", group = gVis)
+showDash    = input.bool(true, "Show Dashboard", group = gVis)
+dashPos     = input.string("Top Right", "Dashboard Position", options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left", "Middle Right"], group = gVis)
+showBigLabel = input.bool(true, "Show Premium Signal Label", group = gVis)
+showArrows  = input.bool(true, "Show BUY / SELL Arrows", group = gVis)
+maxOnChart  = input.int(4, "Max Setups Drawn On Chart", minval = 1, maxval = 20, group = gVis)
+drawExtend  = input.int(30, "Trade Box Width (bars)", minval = 5, group = gVis)
+maxSR       = input.int(6, "Max S/R Zones", minval = 2, maxval = 20, group = gVis)
+
+// Tuning presets. These resolve to simple values so they are legal ta.* lengths.
+emaFastLen  = tuning == "Scalp" ? 9  : tuning == "Swing" ? 20 : emaFastIn
+emaMidLen   = tuning == "Scalp" ? 21 : tuning == "Swing" ? 50 : emaMidIn
+emaSlowLen  = tuning == "Scalp" ? 50 : tuning == "Swing" ? 100 : emaSlowIn
+emaTrendLen = emaTrendIn
+rsiLongTh   = tuning == "Scalp" ? 55.0 : tuning == "Swing" ? 60.0 : rsiLongIn
+rsiShortTh  = tuning == "Scalp" ? 45.0 : tuning == "Swing" ? 40.0 : rsiShortIn
+
+htf1 = useHTF ? htf1In : timeframe.period
+htf2 = useHTF and useHTF2 ? htf2In : timeframe.period
+
+// ----------------------------------------------------------------------------
+// 2. SMALL HELPERS (pure math / string - no ta.* inside)
+// ----------------------------------------------------------------------------
+f_n(b) => b ? 1.0 : 0.0
+f_tick(x) => math.round_to_mintick(x)
+f_fmt(x) => na(x) ? "-" : str.tostring(math.round_to_mintick(x))
+f_clamp(x, lo, hi) => math.max(lo, math.min(hi, x))
+
+// ----------------------------------------------------------------------------
+// 3. CORE SERIES  (all ta.* calls live here, at global scope, unconditionally)
+// ----------------------------------------------------------------------------
+ema9   = ta.ema(close, emaFastLen)
+ema21  = ta.ema(close, emaMidLen)
+ema50  = ta.ema(close, emaSlowLen)
+ema200 = ta.ema(close, emaTrendLen)
+
+rsi = ta.rsi(close, rsiLen)
+[macdLine, macdSignal, macdHist] = ta.macd(close, macdFast, macdSlow, macdSigLen)
+
+atr     = ta.atr(atrLen)
+atrPct  = close != 0 ? atr / close * 100.0 : na
+atrRank = ta.percentrank(atr, 100)
+
+[diPlus, diMinus, adx] = ta.dmi(adxLen, adxLen)
+
+volRaw     = nz(volume)
+volAvg     = ta.sma(volRaw, volLen)
+volNonZero = math.sum(volRaw > 0 ? 1.0 : 0.0, volLen)
+volumeReliable = not volOverride and volAvg > 0 and volNonZero >= volLen * 0.8
+relVol = volAvg > 0 ? volRaw / volAvg : na
+
+// Session anchored VWAP, computed manually so instruments without volume
+// simply report "unavailable" instead of throwing a runtime error.
+dayStamp  = time("D")
+dayChange = ta.change(dayStamp)
+newDay    = na(dayChange) or dayChange != 0
+var float cumPV  = 0.0
+var float cumVol = 0.0
+if newDay
+    cumPV  := 0.0
+    cumVol := 0.0
+cumPV  += hlc3 * volRaw
+cumVol += volRaw
+vwapVal = cumVol > 0 ? cumPV / cumVol : na
+vwapAvailable = useVwap and timeframe.isintraday and volumeReliable and not na(vwapVal)
+
+// candle anatomy
+bodyTop   = math.max(open, close)
+bodyBot   = math.min(open, close)
+barRange  = math.max(high - low, syminfo.mintick)
+lowerWick = bodyBot - low
+upperWick = high - bodyTop
+bullReject = close > open and lowerWick >= barRange * 0.4
+bearReject = close < open and upperWick >= barRange * 0.4
+bullEngulf = close > open and close[1] < open[1] and close >= open[1] and open <= close[1]
+bearEngulf = close < open and close[1] > open[1] and close <= open[1] and open >= close[1]
+
+low3     = ta.lowest(low, 3)
+high3    = ta.highest(high, 3)
+recentLow  = ta.lowest(low, 10)
+recentHigh = ta.highest(high, 10)
+
+// ----------------------------------------------------------------------------
+// 4. HIGHER TIMEFRAME CONFIRMATION (no lookahead, closed bars by default)
+// ----------------------------------------------------------------------------
+f_htfPack() =>
+    o = htfConfirmed ? 1 : 0
+    e9  = ta.ema(close, emaFastLen)
+    e21 = ta.ema(close, emaMidLen)
+    e50 = ta.ema(close, emaSlowLen)
+    e200 = ta.ema(close, emaTrendLen)
+    r   = ta.rsi(close, rsiLen)
+    [_ml, _ms, mh] = ta.macd(close, macdFast, macdSlow, macdSigLen)
+    hi20 = ta.highest(high, 20)
+    lo20 = ta.lowest(low, 20)
+    [close[o], e9[o], e21[o], e50[o], e200[o], r[o], mh[o], hi20[o], lo20[o]]
+
+[h1c, h1e9, h1e21, h1e50, h1e200, h1rsi, h1hist, h1hi, h1lo] = request.security(syminfo.tickerid, htf1, f_htfPack(), lookahead = barmerge.lookahead_off)
+[h2c, h2e9, h2e21, h2e50, h2e200, h2rsi, h2hist, h2hi, h2lo] = request.security(syminfo.tickerid, htf2, f_htfPack(), lookahead = barmerge.lookahead_off)
+
+// -1 (fully bearish) .. +1 (fully bullish)
+f_bias(c, e9v, e21v, e50v, e200v, r, mh) =>
+    float s = 0.0
+    float n = 0.0
+    if not na(c) and not na(e21v)
+        s += c > e21v ? 1.0 : -1.0
+        n += 1.0
+    if not na(c) and not na(e50v)
+        s += c > e50v ? 1.0 : -1.0
+        n += 1.0
+    if not na(e9v) and not na(e21v)
+        s += e9v > e21v ? 1.0 : -1.0
+        n += 1.0
+    if not na(e21v) and not na(e50v)
+        s += e21v > e50v ? 1.0 : -1.0
+        n += 1.0
+    if not na(c) and not na(e200v)
+        s += c > e200v ? 1.0 : -1.0
+        n += 1.0
+    if not na(r)
+        s += r > 50.0 ? 1.0 : -1.0
+        n += 1.0
+    if not na(mh)
+        s += mh > 0 ? 1.0 : -1.0
+        n += 1.0
+    n > 0 ? s / n : 0.0
+
+h1Bias = f_bias(h1c, h1e9, h1e21, h1e50, h1e200, h1rsi, h1hist)
+h2Bias = f_bias(h2c, h2e9, h2e21, h2e50, h2e200, h2rsi, h2hist)
+htfBias = not useHTF ? 0.0 : useHTF2 ? (h1Bias * 0.6 + h2Bias * 0.4) : h1Bias
+htfBull = useHTF and htfBias >= 0.25
+htfBear = useHTF and htfBias <= -0.25
+htfText = not useHTF ? "OFF" : htfBias >= 0.6 ? "STRONG BULL" : htfBias >= 0.25 ? "BULLISH" : htfBias <= -0.6 ? "STRONG BEAR" : htfBias <= -0.25 ? "BEARISH" : "NEUTRAL"
+
+// ----------------------------------------------------------------------------
+// 5. MARKET STRUCTURE
+// ----------------------------------------------------------------------------
+ph = ta.pivothigh(high, pivotLen, pivotLen)
+pl = ta.pivotlow(low, pivotLen, pivotLen)
+
+var float swHigh     = na
+var float swHighPrev = na
+var float swLow      = na
+var float swLowPrev  = na
+
+if not na(ph)
+    swHighPrev := swHigh
+    swHigh     := ph
+if not na(pl)
+    swLowPrev := swLow
+    swLow     := pl
+
+isHH = not na(swHigh) and not na(swHighPrev) and swHigh > swHighPrev
+isLH = not na(swHigh) and not na(swHighPrev) and swHigh < swHighPrev
+isHL = not na(swLow)  and not na(swLowPrev)  and swLow  > swLowPrev
+isLL = not na(swLow)  and not na(swLowPrev)  and swLow  < swLowPrev
+
+var int structDir = 0
+bosUpRaw = not na(swHigh) and close > swHigh and close[1] <= swHigh
+bosDnRaw = not na(swLow)  and close < swLow  and close[1] >= swLow
+chochUp  = bosUpRaw and structDir == -1
+chochDn  = bosDnRaw and structDir == 1
+bosUp    = bosUpRaw and structDir >= 0
+bosDn    = bosDnRaw and structDir <= 0
+if bosUpRaw
+    structDir := 1
+if bosDnRaw
+    structDir := -1
+
+barsSinceBosUp   = nz(ta.barssince(bosUpRaw), 9999)
+barsSinceBosDn   = nz(ta.barssince(bosDnRaw), 9999)
+barsSinceChochUp = nz(ta.barssince(chochUp), 9999)
+barsSinceChochDn = nz(ta.barssince(chochDn), 9999)
+
+// ----------------------------------------------------------------------------
+// 6. LIQUIDITY
+// ----------------------------------------------------------------------------
+eqTol   = atr * 0.12
+eqHighs = not na(swHigh) and not na(swHighPrev) and math.abs(swHigh - swHighPrev) <= eqTol
+eqLows  = not na(swLow)  and not na(swLowPrev)  and math.abs(swLow  - swLowPrev)  <= eqTol
+
+sweepLow  = not na(swLow)  and low  < swLow  and close > swLow  and lowerWick >= barRange * 0.35
+sweepHigh = not na(swHigh) and high > swHigh and close < swHigh and upperWick >= barRange * 0.35
+barsSinceSweepLow  = nz(ta.barssince(sweepLow), 9999)
+barsSinceSweepHigh = nz(ta.barssince(sweepHigh), 9999)
+
+// ----------------------------------------------------------------------------
+// 7. SUPPORT / RESISTANCE ENGINE
+// ----------------------------------------------------------------------------
+var array<float> resLevels = array.new<float>()
+var array<float> supLevels = array.new<float>()
+
+f_addLevel(arr, lvl, tol, maxN) =>
+    bool found = false
+    if array.size(arr) > 0
+        for i = 0 to array.size(arr) - 1
+            v = array.get(arr, i)
+            if math.abs(v - lvl) <= tol
+                array.set(arr, i, (v + lvl) / 2.0)
+                found := true
+    if not found
+        array.push(arr, lvl)
+        if array.size(arr) > maxN
+            array.shift(arr)
+
+f_nearestAbove(arr, px) =>
+    float best = na
+    if array.size(arr) > 0
+        for i = 0 to array.size(arr) - 1
+            v = array.get(arr, i)
+            if v > px and (na(best) or v < best)
+                best := v
+    best
+
+f_nearestBelow(arr, px) =>
+    float best = na
+    if array.size(arr) > 0
+        for i = 0 to array.size(arr) - 1
+            v = array.get(arr, i)
+            if v < px and (na(best) or v > best)
+                best := v
+    best
+
+if not na(ph)
+    f_addLevel(resLevels, ph, atr * 0.5, maxSR)
+if not na(pl)
+    f_addLevel(supLevels, pl, atr * 0.5, maxSR)
+
+nearestRes = f_nearestAbove(resLevels, close)
+nearestSup = f_nearestBelow(supLevels, close)
+distResAtr = na(nearestRes) or atr == 0 ? na : (nearestRes - close) / atr
+distSupAtr = na(nearestSup) or atr == 0 ? na : (close - nearestSup) / atr
+
+// ----------------------------------------------------------------------------
+// 8. MARKET REGIME
+// ----------------------------------------------------------------------------
+regimeLen  = 20
+boxHigh    = ta.highest(high, regimeLen)
+boxLow     = ta.lowest(low, regimeLen)
+boxWidthAtr = atr > 0 ? (boxHigh - boxLow) / atr : na
+
+bullAlign   = ema9 > ema21 and ema21 > ema50
+bearAlign   = ema9 < ema21 and ema21 < ema50
+strongBull  = bullAlign and ema50 > ema200 and close > ema200
+strongBear  = bearAlign and ema50 < ema200 and close < ema200
+
+volHigh = atrRank >= 80
+volLow  = atrRank <= 20
+trending = adx >= 25
+choppy   = adx < 18 and boxWidthAtr < 4.0
+
+priorHigh  = ta.highest(high, regimeLen)[1]
+priorLow   = ta.lowest(low, regimeLen)[1]
+priorRngAtr = atr > 0 ? (priorHigh - priorLow) / atr : na
+breakUp    = close > priorHigh
+breakDn    = close < priorLow
+squeezeNow = priorRngAtr <= 3.0
+barsSinceBreakUp = nz(ta.barssince(breakUp), 9999)
+barsSinceBreakDn = nz(ta.barssince(breakDn), 9999)
+brokenUpLvl = ta.valuewhen(breakUp, priorHigh, 0)
+brokenDnLvl = ta.valuewhen(breakDn, priorLow, 0)
+
+string regime = "RANGE"
+if (breakUp or breakDn) and squeezeNow[1]
+    regime := "BREAKOUT"
+else if trending and strongBull and adx >= 30
+    regime := "STRONG BULL"
+else if trending and bullAlign
+    regime := "BULL"
+else if trending and strongBear and adx >= 30
+    regime := "STRONG BEAR"
+else if trending and bearAlign
+    regime := "BEAR"
+else if choppy
+    regime := "CHOPPY"
+else if volHigh
+    regime := "HIGH VOLATILITY"
+else if volLow
+    regime := "LOW VOLATILITY"
+
+regimeTrending = regime == "STRONG BULL" or regime == "BULL" or regime == "STRONG BEAR" or regime == "BEAR"
+regimeRanging  = regime == "RANGE" or regime == "LOW VOLATILITY"
+regimeBreakout = regime == "BREAKOUT"
+
+// ----------------------------------------------------------------------------
+// 9. CONFIRMATION MATRIX + BEAST SCORE (0-100)
+//    Every component returns a 0..1 ratio plus an availability flag.
+//    Unavailable components are removed from the denominator instead of being
+//    scored as zero, so an instrument without volume is not silently punished
+//    and the engine never pretends it has data it does not have.
+// ----------------------------------------------------------------------------
+historyOk = bar_index > emaTrendLen + 20 and not na(atr) and atr > 0
+
+// --- TREND (15)
+trendLongRatio  = (f_n(close > ema21) + f_n(close > ema50) + f_n(close > ema200) + f_n(ema9 > ema21) + f_n(ema21 > ema50) + f_n(ema50 > ema200) + f_n(ema21 > ema21[3]) + f_n(diPlus > diMinus)) / 8.0
+trendShortRatio = (f_n(close < ema21) + f_n(close < ema50) + f_n(close < ema200) + f_n(ema9 < ema21) + f_n(ema21 < ema50) + f_n(ema50 < ema200) + f_n(ema21 < ema21[3]) + f_n(diMinus > diPlus)) / 8.0
+
+// --- STRUCTURE (15)
+structLongRatio  = (f_n(structDir == 1) + f_n(isHH) + f_n(isHL) + f_n(barsSinceBosUp <= 10) + f_n(barsSinceChochUp <= 15) + f_n(not na(swLow) and close > swLow)) / 6.0
+structShortRatio = (f_n(structDir == -1) + f_n(isLH) + f_n(isLL) + f_n(barsSinceBosDn <= 10) + f_n(barsSinceChochDn <= 15) + f_n(not na(swHigh) and close < swHigh)) / 6.0
+
+// --- MOMENTUM (10)
+momoLongRatio  = (f_n(rsi > rsiLongTh) + f_n(rsi > rsi[1]) + f_n(macdLine > macdSignal) + f_n(macdHist > 0) + f_n(macdHist > macdHist[1]) + f_n(close > close[3])) / 6.0
+momoShortRatio = (f_n(rsi < rsiShortTh) + f_n(rsi < rsi[1]) + f_n(macdLine < macdSignal) + f_n(macdHist < 0) + f_n(macdHist < macdHist[1]) + f_n(close < close[3])) / 6.0
+
+// --- VOLUME (10)
+relVolSafe = nz(relVol, 0.0)
+volLongRatio  = (f_n(relVolSafe >= 1.0) + f_n(relVolSafe >= 1.5) + f_n(volRaw > volRaw[1]) + f_n(close > open and relVolSafe >= 1.2)) / 4.0
+volShortRatio = (f_n(relVolSafe >= 1.0) + f_n(relVolSafe >= 1.5) + f_n(volRaw > volRaw[1]) + f_n(close < open and relVolSafe >= 1.2)) / 4.0
+
+// --- VWAP (10)
+vwapReclaim = vwapAvailable and close > vwapVal and close[1] <= nz(vwapVal[1], vwapVal)
+vwapReject  = vwapAvailable and close < vwapVal and close[1] >= nz(vwapVal[1], vwapVal)
+vwapLongRatio  = not vwapAvailable ? 0.0 : (f_n(close > vwapVal) + f_n(vwapVal > nz(vwapVal[1], vwapVal)) + f_n(close - vwapVal < atr * 2.5) + f_n(vwapReclaim or close[2] > nz(vwapVal[2], vwapVal))) / 4.0
+vwapShortRatio = not vwapAvailable ? 0.0 : (f_n(close < vwapVal) + f_n(vwapVal < nz(vwapVal[1], vwapVal)) + f_n(vwapVal - close < atr * 2.5) + f_n(vwapReject or close[2] < nz(vwapVal[2], vwapVal))) / 4.0
+
+// --- SUPPORT / RESISTANCE (10)
+srLongRatio  = (f_n(not na(distSupAtr) and distSupAtr <= 1.5) + f_n(na(distResAtr) or distResAtr >= 2.0) + f_n(barsSinceBreakUp <= 5) + f_n(close > (boxHigh + boxLow) / 2.0)) / 4.0
+srShortRatio = (f_n(not na(distResAtr) and distResAtr <= 1.5) + f_n(na(distSupAtr) or distSupAtr >= 2.0) + f_n(barsSinceBreakDn <= 5) + f_n(close < (boxHigh + boxLow) / 2.0)) / 4.0
+
+// --- LIQUIDITY (10)
+liqLongRatio  = (f_n(barsSinceSweepLow <= 5) + f_n(eqLows) + f_n(bullReject or bullEngulf) + f_n(not na(swLow) and close > swLow)) / 4.0
+liqShortRatio = (f_n(barsSinceSweepHigh <= 5) + f_n(eqHighs) + f_n(bearReject or bearEngulf) + f_n(not na(swHigh) and close < swHigh)) / 4.0
+
+// --- VOLATILITY (10) - direction neutral
+volatilityRatio = (f_n(atrRank >= 25 and atrRank <= 88) + f_n(atr > atr[5] or regimeRanging) + f_n(nz(atrPct, 0.0) < 12.0) + f_n(nz(boxWidthAtr, 0.0) >= 2.0)) / 4.0
+
+// --- MULTI TIMEFRAME (10)
+htfStructN    = useHTF2 ? 2.0 : 1.0
+htfStructBull = (f_n(not na(h1hi) and h1c > (h1hi + h1lo) / 2.0) + (useHTF2 ? f_n(not na(h2hi) and h2c > (h2hi + h2lo) / 2.0) : 0.0)) / htfStructN
+htfStructBear = (f_n(not na(h1lo) and h1c < (h1hi + h1lo) / 2.0) + (useHTF2 ? f_n(not na(h2lo) and h2c < (h2hi + h2lo) / 2.0) : 0.0)) / htfStructN
+mtfLongRatio  = f_clamp(0.70 * ((htfBias + 1.0) / 2.0) + 0.30 * htfStructBull, 0.0, 1.0)
+mtfShortRatio = f_clamp(0.70 * ((-htfBias + 1.0) / 2.0) + 0.30 * htfStructBear, 0.0, 1.0)
+
+// --- Adaptive weights: the engine re-prioritises by regime
+wTrendB = 15.0
+wStrucB = 15.0
+wMomoB  = 10.0
+wVolB   = 10.0
+wVwapB  = 10.0
+wSrB    = 10.0
+wLiqB   = 10.0
+wVolaB  = 10.0
+wMtfB   = 10.0
+
+mTrend = regimeTrending ? 1.30 : regimeRanging ? 0.70 : regimeBreakout ? 0.90 : 1.0
+mStruc = regimeTrending ? 1.20 : regimeRanging ? 0.90 : regimeBreakout ? 1.10 : 1.0
+mMomo  = regimeTrending ? 1.10 : regimeRanging ? 0.90 : regimeBreakout ? 1.10 : 1.0
+mVol   = regimeBreakout ? 1.40 : regimeRanging ? 0.90 : 1.0
+mVwap  = 1.0
+mSr    = regimeRanging ? 1.40 : regimeTrending ? 0.80 : regimeBreakout ? 1.20 : 1.0
+mLiq   = regimeRanging ? 1.40 : regimeTrending ? 0.80 : 1.0
+mVola  = regimeBreakout ? 1.30 : 1.0
+mMtf   = 1.0
+
+wTrend = wTrendB * mTrend
+wStruc = wStrucB * mStruc
+wMomo  = wMomoB  * mMomo
+wVol   = wVolB   * mVol
+wVwap  = wVwapB  * mVwap
+wSr    = wSrB    * mSr
+wLiq   = wLiqB   * mLiq
+wVola  = wVolaB  * mVola
+wMtf   = wMtfB   * mMtf
+
+avVol  = volumeReliable
+avVwap = vwapAvailable
+avMtf  = useHTF
+
+f_w(ratio, w, avail) => avail ? ratio * w : 0.0
+f_d(w, avail) => avail ? w : 0.0
+
+denomW = wTrend + wStruc + wMomo + f_d(wVol, avVol) + f_d(wVwap, avVwap) + wSr + wLiq + wVola + f_d(wMtf, avMtf)
+
+longNum = f_w(trendLongRatio, wTrend, true) + f_w(structLongRatio, wStruc, true) + f_w(momoLongRatio, wMomo, true) + f_w(volLongRatio, wVol, avVol) + f_w(vwapLongRatio, wVwap, avVwap) + f_w(srLongRatio, wSr, true) + f_w(liqLongRatio, wLiq, true) + f_w(volatilityRatio, wVola, true) + f_w(mtfLongRatio, wMtf, avMtf)
+
+shortNum = f_w(trendShortRatio, wTrend, true) + f_w(structShortRatio, wStruc, true) + f_w(momoShortRatio, wMomo, true) + f_w(volShortRatio, wVol, avVol) + f_w(vwapShortRatio, wVwap, avVwap) + f_w(srShortRatio, wSr, true) + f_w(liqShortRatio, wLiq, true) + f_w(volatilityRatio, wVola, true) + f_w(mtfShortRatio, wMtf, avMtf)
+
+longScore  = denomW > 0 ? int(math.round(100.0 * longNum  / denomW)) : 0
+shortScore = denomW > 0 ? int(math.round(100.0 * shortNum / denomW)) : 0
+
+f_tier(sc) => sc >= beastTh ? "BEAST" : sc >= eliteTh ? "ELITE" : sc >= strongTh ? "STRONG" : sc >= 70 ? "DEVELOPING" : sc >= 60 ? "WATCH" : "NO TRADE"
+
+// ----------------------------------------------------------------------------
+// 10. ENTRY ENGINE - four independent setups, each regime-gated
+// ----------------------------------------------------------------------------
+pbAllowed     = not (regime == "CHOPPY" or regime == "RANGE")
+boAllowed     = not (regime == "CHOPPY" or regime == "LOW VOLATILITY")
+retestAllowed = regime != "CHOPPY"
+sweepAllowed  = true
+
+// A. TREND PULLBACK
+pbLong  = enTrendPB and pbAllowed and strongBull and adx >= 20 and (low <= ema21 + atr * 0.30 or low3 <= ema50) and close > ema21 and (bullReject or bullEngulf or macdHist > macdHist[1])
+pbShort = enTrendPB and pbAllowed and strongBear and adx >= 20 and (high >= ema21 - atr * 0.30 or high3 >= ema50) and close < ema21 and (bearReject or bearEngulf or macdHist < macdHist[1])
+
+// B. BREAKOUT
+boVolOk  = not volumeReliable or relVolSafe >= 1.3
+boLong   = enBreakout and boAllowed and squeezeNow[1] and close > priorHigh + atr * 0.05 and boVolOk and close > open
+boShort  = enBreakout and boAllowed and squeezeNow[1] and close < priorLow - atr * 0.05 and boVolOk and close < open
+
+// C. BREAKOUT RETEST
+retestLong  = enRetest and retestAllowed and barsSinceBreakUp >= 2 and barsSinceBreakUp <= 12 and not na(brokenUpLvl) and low <= brokenUpLvl + atr * 0.35 and close > brokenUpLvl and (bullReject or bullEngulf or close > open)
+retestShort = enRetest and retestAllowed and barsSinceBreakDn >= 2 and barsSinceBreakDn <= 12 and not na(brokenDnLvl) and high >= brokenDnLvl - atr * 0.35 and close < brokenDnLvl and (bearReject or bearEngulf or close < open)
+
+// D. LIQUIDITY SWEEP
+sweepSetupLong  = enSweep and sweepAllowed and barsSinceSweepLow  <= 4 and (chochUp or bosUp or close > ema9) and macdHist > macdHist[1] and close > open
+sweepSetupShort = enSweep and sweepAllowed and barsSinceSweepHigh <= 4 and (chochDn or bosDn or close < ema9) and macdHist < macdHist[1] and close < open
+
+longTrigger  = pbLong  or boLong  or retestLong  or sweepSetupLong
+shortTrigger = pbShort or boShort or retestShort or sweepSetupShort
+
+longSetupName  = pbLong ? "TREND PULLBACK" : boLong ? "BREAKOUT" : retestLong ? "BREAKOUT RETEST" : sweepSetupLong ? "LIQUIDITY SWEEP" : ""
+shortSetupName = pbShort ? "TREND PULLBACK" : boShort ? "BREAKOUT" : retestShort ? "BREAKOUT RETEST" : sweepSetupShort ? "LIQUIDITY SWEEP" : ""
+
+// ----------------------------------------------------------------------------
+// 11. RISK ENGINE - stop loss
+// ----------------------------------------------------------------------------
+structStopL = math.min(nz(swLow, recentLow), recentLow) - atr * slBuffer
+structStopS = math.max(nz(swHigh, recentHigh), recentHigh) + atr * slBuffer
+atrStopL    = close - atr * atrMult
+atrStopS    = close + atr * atrMult
+
+float slLong  = na
+float slShort = na
+if slMethod == "ATR"
+    slLong  := atrStopL
+    slShort := atrStopS
+else if slMethod == "Structure"
+    slLong  := structStopL
+    slShort := structStopS
+else
+    dl = math.min(math.max(close - structStopL, atr * minStopAtr), atr * maxStopAtr)
+    ds = math.min(math.max(structStopS - close, atr * minStopAtr), atr * maxStopAtr)
+    slLong  := close - dl
+    slShort := close + ds
+
+entryPx  = close
+riskLong  = entryPx - slLong
+riskShort = slShort - entryPx
+
+// ----------------------------------------------------------------------------
+// 12. TAKE PROFITS + REALISTIC R:R
+//     TPs come from R multiples, but the R:R actually reported is capped by
+//     the first real structure level in the way. No target inflation.
+// ----------------------------------------------------------------------------
+tp1Long = entryPx + riskLong * tp1R
+tp2Long = entryPx + riskLong * tp2R
+tp3Long = entryPx + riskLong * tp3R
+tp1Short = entryPx - riskShort * tp1R
+tp2Short = entryPx - riskShort * tp2R
+tp3Short = entryPx - riskShort * tp3R
+
+blockLong  = f_nearestAbove(resLevels, entryPx + atr * 0.2)
+blockShort = f_nearestBelow(supLevels, entryPx - atr * 0.2)
+effTargetLong  = na(blockLong)  ? tp2Long  : math.min(tp2Long,  blockLong)
+effTargetShort = na(blockShort) ? tp2Short : math.max(tp2Short, blockShort)
+rrLong  = riskLong  > 0 ? (effTargetLong  - entryPx) / riskLong  : na
+rrShort = riskShort > 0 ? (entryPx - effTargetShort) / riskShort : na
+
+// ----------------------------------------------------------------------------
+// 13. NO-TRADE FILTERS
+// ----------------------------------------------------------------------------
+extAtr = atr > 0 ? math.abs(close - ema21) / atr : na
+stopWideLong  = atr > 0 and riskLong  / atr > maxStopAtr
+stopWideShort = atr > 0 and riskShort / atr > maxStopAtr
+
+longBlocked  = not historyOk or riskLong  <= 0 or stopWideLong  or nz(extAtr, 0.0) > maxExtAtr or nz(rrLong, 0.0)  < minRR or (useHTF and htfBear) or regime == "CHOPPY"
+shortBlocked = not historyOk or riskShort <= 0 or stopWideShort or nz(extAtr, 0.0) > maxExtAtr or nz(rrShort, 0.0) < minRR or (useHTF and htfBull) or regime == "CHOPPY"
+
+f_reason(hasTrigger, sc, risk, stopWide, rr, htfConflict) =>
+    string r = ""
+    if not historyOk
+        r := "Not enough history"
+    else if regime == "CHOPPY"
+        r := "Market too choppy"
+    else if htfConflict
+        r := "HTF conflict"
+    else if not hasTrigger
+        r := "No valid entry trigger"
+    else if risk <= 0
+        r := "Invalid stop"
+    else if stopWide
+        r := "Stop too wide"
+    else if nz(rr, 0.0) < minRR
+        r := "Poor R:R (target blocked)"
+    else if sc < minScore
+        r := "Insufficient confluence"
+    else
+        r := ""
+    r
+
+// ----------------------------------------------------------------------------
+// 14. SIGNAL STATE MACHINE (cooldown, dedup, lifecycle)
+// ----------------------------------------------------------------------------
+barOk = confirmClose ? barstate.isconfirmed : true
+
+var int    sigDir    = 0
+var float  sigEntry  = na
+var float  sigSL     = na
+var float  sigTP1    = na
+var float  sigTP2    = na
+var float  sigTP3    = na
+var float  sigScoreV = na
+var float  sigRR     = na
+var int    sigBar    = na
+var string sigState  = "NONE"
+var string sigSetup  = ""
+var string sigTier   = ""
+var bool   hitT1     = false
+var bool   hitT2     = false
+var bool   hitT3     = false
+var int    lastSigBar = na
+
+bool evT1 = false
+bool evT2 = false
+bool evT3 = false
+bool evSL = false
+bool evInv = false
+bool evExp = false
+
+if barOk and sigState == "ACTIVE"
+    if sigDir == 1
+        if low <= sigSL
+            sigState := "STOP HIT"
+            evSL := true
+        else
+            if not hitT1 and high >= sigTP1
+                hitT1 := true
+                evT1  := true
+            if not hitT2 and high >= sigTP2
+                hitT2 := true
+                evT2  := true
+            if not hitT3 and high >= sigTP3
+                hitT3 := true
+                evT3  := true
+                sigState := "TP3 HIT"
+            if bosDnRaw and not hitT1
+                sigState := "INVALIDATED"
+                evInv := true
+    else if sigDir == -1
+        if high >= sigSL
+            sigState := "STOP HIT"
+            evSL := true
+        else
+            if not hitT1 and low <= sigTP1
+                hitT1 := true
+                evT1  := true
+            if not hitT2 and low <= sigTP2
+                hitT2 := true
+                evT2  := true
+            if not hitT3 and low <= sigTP3
+                hitT3 := true
+                evT3  := true
+                sigState := "TP3 HIT"
+            if bosUpRaw and not hitT1
+                sigState := "INVALIDATED"
+                evInv := true
+    if sigState == "ACTIVE" and not na(sigBar) and bar_index - sigBar > expireBars
+        sigState := "EXPIRED"
+        evExp := true
+
+cooldownOk = na(lastSigBar) or (bar_index - lastSigBar) >= cooldownBars
+slotFree   = sigState != "ACTIVE"
+
+longFire  = enableLong  and barOk and longTrigger  and not longBlocked  and longScore  >= minScore and cooldownOk and slotFree
+shortFire = enableShort and barOk and shortTrigger and not shortBlocked and shortScore >= minScore and cooldownOk and slotFree and not longFire
+
+if longFire
+    sigDir    := 1
+    sigEntry  := entryPx
+    sigSL     := slLong
+    sigTP1    := tp1Long
+    sigTP2    := tp2Long
+    sigTP3    := tp3Long
+    sigScoreV := longScore
+    sigRR     := rrLong
+    sigBar    := bar_index
+    sigState  := "ACTIVE"
+    sigSetup  := longSetupName
+    sigTier   := f_tier(longScore)
+    hitT1 := false
+    hitT2 := false
+    hitT3 := false
+    lastSigBar := bar_index
+if shortFire
+    sigDir    := -1
+    sigEntry  := entryPx
+    sigSL     := slShort
+    sigTP1    := tp1Short
+    sigTP2    := tp2Short
+    sigTP3    := tp3Short
+    sigScoreV := shortScore
+    sigRR     := rrShort
+    sigBar    := bar_index
+    sigState  := "ACTIVE"
+    sigSetup  := shortSetupName
+    sigTier   := f_tier(shortScore)
+    hitT1 := false
+    hitT2 := false
+    hitT3 := false
+    lastSigBar := bar_index
+
+newSignal = longFire or shortFire
+
+// ----------------------------------------------------------------------------
+// 15. VISUALS
+// ----------------------------------------------------------------------------
+cBull   = color.new(#00e676, 0)
+cBear   = color.new(#ff5252, 0)
+cEntry  = color.new(#ff9800, 0)
+cStop   = color.new(#f44336, 0)
+cT1     = color.new(#29b6f6, 0)
+cT2     = color.new(#ab47bc, 0)
+cT3     = color.new(#26c6da, 0)
+cSup    = color.new(#26a69a, 0)
+cRes    = color.new(#ef5350, 0)
+cInk    = color.new(#0d0d12, 0)
+
+var array<line>  sigLines  = array.new<line>()
+var array<label> sigLabels = array.new<label>()
+var array<box>   sigBoxes  = array.new<box>()
+var array<line>  srLines   = array.new<line>()
+var array<box>   srBoxes   = array.new<box>()
+
+f_trimLines(arr, maxN) =>
+    while array.size(arr) > maxN
+        line.delete(array.shift(arr))
+
+f_trimLabels(arr, maxN) =>
+    while array.size(arr) > maxN
+        label.delete(array.shift(arr))
+
+f_trimBoxes(arr, maxN) =>
+    while array.size(arr) > maxN
+        box.delete(array.shift(arr))
+
+if newSignal
+    xr     = bar_index + drawExtend
+    dirCol = sigDir == 1 ? cBull : cBear
+    arrow  = sigDir == 1 ? "▲" : "▼"
+
+    b = box.new(bar_index, sigEntry + atr * 0.08, xr, sigEntry - atr * 0.08, border_color = cEntry, bgcolor = color.new(cEntry, 88))
+    array.push(sigBoxes, b)
+
+    if showEntry
+        array.push(sigLines, line.new(bar_index, sigEntry, xr, sigEntry, color = cEntry, width = 2))
+        array.push(sigLabels, label.new(xr, sigEntry, arrow + " ENTRY " + f_fmt(sigEntry), style = label.style_label_left, color = cEntry, textcolor = cInk, size = size.small))
+    if showSL
+        array.push(sigLines, line.new(bar_index, sigSL, xr, sigSL, color = cStop, width = 1, style = line.style_dashed))
+        array.push(sigLabels, label.new(xr, sigSL, "✕ STOP " + f_fmt(sigSL), style = label.style_label_left, color = cStop, textcolor = color.white, size = size.small))
+    if showTP1
+        array.push(sigLines, line.new(bar_index, sigTP1, xr, sigTP1, color = cT1, width = 1, style = line.style_dotted))
+        array.push(sigLabels, label.new(xr, sigTP1, "◉ TP1 " + f_fmt(sigTP1), style = label.style_label_left, color = cT1, textcolor = cInk, size = size.small))
+    if showTP2
+        array.push(sigLines, line.new(bar_index, sigTP2, xr, sigTP2, color = cT2, width = 1, style = line.style_dotted))
+        array.push(sigLabels, label.new(xr, sigTP2, "★ TP2 " + f_fmt(sigTP2), style = label.style_label_left, color = cT2, textcolor = color.white, size = size.small))
+    if showTP3
+        array.push(sigLines, line.new(bar_index, sigTP3, xr, sigTP3, color = cT3, width = 1, style = line.style_dotted))
+        array.push(sigLabels, label.new(xr, sigTP3, "★ TP3 " + f_fmt(sigTP3), style = label.style_label_left, color = cT3, textcolor = cInk, size = size.small))
+
+    if showBigLabel
+        txt = "━━━━━━━━━━━━━━━━\n🔥 TRADEPULSE PRO\n" + sigTier + (sigDir == 1 ? " LONG" : " SHORT") + "\n━━━━━━━━━━━━━━━━\n" + syminfo.ticker + "  ·  " + timeframe.period + "\nSCORE: " + str.tostring(int(sigScoreV)) + "/100\nSETUP: " + sigSetup + "\nENTRY: " + f_fmt(sigEntry) + "\nSL:    " + f_fmt(sigSL) + "\nTP1:   " + f_fmt(sigTP1) + "\nTP2:   " + f_fmt(sigTP2) + "\nTP3:   " + f_fmt(sigTP3) + "\nR:R:   1:" + str.tostring(sigRR, "#.##") + "\nHTF:   " + htfText + "\nREGIME: " + regime + "\n━━━━━━━━━━━━━━━━"
+        array.push(sigLabels, label.new(bar_index, sigDir == 1 ? low - atr * 1.2 : high + atr * 1.2, txt, style = sigDir == 1 ? label.style_label_up : label.style_label_down, color = color.new(cInk, 10), textcolor = dirCol, size = size.small, text_font_family = font.family_monospace))
+
+    f_trimLines(sigLines, maxOnChart * 5)
+    f_trimLabels(sigLabels, maxOnChart * 6)
+    f_trimBoxes(sigBoxes, maxOnChart)
+
+// Arrows (tier-coloured)
+arrowColLong  = longFire  ? (longScore  >= beastTh ? cBull : longScore  >= eliteTh ? color.new(#69f0ae, 0) : color.new(#26a69a, 0)) : na
+arrowColShort = shortFire ? (shortScore >= beastTh ? cBear : shortScore >= eliteTh ? color.new(#ff8a80, 0) : color.new(#ef5350, 0)) : na
+plotshape(showArrows and longFire,  title = "BUY",  style = shape.triangleup,   location = location.belowbar, color = arrowColLong,  size = size.small, text = "BUY",  textcolor = cBull)
+plotshape(showArrows and shortFire, title = "SELL", style = shape.triangledown, location = location.abovebar, color = arrowColShort, size = size.small, text = "SELL", textcolor = cBear)
+
+// Liquidity sweep markers
+plotshape(showLiq and sweepLow,  title = "Sweep Low",  style = shape.xcross, location = location.belowbar, color = color.new(#ffd54f, 0), size = size.tiny)
+plotshape(showLiq and sweepHigh, title = "Sweep High", style = shape.xcross, location = location.abovebar, color = color.new(#ffd54f, 0), size = size.tiny)
+
+// EMA context (thin, off by default via transparency choice)
+plot(ema21,  "EMA Mid",   color = color.new(#42a5f5, 55), linewidth = 1)
+plot(ema50,  "EMA Slow",  color = color.new(#ffa726, 55), linewidth = 1)
+plot(ema200, "EMA Trend", color = color.new(#bdbdbd, 55), linewidth = 2)
+
+// S/R zones redrawn on the last bar only
+if barstate.islast
+    f_trimBoxes(srBoxes, 0)
+    if showSR
+        if array.size(resLevels) > 0
+            for i = 0 to array.size(resLevels) - 1
+                v = array.get(resLevels, i)
+                array.push(srBoxes, box.new(math.max(bar_index - 60, 0), v + atr * 0.15, bar_index + drawExtend, v - atr * 0.15, border_color = color.new(cRes, 40), bgcolor = color.new(cRes, 90), text = "RESISTANCE", text_color = color.new(cRes, 20), text_size = size.tiny))
+        if array.size(supLevels) > 0
+            for i = 0 to array.size(supLevels) - 1
+                v = array.get(supLevels, i)
+                array.push(srBoxes, box.new(math.max(bar_index - 60, 0), v + atr * 0.15, bar_index + drawExtend, v - atr * 0.15, border_color = color.new(cSup, 40), bgcolor = color.new(cSup, 90), text = "SUPPORT", text_color = color.new(cSup, 20), text_size = size.tiny))
+
+// ----------------------------------------------------------------------------
+// 16. DASHBOARD
+// ----------------------------------------------------------------------------
+dispDir   = longScore >= shortScore ? 1 : -1
+dispScore = math.max(longScore, shortScore)
+dispRR    = dispDir == 1 ? rrLong : rrShort
+dispTrig  = dispDir == 1 ? longTrigger : shortTrigger
+dispRisk  = dispDir == 1 ? riskLong : riskShort
+dispWide  = dispDir == 1 ? stopWideLong : stopWideShort
+dispConf  = dispDir == 1 ? (useHTF and htfBear) : (useHTF and htfBull)
+ntReason  = f_reason(dispTrig, dispScore, dispRisk, dispWide, dispRR, dispConf)
+
+statusTxt = sigState == "ACTIVE" ? (sigDir == 1 ? "🔥 " + sigTier + " LONG" : "🔥 " + sigTier + " SHORT") : sigState == "STOP HIT" or sigState == "TP3 HIT" or sigState == "INVALIDATED" or sigState == "EXPIRED" ? sigState : ntReason == "" ? f_tier(dispScore) + (dispDir == 1 ? " LONG SETUP" : " SHORT SETUP") : "⚠️ NO TRADE"
+statusCol = sigState == "ACTIVE" ? (sigDir == 1 ? cBull : cBear) : ntReason == "" ? color.new(#ffd54f, 0) : color.new(#9e9e9e, 0)
+
+dpos = dashPos == "Top Right" ? position.top_right : dashPos == "Top Left" ? position.top_left : dashPos == "Bottom Right" ? position.bottom_right : dashPos == "Bottom Left" ? position.bottom_left : position.middle_right
+
+var table dash = table.new(dpos, 2, 18, border_width = 1, border_color = color.new(#2a2a35, 0), frame_width = 1, frame_color = color.new(#2a2a35, 0))
+
+f_row(t, r, k, v, vc) =>
+    table.cell(t, 0, r, k, text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left,  bgcolor = color.new(#12121a, 0))
+    table.cell(t, 1, r, v, text_color = vc,                     text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#12121a, 0))
+
+f_ratioCol(r, avail) => not avail ? color.new(#616161, 0) : r >= 0.6 ? cBull : r >= 0.4 ? color.new(#ffd54f, 0) : cBear
+f_ratioTxt(r, avail) => not avail ? "n/a" : (r >= 0.6 ? "✓ " : r >= 0.4 ? "~ " : "✗ ") + str.tostring(int(math.round(r * 100))) + "%"
+
+if showDash and barstate.islast
+    dr = dispDir == 1
+    table.cell(dash, 0, 0, "⚡ TRADEPULSE PRO", text_color = color.white, text_size = size.small, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
+    table.cell(dash, 1, 0, dr ? "LONG BIAS" : "SHORT BIAS", text_color = dr ? cBull : cBear, text_size = size.small, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
+    f_row(dash, 1,  "MARKET",     syminfo.ticker, color.white)
+    f_row(dash, 2,  "TIMEFRAME",  timeframe.period, color.white)
+    f_row(dash, 3,  "REGIME",     regime, color.new(#ffd54f, 0))
+    f_row(dash, 4,  "HTF",        htfText, htfBull ? cBull : htfBear ? cBear : color.new(#9e9e9e, 0))
+    f_row(dash, 5,  "BEAST SCORE", str.tostring(dispScore) + "/100", dispScore >= beastTh ? cBull : dispScore >= eliteTh ? color.new(#69f0ae, 0) : dispScore >= strongTh ? color.new(#ffd54f, 0) : color.new(#9e9e9e, 0))
+    f_row(dash, 6,  "TREND",      f_ratioTxt(dr ? trendLongRatio : trendShortRatio, true), f_ratioCol(dr ? trendLongRatio : trendShortRatio, true))
+    f_row(dash, 7,  "STRUCTURE",  f_ratioTxt(dr ? structLongRatio : structShortRatio, true), f_ratioCol(dr ? structLongRatio : structShortRatio, true))
+    f_row(dash, 8,  "MOMENTUM",   f_ratioTxt(dr ? momoLongRatio : momoShortRatio, true), f_ratioCol(dr ? momoLongRatio : momoShortRatio, true))
+    f_row(dash, 9,  "VOLUME",     f_ratioTxt(dr ? volLongRatio : volShortRatio, avVol), f_ratioCol(dr ? volLongRatio : volShortRatio, avVol))
+    f_row(dash, 10, "VWAP",       f_ratioTxt(dr ? vwapLongRatio : vwapShortRatio, avVwap), f_ratioCol(dr ? vwapLongRatio : vwapShortRatio, avVwap))
+    f_row(dash, 11, "S/R",        f_ratioTxt(dr ? srLongRatio : srShortRatio, true), f_ratioCol(dr ? srLongRatio : srShortRatio, true))
+    f_row(dash, 12, "LIQUIDITY",  f_ratioTxt(dr ? liqLongRatio : liqShortRatio, true), f_ratioCol(dr ? liqLongRatio : liqShortRatio, true))
+    f_row(dash, 13, "VOLATILITY", f_ratioTxt(volatilityRatio, true), f_ratioCol(volatilityRatio, true))
+    f_row(dash, 14, "MTF",        f_ratioTxt(dr ? mtfLongRatio : mtfShortRatio, avMtf), f_ratioCol(dr ? mtfLongRatio : mtfShortRatio, avMtf))
+    f_row(dash, 15, "R:R",        na(dispRR) ? "-" : "1:" + str.tostring(dispRR, "#.##"), nz(dispRR, 0.0) >= minRR ? cBull : cBear)
+    f_row(dash, 16, "SETUP",      sigState == "ACTIVE" ? sigSetup : (dr ? longSetupName : shortSetupName) == "" ? "-" : (dr ? longSetupName : shortSetupName), color.white)
+    table.cell(dash, 0, 17, "STATUS", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
+    table.cell(dash, 1, 17, statusTxt + (ntReason == "" or sigState == "ACTIVE" ? "" : "\n" + ntReason), text_color = statusCol, text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
+
+// ----------------------------------------------------------------------------
+// S1. ORDER EXECUTION
+// ----------------------------------------------------------------------------
+gBt = "BACKTEST"
+btUseDateFilter = input.bool(false, "Limit Backtest Date Range", group = gBt)
+btFrom = input.time(timestamp("01 Jan 2020 00:00 +0000"), "From", group = gBt)
+btTo   = input.time(timestamp("01 Jan 2030 00:00 +0000"), "To",   group = gBt)
+inWindow = not btUseDateFilter or (time >= btFrom and time <= btTo)
+
+if longFire and inWindow
+    strategy.entry("TP Long", strategy.long)
+    strategy.exit("TP Long X", from_entry = "TP Long", stop = sigSL, limit = sigTP2, comment_loss = "SL", comment_profit = "TP2")
+if shortFire and inWindow
+    strategy.entry("TP Short", strategy.short)
+    strategy.exit("TP Short X", from_entry = "TP Short", stop = sigSL, limit = sigTP2, comment_loss = "SL", comment_profit = "TP2")
+
+// ----------------------------------------------------------------------------
+// S2. PERFORMANCE BY SCORE BAND AND BY MARKET REGIME
+//     Bucket layout: 0 = 80-89, 1 = 90-94, 2 = 95-100, 3 = ALL,
+//                    4 = TRENDING, 5 = RANGING, 6 = BREAKOUT, 7 = OTHER
+// ----------------------------------------------------------------------------
+var array<float> btTrades = array.new<float>(8, 0.0)
+var array<float> btWins   = array.new<float>(8, 0.0)
+var array<float> btSumR   = array.new<float>(8, 0.0)
+var array<float> btGrossW = array.new<float>(8, 0.0)
+var array<float> btGrossL = array.new<float>(8, 0.0)
+var array<float> btCumR   = array.new<float>(8, 0.0)
+var array<float> btPeakR  = array.new<float>(8, 0.0)
+var array<float> btMaxDD  = array.new<float>(8, 0.0)
+
+f_btAdd(idx, r) =>
+    array.set(btTrades, idx, array.get(btTrades, idx) + 1.0)
+    if r > 0
+        array.set(btWins, idx, array.get(btWins, idx) + 1.0)
+        array.set(btGrossW, idx, array.get(btGrossW, idx) + r)
+    else
+        array.set(btGrossL, idx, array.get(btGrossL, idx) - r)
+    array.set(btSumR, idx, array.get(btSumR, idx) + r)
+    cum = array.get(btCumR, idx) + r
+    array.set(btCumR, idx, cum)
+    peak = math.max(array.get(btPeakR, idx), cum)
+    array.set(btPeakR, idx, peak)
+    array.set(btMaxDD, idx, math.max(array.get(btMaxDD, idx), peak - cum))
+
+var bool   bkOpen   = false
+var float  bkScore  = na
+var string bkRegime = ""
+var float  bkEntry  = na
+var float  bkRisk   = na
+var int    bkDir    = 0
+
+if newSignal and inWindow
+    bkOpen   := true
+    bkScore  := sigScoreV
+    bkRegime := regime
+    bkEntry  := sigEntry
+    bkRisk   := math.abs(sigEntry - sigSL)
+    bkDir    := sigDir
+
+float bkR = na
+bool  bkClosed = false
+if bkOpen
+    if evSL
+        bkR := -1.0
+        bkClosed := true
+    else if evT2
+        bkR := bkRisk > 0 ? math.abs(sigTP2 - bkEntry) / bkRisk : 0.0
+        bkClosed := true
+    else if evInv or evExp
+        bkR := bkRisk > 0 ? (bkDir == 1 ? (close - bkEntry) : (bkEntry - close)) / bkRisk : 0.0
+        bkClosed := true
+
+if bkClosed
+    sIdx = bkScore >= beastTh ? 2 : bkScore >= eliteTh ? 1 : 0
+    rIdx = bkRegime == "STRONG BULL" or bkRegime == "BULL" or bkRegime == "STRONG BEAR" or bkRegime == "BEAR" ? 4 : bkRegime == "RANGE" or bkRegime == "LOW VOLATILITY" ? 5 : bkRegime == "BREAKOUT" ? 6 : 7
+    f_btAdd(sIdx, bkR)
+    f_btAdd(3, bkR)
+    f_btAdd(rIdx, bkR)
+    bkOpen := false
+
+f_pct(a, b) => b > 0 ? str.tostring(a / b * 100.0, "#.#") + "%" : "-"
+f_avg(a, b) => b > 0 ? str.tostring(a / b, "#.##") : "-"
+f_pf(w, l)  => l > 0 ? str.tostring(w / l, "#.##") : (w > 0 ? "inf" : "-")
+f_num(x)    => str.tostring(x, "#")
+
+showStats = input.bool(true, "Show Performance Table", group = gBt)
+var table stats = table.new(position.bottom_right, 5, 11, border_width = 1, border_color = color.new(#2a2a35, 0), frame_width = 1, frame_color = color.new(#2a2a35, 0))
+
+f_statCol(col, idx, headline) =>
+    t  = array.get(btTrades, idx)
+    w  = array.get(btWins, idx)
+    sr = array.get(btSumR, idx)
+    gw = array.get(btGrossW, idx)
+    gl = array.get(btGrossL, idx)
+    dd = array.get(btMaxDD, idx)
+    table.cell(stats, col, 0, headline, text_color = color.white, text_size = size.tiny, bgcolor = color.new(#1c1c26, 0))
+    table.cell(stats, col, 1, f_num(t),           text_color = color.white, text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+    table.cell(stats, col, 2, f_num(w),           text_color = color.white, text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+    table.cell(stats, col, 3, f_num(t - w),       text_color = color.white, text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+    table.cell(stats, col, 4, f_pct(w, t),        text_color = t > 0 and w / t >= 0.5 ? cBull : cBear, text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+    table.cell(stats, col, 5, f_avg(sr, t),       text_color = sr > 0 ? cBull : cBear, text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+    table.cell(stats, col, 6, f_pf(gw, gl),       text_color = gl > 0 and gw / gl >= 1 ? cBull : cBear, text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+    avgW = w > 0 ? gw / w : na
+    avgL = (t - w) > 0 ? gl / (t - w) : na
+    table.cell(stats, col, 7, na(avgW) or na(avgL) or avgL == 0 ? "-" : str.tostring(avgW / avgL, "#.##"), text_color = color.new(#9aa0b5, 0), text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+    table.cell(stats, col, 8, str.tostring(sr, "#.#"), text_color = sr > 0 ? cBull : cBear, text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+    table.cell(stats, col, 9, str.tostring(dd, "#.#"), text_color = color.new(#ffd54f, 0), text_size = size.tiny, bgcolor = color.new(#12121a, 0))
+
+if showStats and barstate.islast
+    table.cell(stats, 0, 0, "TRADEPULSE STATS", text_color = color.white, text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
+    labels = array.from("Trades", "Wins", "Losses", "Win Rate", "Expectancy (R)", "Profit Factor", "Avg Win / Avg Loss", "Total R", "Max DD (R)")
+    for i = 0 to array.size(labels) - 1
+        table.cell(stats, 0, i + 1, array.get(labels, i), text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#12121a, 0))
+    f_statCol(1, 0, "80-89")
+    f_statCol(2, 1, "90-94")
+    f_statCol(3, 2, "95-100")
+    f_statCol(4, 3, "ALL")
+    table.cell(stats, 0, 10, "By regime (trades / avg R)", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
+    table.cell(stats, 1, 10, "TRND " + f_num(array.get(btTrades, 4)) + " / " + f_avg(array.get(btSumR, 4), array.get(btTrades, 4)), text_color = color.white, text_size = size.tiny, bgcolor = color.new(#1c1c26, 0))
+    table.cell(stats, 2, 10, "RNG " + f_num(array.get(btTrades, 5)) + " / " + f_avg(array.get(btSumR, 5), array.get(btTrades, 5)), text_color = color.white, text_size = size.tiny, bgcolor = color.new(#1c1c26, 0))
+    table.cell(stats, 3, 10, "BRK " + f_num(array.get(btTrades, 6)) + " / " + f_avg(array.get(btSumR, 6), array.get(btTrades, 6)), text_color = color.white, text_size = size.tiny, bgcolor = color.new(#1c1c26, 0))
+    table.cell(stats, 4, 10, "OTH " + f_num(array.get(btTrades, 7)) + " / " + f_avg(array.get(btSumR, 7), array.get(btTrades, 7)), text_color = color.white, text_size = size.tiny, bgcolor = color.new(#1c1c26, 0))
