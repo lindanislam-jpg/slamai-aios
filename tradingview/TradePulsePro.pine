@@ -58,6 +58,7 @@ minRR       = input.float(2.0, "Minimum R:R",  minval = 0.5, step = 0.1, group =
 tp1R        = input.float(1.0, "TP1 (R multiple)", minval = 0.3, step = 0.1, group = gRisk)
 tp2R        = input.float(2.0, "TP2 (R multiple)", minval = 0.5, step = 0.1, group = gRisk)
 tp3R        = input.float(3.0, "TP3 (R multiple)", minval = 0.5, step = 0.1, group = gRisk)
+maxChaseR   = input.float(0.30, "Max Chase From Entry (R)", minval = 0.0, maxval = 1.0, step = 0.05, group = gRisk, tooltip = "How far price may travel past the signal price before the entry window closes. 0.30 means you may still enter while price has moved less than 30% of your risk in your favour. Beyond that you are chasing: the stop is the same distance but the reward is smaller.")
 
 gSig = "SIGNALS"
 enableLong   = input.bool(true, "Enable Long Signals",  group = gSig)
@@ -702,6 +703,19 @@ if shortFire
     lastSigBar := bar_index
 
 newSignal = longFire or shortFire
+
+// ----------------------------------------------------------------------------
+// 14b. ENTRY WINDOW - is this setup still enterable at the current price?
+//      A signal price is not a standing invitation. Once price has run on, the
+//      stop is unchanged but the reward is smaller, so the trade is no longer
+//      the one the engine scored.
+// ----------------------------------------------------------------------------
+sigRisk   = na(sigEntry) or na(sigSL) ? na : math.abs(sigEntry - sigSL)
+chaseRoom = nz(sigRisk, 0.0) * maxChaseR
+entryLive = sigState == "ACTIVE" and not hitT1 and (sigDir == 1 ? (close <= sigEntry + chaseRoom and close > sigSL) : (close >= sigEntry - chaseRoom and close < sigSL))
+entryGone = sigState == "ACTIVE" and not entryLive
+entryTxt  = sigState != "ACTIVE" ? "-" : entryLive ? "✅ ENTER " + f_fmt(sigEntry) : hitT1 ? "MISSED · TP1 hit" : "✗ TOO FAR · skip"
+entryCol2 = sigState != "ACTIVE" ? color.new(#9e9e9e, 0) : entryLive ? cBull : color.new(#ffd54f, 0)
 // === ENGINE END ===
 
 // === VISUALS START ===
@@ -841,6 +855,11 @@ if sigState == "ACTIVE" and not na(sigBar)
         label.set_x(lbT3, xr2)
     if not na(bxE)
         box.set_right(bxE, xr2)
+        box.set_bgcolor(bxE, color.new(entryLive ? cBull : cEntry, entryLive ? 80 : 92))
+        box.set_border_color(bxE, color.new(entryLive ? cBull : cEntry, entryLive ? 0 : 55))
+    if not na(lbE)
+        label.set_text(lbE, (entryLive ? "✅ ENTER " : "▫ ENTRY ") + f_fmt(sigEntry))
+        label.set_color(lbE, entryLive ? cBull : color.new(cEntry, 45))
     if pinLabel and not na(lbBig)
         label.set_x(lbBig, bar_index + 2)
         label.set_y(lbBig, sigDir == 1 ? low - atr * 1.5 : high + atr * 1.5)
@@ -920,7 +939,7 @@ statusCol = sigState == "ACTIVE" ? (sigDir == 1 ? cBull : cBear) : ntReason == "
 
 dpos = dashPos == "Top Right" ? position.top_right : dashPos == "Top Left" ? position.top_left : dashPos == "Bottom Right" ? position.bottom_right : dashPos == "Bottom Left" ? position.bottom_left : position.middle_right
 
-var table dash = table.new(dpos, 2, 18, border_width = 1, border_color = color.new(#2a2a35, 0), frame_width = 1, frame_color = color.new(#2a2a35, 0))
+var table dash = table.new(dpos, 2, 19, border_width = 1, border_color = color.new(#2a2a35, 0), frame_width = 1, frame_color = color.new(#2a2a35, 0))
 
 f_row(t, r, k, v, vc) =>
     table.cell(t, 0, r, k, text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left,  bgcolor = color.new(#12121a, 0))
@@ -948,10 +967,11 @@ if showDash and barstate.islast
     f_row(dash, 13, "VOLATILITY", f_ratioTxt(volatilityRatio, true), f_ratioCol(volatilityRatio, true))
     f_row(dash, 14, "MTF",        f_ratioTxt(dr ? mtfLongRatio : mtfShortRatio, avMtf), f_ratioCol(dr ? mtfLongRatio : mtfShortRatio, avMtf))
     f_row(dash, 15, "R:R",        na(dispRR) ? "-" : "1:" + str.tostring(dispRR, "#.##"), nz(dispRR, 0.0) >= minRR ? cBull : cBear)
+    f_row(dash, 16, "ENTRY", entryTxt, entryCol2)
     lastTxt = sigState == "ACTIVE" ? sigSetup : sigState == "NONE" ? ((dr ? longSetupName : shortSetupName) == "" ? "-" : (dr ? longSetupName : shortSetupName)) : sigSetup + " → " + sigState
-    f_row(dash, 16, sigState == "ACTIVE" or sigState == "NONE" ? "SETUP" : "LAST SETUP", lastTxt, color.white)
-    table.cell(dash, 0, 17, "STATUS", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
-    table.cell(dash, 1, 17, statusTxt + (ntReason == "" or sigState == "ACTIVE" ? "" : "\n" + ntReason), text_color = statusCol, text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
+    f_row(dash, 17, sigState == "ACTIVE" or sigState == "NONE" ? "SETUP" : "LAST SETUP", lastTxt, color.white)
+    table.cell(dash, 0, 18, "STATUS", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
+    table.cell(dash, 1, 18, statusTxt + (ntReason == "" or sigState == "ACTIVE" ? "" : "\n" + ntReason), text_color = statusCol, text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
 
 // === VISUALS END ===
 
@@ -988,6 +1008,7 @@ alertcondition(evT3,  "TP3 HIT",            "TRADEPULSE PRO\nEVENT: TP3 HIT\nSYM
 alertcondition(evSL,  "STOP LOSS HIT",      "TRADEPULSE PRO\nEVENT: STOP LOSS HIT\nSYMBOL: {{ticker}}\nTIMEFRAME: {{interval}}\nSL: {{plot(\"SL\")}}\nTIME: {{timenow}}")
 alertcondition(evInv, "SIGNAL INVALIDATED", "TRADEPULSE PRO\nEVENT: SIGNAL INVALIDATED\nSYMBOL: {{ticker}}\nTIMEFRAME: {{interval}}\nTIME: {{timenow}}")
 alertcondition(evExp, "SIGNAL EXPIRED",     "TRADEPULSE PRO\nEVENT: SIGNAL EXPIRED\nSYMBOL: {{ticker}}\nTIMEFRAME: {{interval}}\nTIME: {{timenow}}")
+alertcondition(entryGone and not entryGone[1] and not hitT1, "ENTRY WINDOW CLOSED", "TRADEPULSE PRO\nEVENT: ENTRY WINDOW CLOSED\nSYMBOL: {{ticker}}\nTIMEFRAME: {{interval}}\nPrice has moved too far from the signal price - do not chase.\nTIME: {{timenow}}")
 alertcondition(newSignal, "ANY SIGNAL",     "TRADEPULSE PRO\nSIGNAL: NEW\nSYMBOL: {{ticker}}\nTIMEFRAME: {{interval}}\nSCORE: {{plot(\"Score\")}}\nENTRY: {{plot(\"Entry\")}}\nSL: {{plot(\"SL\")}}\nTP1: {{plot(\"TP1\")}}\nTP2: {{plot(\"TP2\")}}\nTP3: {{plot(\"TP3\")}}\nTIME: {{timenow}}")
 
 f_json(ev, dir, sc, en, sl, t1, t2, t3, setup, tier) =>
