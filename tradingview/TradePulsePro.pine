@@ -114,6 +114,19 @@ f_tick(x) => math.round_to_mintick(x)
 f_fmt(x) => na(x) ? "-" : str.tostring(math.round_to_mintick(x))
 f_clamp(x, lo, hi) => math.max(lo, math.min(hi, x))
 
+// Palette. Declared up here because Pine resolves identifiers top-down and the
+// engine references these colours before the drawing section runs.
+cBull   = color.new(#00e676, 0)
+cBear   = color.new(#ff5252, 0)
+cEntry  = color.new(#ff9800, 0)
+cStop   = color.new(#f44336, 0)
+cT1     = color.new(#29b6f6, 0)
+cT2     = color.new(#ab47bc, 0)
+cT3     = color.new(#26c6da, 0)
+cSup    = color.new(#26a69a, 0)
+cRes    = color.new(#ef5350, 0)
+cInk    = color.new(#0d0d12, 0)
+
 // ----------------------------------------------------------------------------
 // 3. CORE SERIES  (all ta.* calls live here, at global scope, unconditionally)
 // ----------------------------------------------------------------------------
@@ -723,16 +736,6 @@ entryCol2 = sigState != "ACTIVE" ? color.new(#9e9e9e, 0) : entryLive ? cBull : c
 // ----------------------------------------------------------------------------
 // 15. VISUALS
 // ----------------------------------------------------------------------------
-cBull   = color.new(#00e676, 0)
-cBear   = color.new(#ff5252, 0)
-cEntry  = color.new(#ff9800, 0)
-cStop   = color.new(#f44336, 0)
-cT1     = color.new(#29b6f6, 0)
-cT2     = color.new(#ab47bc, 0)
-cT3     = color.new(#26c6da, 0)
-cSup    = color.new(#26a69a, 0)
-cRes    = color.new(#ef5350, 0)
-cInk    = color.new(#0d0d12, 0)
 
 var array<line>  sigLines  = array.new<line>()
 var array<label> sigLabels = array.new<label>()
