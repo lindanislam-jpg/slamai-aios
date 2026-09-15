@@ -95,6 +95,7 @@ maxOnChart  = input.int(4, "Max Setups Drawn On Chart", minval = 1, maxval = 20,
 drawExtend  = input.int(30, "Trade Box Width (bars)", minval = 5, group = gVis)
 minSrHits   = input.int(2, "Min Reactions Per S/R Level", minval = 1, maxval = 6, group = gVis, tooltip = "A level is only drawn once price has actually swung off it this many times. Raise it if the chart still looks busy.")
 srMergeAtr  = input.float(0.9, "S/R Merge Distance (ATR)", minval = 0.1, step = 0.1, group = gVis, tooltip = "Swings within this distance of each other are treated as one level instead of two lines on top of each other.")
+extendLvls  = input.bool(true, "Trade Levels Follow Price", group = gVis, tooltip = "ON = the entry, stop and target lines grow sideways with each new candle so the trade stays next to current price. OFF = they stop a fixed number of bars after the signal candle. The PRICES never change either way - only how far the lines are drawn.")
 pinLabel    = input.bool(true, "Info Panel Follows Price", group = gVis, tooltip = "ON = the signal panel travels with the candles so it stays next to current price. OFF = it stays anchored to the candle that produced the signal.")
 keepClosed  = input.bool(false, "Keep Closed Setups On Chart", group = gVis, tooltip = "OFF = the trade box is removed once the setup stops out, completes or expires, so the chart always shows the live idea.")
 
@@ -847,7 +848,7 @@ if newSignal
 
 // While a setup is live its levels track the right edge, so the trade is always
 // readable next to current price instead of stranded in history.
-if sigState == "ACTIVE" and not na(sigBar)
+if sigState == "ACTIVE" and not na(sigBar) and extendLvls
     xr2 = math.max(bar_index + 3, sigBar + drawExtend)
     if not na(lnE)
         line.set_x2(lnE, xr2)
