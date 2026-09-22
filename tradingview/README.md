@@ -75,6 +75,69 @@ way. If a level sits between entry and TP2, the trade is judged on the distance 
 that level, not on the pretty number. This is why some high-score setups still
 print `⚠️ NO TRADE — Poor R:R (target blocked)`.
 
+## ICT / Smart Money layer
+
+Switched on by default (`Enable ICT Layer`). Everything below is confirmed on
+bar close and uses no future data.
+
+### What it detects
+
+| Feature | Notes |
+|---|---|
+| **Fair value gaps** | Classic three-candle gap, confirmed on the close of the third candle. Filtered by minimum size in ATR and (by default) by whether a real displacement candle created it |
+| **FVG mitigation** | `ACTIVE → TOUCHED → PARTIAL → FILLED`, plus `INVALIDATED` when price closes through the far side. Handling is configurable: remove, fade, or keep |
+| **Order blocks** | The last opposing candle before displacement or a structure break — not every candle, and only where structure confirms it |
+| **Draw-on liquidity** | PDH / PDL / PWH / PWL, taken from the last *closed* daily and weekly bar |
+| **Liquidity raids** | A sweep is a raid *and* a rejection: price trades through the level and closes back on the original side. Trading through and staying there is a break, not a sweep |
+| **Displacement** | Body size measured against ATR, so the same threshold means the same thing on gold, BTC, EURUSD and an index future |
+| **Dealing range** | Built from the two most recent confirmed swings. Fibonacci 0 / .236 / .382 / .5 / .618 / .786 / 1, equilibrium at 0.5 |
+| **Premium / discount** | Above equilibrium is premium, below is discount. A filter and a score input — never a trigger on its own |
+
+### The execution model
+
+A fifth setup type alongside trend pullback, breakout, retest and sweep:
+
+```
+liquidity raid  →  displacement  →  structure shift (CHoCH/BOS)  →  retrace into FVG or OB
+```
+
+Three modes:
+
+- **Strict** — every leg, plus premium/discount alignment and HTF agreement
+- **Balanced** (default) — the core legs, HTF must not oppose
+- **Early** — sweep and structure shift, entered before the retrace completes
+
+All four legs must land inside `ICT Sequence Window` bars of each other.
+
+### Two scores, not one
+
+- **Beast Score** — the overall grade. The ICT components (FVG, order block,
+  premium/discount, displacement) are now four of its thirteen weighted inputs,
+  worth 30 of the raw weight. Liquidity now counts previous-day and
+  previous-week raids, not just swing sweeps.
+- **ICT Score** — the smart-money read on its own, using the classic weights
+  (sweep 20, CHoCH 15, BOS 10, HTF 15, FVG 10, OB 10, P/D 10, displacement 10).
+
+Both appear on the dashboard. Neither is a probability of profit — they are
+counts of conditions met. Every signal label carries the reason list, so you can
+see exactly which legs fired and which didn't.
+
+### Honest limits
+
+- **Correlated components.** Sweep, CHoCH, BOS, order block and displacement all
+  key off the same handful of swing pivots. They are not eight independent
+  confirmations, and the score should not be read as if they were.
+- **Object budget.** Pine allows 500 boxes, 500 lines and 500 labels per script.
+  Active FVGs and order blocks are capped (6 and 3 by default) and mitigated
+  zones are removed. Raise those caps and you will eventually hit the ceiling,
+  at which point TradingView silently deletes the oldest drawings.
+- **Not built, and not buildable in Pine:** position sizing against a real
+  account balance, max daily loss, max simultaneous trades, max correlated
+  exposure. An indicator cannot see your account or your other positions. That
+  needs a broker connection, which is a different product.
+- **Still to come (Phase 2):** HTF fair value gaps, inversion FVGs, the session
+  engine, and stop-loss models anchored to the sweep / FVG / order block.
+
 ## Anti-repainting
 
 - Signals confirm on **bar close** by default (`Confirm Signals On Bar Close`).
