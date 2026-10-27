@@ -2,7 +2,7 @@ import type { ControlPointType } from "@prisma/client";
 import { db } from "../db";
 import { recordEvent } from "../audit";
 import { ValidationError } from "../errors";
-import { parseItpWorkbook } from "../import/itp";
+import { parseItpWorkbook, type ParsedItp } from "../import/itp";
 import type { Actor } from "../permissions";
 import { assertCan, found, transaction } from "./base";
 
@@ -22,6 +22,13 @@ export async function applyItp(actor: Actor, projectId: string, file: { name: st
     throw new ValidationError("The file could not be read as an Excel ITP workbook.");
   }
   const chosen = disciplines?.length ? parsed.filter((p) => disciplines.includes(p.discipline)) : parsed;
+  return applyParsedItp(actor, projectId, chosen, file.name);
+}
+
+/** Apply already-parsed ITP tables to a project (one plan per discipline). */
+export async function applyParsedItp(actor: Actor, projectId: string, chosen: ParsedItp[], sourceName: string) {
+  assertCan(actor, "project.write");
+  found(await db.project.findUnique({ where: { id: projectId } }), "Project");
   if (!chosen.length) throw new ValidationError("No ITP tables found (expected a header row starting “Item | Inspection Activity”).");
   const existing = await db.itpPlan.findMany({ where: { projectId, discipline: { in: chosen.map((c) => c.discipline) } }, select: { discipline: true } });
   if (existing.length) throw new ValidationError(`Already applied to this project: ${existing.map((e) => e.discipline).join(", ")}.`);
@@ -34,14 +41,14 @@ export async function applyItp(actor: Actor, projectId: string, file: { name: st
           projectId,
           discipline: itp.discipline,
           documentRef: itp.documentRef,
-          sourceFile: file.name.slice(0, 200),
+          sourceFile: sourceName.slice(0, 200),
           createdById: actor.id,
           points: { create: itp.points.map((p, i) => ({ ...p, order: i + 1 })) },
         },
         include: { points: true },
       });
       created.push({ discipline: plan.discipline, points: plan.points.length, holds: plan.points.filter((p) => p.pointType === "H").length, warnings: itp.warnings });
-      await recordEvent(tx, actor, "itp.apply", "Project", projectId, { summary: `ITP ${itp.documentRef ?? ""} ${itp.discipline} applied (${plan.points.length} control points) from ${file.name}` });
+      await recordEvent(tx, actor, "itp.apply", "Project", projectId, { summary: `ITP ${itp.documentRef ?? ""} ${itp.discipline} applied (${plan.points.length} control points) from ${sourceName}` });
     }
     return created;
   });
