@@ -18,7 +18,7 @@ import sharp from "sharp";
 import { hashPassword } from "../src/lib/session";
 import { permissionsFor, type Actor } from "../src/lib/permissions";
 import { createProject, createUnit, updateProject } from "../src/lib/services/projects";
-import { createInspection, reviewInspection, saveChecklist, submitInspection, updateInspection } from "../src/lib/services/inspections";
+import { createInspection, reviewInspection, submitInspection, updateInspection } from "../src/lib/services/inspections";
 import { addDefect, createWeld, recordVisual, recordWeldRepair } from "../src/lib/services/welding";
 import { createMaterial, dispositionMaterial, verifyCertificate } from "../src/lib/services/materials";
 import { addAction, closeNcr, moveNcr, raiseNcr, updateActionStatus, updateNcr } from "../src/lib/services/ncrs";

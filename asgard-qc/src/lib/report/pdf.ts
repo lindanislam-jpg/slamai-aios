@@ -33,7 +33,6 @@ const fmtDate = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10
 const fmtDateTime = (d: Date | null | undefined) => (d ? `${d.toISOString().slice(0, 16).replace("T", " ")} UTC` : "—");
 const human = (s: string | null | undefined) => (s ? s.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : "—");
 
-type Doc = PDFKit.PDFDocument;
 
 interface Col {
   header: string;
