@@ -75,7 +75,7 @@ export async function savePermissions(_: ActionState, fd: FormData) {
   }, ["/settings", "/users"]);
 }
 
-export async function resetPermissions(_: ActionState) {
+export async function resetPermissions() {
   return run(async (actor) => {
     await updateSetting(actor, "rolePermissions", SETTING_DEFAULTS.rolePermissions);
     return "Permissions reset to defaults.";
@@ -99,7 +99,7 @@ export async function saveTemplateAction(id: string | null, _: ActionState, fd: 
   }, ["/settings"]);
 }
 
-export async function approveTemplateAction(id: string, _: ActionState) {
+export async function approveTemplateAction(id: string) {
   return run(async (actor) => {
     await approveTemplate(actor, id);
     return "Template approved.";

@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { destroySession, login, LoginError, SESSION_COOKIE } from "@/lib/session";
 
-export async function signIn(_prev: { error?: string } | null, fd: FormData) {
+export async function signIn(_prev: { error?: string; email?: string } | null, fd: FormData) {
   const email = String(fd.get("email") ?? "");
   const password = String(fd.get("password") ?? "");
   try {
@@ -18,9 +18,9 @@ export async function signIn(_prev: { error?: string } | null, fd: FormData) {
       expires,
     });
   } catch (err) {
-    if (err instanceof LoginError) return { error: err.message };
+    if (err instanceof LoginError) return { error: err.message, email };
     console.error(err);
-    return { error: "Sign-in is unavailable. Check the database connection." };
+    return { error: "Sign-in is unavailable. Check the database connection.", email };
   }
   const next = String(fd.get("next") ?? "/");
   redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/");

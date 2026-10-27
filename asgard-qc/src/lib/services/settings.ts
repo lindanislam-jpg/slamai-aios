@@ -118,8 +118,12 @@ export async function purgeDemoData(actor: Actor) {
       tx.ndtRecord.count({ where: { projectId: { in: demoProjects }, isDemo: false } }),
       tx.coatingRecord.count({ where: { projectId: { in: demoProjects }, isDemo: false } }),
       tx.releaseRecord.count({ where: { projectId: { in: demoProjects }, isDemo: false } }),
+      // Children that would be cascade-deleted with a demo parent.
+      tx.correctiveAction.count({ where: { isDemo: false, OR: [{ ncr: { isDemo: true } }, { auditFinding: { isDemo: true } }] } }),
+      tx.auditFinding.count({ where: { isDemo: false, audit: { isDemo: true } } }),
+      tx.calibrationRecord.count({ where: { isDemo: false, equipment: { isDemo: true } } }),
     ]);
-    if (realOnDemo.some((n) => n > 0)) throw new ValidationError("Real records are linked to demo projects. Move or remove them before purging demo data.");
+    if (realOnDemo.some((n) => n > 0)) throw new ValidationError("Real records are linked to demo projects or demo records (e.g. actions on a demo NCR). Move or remove them before purging demo data.");
 
     const photos = await tx.photo.findMany({ where: { isDemo: true }, select: { storageKey: true, thumbKey: true } });
     const reports = await tx.reportJob.findMany({ where: { projectId: { in: demoProjects } }, select: { storageKey: true } });

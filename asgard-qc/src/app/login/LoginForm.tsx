@@ -10,7 +10,7 @@ export function LoginForm({ next }: { next?: string }) {
       <input type="hidden" name="next" value={next ?? "/"} />
       <div>
         <label className="label" htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" autoComplete="username" required className="input" />
+        <input key={state?.email ?? ""} id="email" name="email" type="email" autoComplete="username" required className="input" defaultValue={state?.email ?? ""} />
       </div>
       <div>
         <label className="label" htmlFor="password">Password</label>

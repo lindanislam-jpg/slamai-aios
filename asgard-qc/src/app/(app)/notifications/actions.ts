@@ -4,7 +4,7 @@ import { run, type ActionState } from "@/lib/action";
 import { ForbiddenError } from "@/lib/errors";
 import { markRead, runNotificationScan, setMuted } from "@/lib/services/notifications";
 
-export async function markReadAction(ids: string[] | "all", _: ActionState) {
+export async function markReadAction(ids: string[] | "all") {
   return run(async (actor) => {
     await markRead(actor, ids);
     return "Marked as read.";
@@ -18,7 +18,7 @@ export async function muteAction(_: ActionState, fd: FormData) {
   }, ["/notifications"]);
 }
 
-export async function scanAction(_: ActionState) {
+export async function scanAction() {
   return run(async (actor) => {
     if (!actor.permissions.has("settings.manage") && !actor.permissions.has("ncr.manage")) throw new ForbiddenError();
     const r = await runNotificationScan();
