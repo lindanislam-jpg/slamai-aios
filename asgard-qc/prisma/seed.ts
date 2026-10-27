@@ -163,7 +163,7 @@ async function main() {
       items: [
         { description: "Drawing revision matches traveller", requirement: "Current approved revision per DEMO-DWG register", result: result === "FAIL" ? "PASS" : result, actual: "Rev matches" },
         { description: "Overall length", requirement: "Per drawing (demo — configure real tolerance)", tolerance: "Not configured", actual: "6002", unit: "mm", result: result },
-        { description: "Diagonal check (squareness)", actual: "Δ 3", unit: "mm", result: result },
+        { description: "Diagonal check (squareness)", actual: "3 (diagonal difference)", unit: "mm", result: result },
       ],
     });
     await updateInspection(actor, i.id, { result });

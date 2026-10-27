@@ -1,5 +1,11 @@
 # Status — what is built, what needs company input
 
+## Final verification (this build)
+
+- `npx tsc --noEmit` clean · `npx eslint . --max-warnings=0` clean · `npm test` **50/50 passed** (12 files, real PostgreSQL) · `npm run build` succeeds (44 routes).
+- Production server (`npm start`) end-to-end run with Playwright on a freshly seeded database, signing in as each of the 7 roles and opening all 23 main pages: every page loads for permitted roles; Users and Settings are refused for every non-admin; the Excel export is refused (403) for Production Viewer; no browser console errors.
+- Real browser photo upload as a QC Inspector stored EV-000012 with the capture time read from EXIF; a Final Quality Handover Pack PDF was generated and downloaded as a Quality Manager (valid PDF, ~480 KB).
+
 Legend: ✅ implemented and verified · ⚠️ implemented, limitation noted · ⛔ not done / needs company input
 
 ## Implemented and verified
