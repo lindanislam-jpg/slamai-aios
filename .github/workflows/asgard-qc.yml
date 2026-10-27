@@ -1,0 +1,47 @@
+name: ASGARD QC
+
+on:
+  push:
+    branches: [main]
+    paths: ["asgard-qc/**", ".github/workflows/asgard-qc.yml"]
+  pull_request:
+    paths: ["asgard-qc/**", ".github/workflows/asgard-qc.yml"]
+
+concurrency:
+  group: asgard-qc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, lint, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: asgard-qc
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: asgard
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: asgard_qc_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U asgard" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://asgard:ci_only_password@localhost:5432/asgard_qc_test
+      TEST_DATABASE_URL: postgresql://asgard:ci_only_password@localhost:5432/asgard_qc_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: asgard-qc/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npx eslint . --max-warnings=0
+      - run: npm test
+      - run: npm run build

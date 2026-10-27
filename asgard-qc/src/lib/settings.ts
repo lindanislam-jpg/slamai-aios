@@ -1,0 +1,92 @@
+import { db, type Tx } from "./db";
+import { DEFAULT_PHOTO_CATEGORIES, DEFAULT_PRODUCTION_STAGES } from "./domain/constants";
+import type { RolePermissionMap } from "./permissions";
+
+/**
+ * Release gate configuration. Every rule can be switched off, because not
+ * every project needs every check — but switching one off is itself an
+ * audited change made by an administrator.
+ */
+export interface ReleaseRules {
+  requireFinalInspectionPass: boolean;
+  requireNoUnresolvedInspections: boolean;
+  requireNoOpenNcrs: boolean;
+  requireNoOpenActions: boolean;
+  requireMaterialsAccepted: boolean;
+  requireCertificatesVerified: boolean;
+  requireWeldsAccepted: boolean;
+  requireNdtComplete: boolean;
+  requiredPhotoCategories: string[];
+  allowConcession: boolean;
+}
+
+export interface UploadLimits {
+  maxFileMb: number;
+  maxFilesPerBatch: number;
+}
+
+export interface NotificationThresholds {
+  ncrDueSoonDays: number;
+  actionDueSoonDays: number;
+  calibrationDueSoonDays: number;
+  ndtOutstandingDays: number;
+  quarantineReviewDays: number;
+}
+
+export interface Vocabulary {
+  photoCategories: string[];
+  productionStages: string[];
+}
+
+export interface Branding {
+  companyName: string;
+  departmentName: string;
+  reportFooter: string;
+}
+
+export const SETTING_DEFAULTS = {
+  releaseRules: {
+    requireFinalInspectionPass: true,
+    requireNoUnresolvedInspections: true,
+    requireNoOpenNcrs: true,
+    requireNoOpenActions: true,
+    requireMaterialsAccepted: true,
+    requireCertificatesVerified: true,
+    requireWeldsAccepted: true,
+    requireNdtComplete: true,
+    requiredPhotoCategories: ["Final inspection", "Completed module"],
+    allowConcession: true,
+  } satisfies ReleaseRules as ReleaseRules,
+  uploadLimits: { maxFileMb: 25, maxFilesPerBatch: 40 } satisfies UploadLimits as UploadLimits,
+  notificationThresholds: {
+    ncrDueSoonDays: 3,
+    actionDueSoonDays: 3,
+    calibrationDueSoonDays: 30,
+    ndtOutstandingDays: 7,
+    quarantineReviewDays: 5,
+  } satisfies NotificationThresholds as NotificationThresholds,
+  vocabulary: {
+    photoCategories: [...DEFAULT_PHOTO_CATEGORIES],
+    productionStages: [...DEFAULT_PRODUCTION_STAGES],
+  } satisfies Vocabulary as Vocabulary,
+  branding: {
+    companyName: "ASGARD Modular Manufacturing",
+    departmentName: "Quality Department",
+    reportFooter: "Controlled when printed from the ASGARD Quality Command Centre. Verify revision before use.",
+  } satisfies Branding as Branding,
+  rolePermissions: null as RolePermissionMap | null,
+};
+
+export type SettingKey = keyof typeof SETTING_DEFAULTS;
+export type SettingValue<K extends SettingKey> = (typeof SETTING_DEFAULTS)[K];
+
+export async function getSetting<K extends SettingKey>(key: K, client: Tx = db): Promise<SettingValue<K>> {
+  const row = await client.setting.findUnique({ where: { key } });
+  const fallback = SETTING_DEFAULTS[key];
+  if (!row) return fallback;
+  if (fallback && typeof fallback === "object" && !Array.isArray(fallback)) {
+    // Merge so settings saved by an older version gain new keys' defaults.
+    return { ...fallback, ...(row.value as object) } as SettingValue<K>;
+  }
+  return row.value as SettingValue<K>;
+}

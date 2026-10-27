@@ -1,0 +1,895 @@
+// ASGARD Quality Command Centre — data model.
+//
+// Conventions
+// - Every business record carries `isDemo`. Seeded synthetic records set it to
+//   true so the UI can label them DEMO DATA and so they can be purged in one go.
+// - Human-readable references (PRJ-0001, INS-000001, NCR-0001 …) are issued
+//   from the `Sequence` table inside the same transaction as the insert.
+// - Nothing in here encodes an acceptance criterion. Criteria are free-text
+//   references to approved documents, entered and approved by quality staff.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Users & security ─────────────────────────────
+
+enum Role {
+  ADMIN
+  QUALITY_MANAGER
+  QC_INSPECTOR
+  WELDING_INSPECTOR
+  MATERIAL_INSPECTOR
+  PRODUCTION_VIEWER
+  AUDITOR
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(PRODUCTION_VIEWER)
+  active       Boolean   @default(true)
+  /// Per-user notification preferences, e.g. { "muted": ["CALIBRATION_DUE"] }.
+  notificationPrefs Json?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions      Session[]
+  notifications Notification[]
+}
+
+/// Server-side sessions. Only the SHA-256 of the cookie token is stored.
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+
+  @@index([userId])
+}
+
+/// Failed sign-in attempts, used to throttle password guessing.
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
+/// Append-only history of every change made through the application.
+model AuditEvent {
+  id         String   @id @default(cuid())
+  at         DateTime @default(now())
+  actorId    String?
+  actorName  String?
+  action     String
+  entityType String
+  entityId   String
+  summary    String?
+  before     Json?
+  after      Json?
+
+  @@index([entityType, entityId])
+  @@index([at])
+}
+
+model Sequence {
+  name  String @id
+  value Int    @default(0)
+}
+
+/// Key/value configuration: release rules, required evidence, permission
+/// overrides, notification thresholds, upload limits.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+// ───────────────────────────── Projects & units ─────────────────────────────
+
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  AWAITING_RELEASE
+  RELEASED
+  CLOSED
+  CANCELLED
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  name            String
+  customerRef     String?
+  description     String?
+  scope           String?
+  status          ProjectStatus @default(PLANNED)
+  startDate       DateTime?
+  targetDate      DateTime?
+  projectManager  String?
+  departments     String?
+  drawingRefs     String?
+  /// Applicable inspection & test requirements (ITP reference, spec clauses).
+  requirements    String?
+  /// Ordered production stages for this project; null = organisation default.
+  stages          String[]
+  isDemo          Boolean       @default(false)
+  createdById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  units       Unit[]
+  photos      Photo[]
+  inspections Inspection[]
+  welds       Weld[]
+  materials   Material[]
+  ndt         NdtRecord[]
+  coatings    CoatingRecord[]
+  ncrs        Ncr[]
+  repairs     Repair[]
+  documents   Document[]
+  releases    ReleaseRecord[]
+  reports     ReportJob[]
+
+  @@index([status])
+}
+
+enum UnitType {
+  MODULE
+  FRAME
+  COMPONENT
+}
+
+/// A module, frame or component inside a project.
+model Unit {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ref         String
+  type        UnitType @default(FRAME)
+  parentId    String?
+  parent      Unit?    @relation("UnitTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Unit[]   @relation("UnitTree")
+  description String?
+  drawingRef  String?
+  revision    String?
+  stage       String?
+  released    Boolean  @default(false)
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  photos      Photo[]
+  inspections Inspection[]
+  welds       Weld[]
+  ncrs        Ncr[]
+  ndt         NdtRecord[]
+  coatings    CoatingRecord[]
+  repairs     Repair[]
+  releases    ReleaseRecord[]
+
+  @@unique([projectId, ref])
+}
+
+// ───────────────────────────── Photo evidence ─────────────────────────────
+
+enum ReviewStatus {
+  PENDING_REVIEW
+  REVIEWED
+  APPROVED
+  REJECTED
+}
+
+enum ReworkPhase {
+  BEFORE
+  AFTER
+}
+
+model Photo {
+  id                String       @id @default(cuid())
+  code              String       @unique
+  projectId         String
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId            String?
+  unit              Unit?        @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  componentRef      String?
+  stage             String?
+  category          String
+  inspectionType    String?
+  /// Capture time from the image's own EXIF data. Null when the file has none —
+  /// it is never back-filled with the upload time.
+  takenAt           DateTime?
+  uploadedAt        DateTime     @default(now())
+  uploadedById      String?
+  uploadedByName    String?
+  responsiblePerson String?
+  heatNumber        String?
+  weldRef           String?
+  inspectionId      String?
+  inspection        Inspection?  @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  ncrId             String?
+  ncr               Ncr?         @relation(fields: [ncrId], references: [id], onDelete: SetNull)
+  weldId            String?
+  weld              Weld?        @relation(fields: [weldId], references: [id], onDelete: SetNull)
+  materialId        String?
+  material          Material?    @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  repairId          String?
+  repair            Repair?      @relation(fields: [repairId], references: [id], onDelete: SetNull)
+  reworkPhase       ReworkPhase?
+  caption           String?
+  description       String?
+  observedCondition String?
+  correctiveAction  String?
+  tags              String[]
+  reviewStatus      ReviewStatus @default(PENDING_REVIEW)
+  reviewedById      String?
+  reviewedAt        DateTime?
+
+  storageKey   String
+  thumbKey     String?
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  sha256       String
+  /// Draft output from the AI vision service. Never copied into the record
+  /// without a person accepting it.
+  aiSuggestion Json?
+  isDemo       Boolean @default(false)
+  deletedAt    DateTime?
+
+  @@index([projectId, category])
+  @@index([unitId])
+  @@index([sha256])
+}
+
+// ───────────────────────────── Inspections ─────────────────────────────
+
+enum InspectionType {
+  INCOMING_MATERIAL
+  FABRICATION
+  DIMENSIONAL
+  WELD_VISUAL
+  NDT
+  COATING
+  INTERMEDIATE
+  FINAL
+  OTHER
+}
+
+enum InspectionResult {
+  PENDING
+  PASS
+  FAIL
+  HOLD
+  NA
+}
+
+enum RecordStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+model Inspection {
+  id              String           @id @default(cuid())
+  code            String           @unique
+  projectId       String
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId          String?
+  unit            Unit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  type            InspectionType
+  /// Fabrication operation (cutting, drilling, bending …) for FABRICATION records.
+  operation       String?
+  stage           String?
+  componentRef    String?
+  drawingRef      String?
+  plannedDate     DateTime?
+  inspectedAt     DateTime?
+  inspectorId     String?
+  inspectorName   String?
+  criteriaRef     String?
+  result          InspectionResult @default(PENDING)
+  status          RecordStatus     @default(DRAFT)
+  comments        String?
+  /// Set when this inspection re-checks an earlier failed/held one.
+  reinspectionOfId String?
+  reinspectionOf   Inspection?     @relation("Reinspection", fields: [reinspectionOfId], references: [id], onDelete: SetNull)
+  reinspections    Inspection[]    @relation("Reinspection")
+  reviewerId      String?
+  reviewerName    String?
+  reviewedAt      DateTime?
+  isDemo          Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  items  ChecklistItem[]
+  photos Photo[]
+  ncrs   Ncr[]
+
+  @@index([projectId, type])
+  @@index([inspectedAt])
+}
+
+enum CriteriaStatus {
+  DEFINED
+  REQUIRES_CONFIGURATION
+}
+
+model ChecklistItem {
+  id             String           @id @default(cuid())
+  inspectionId   String
+  inspection     Inspection       @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  order          Int
+  description    String
+  /// Requirement text or reference to the approved document clause.
+  requirement    String?
+  criteriaStatus CriteriaStatus   @default(REQUIRES_CONFIGURATION)
+  tolerance      String?
+  actual         String?
+  unit           String?
+  result         InspectionResult @default(PENDING)
+  notes          String?
+  required       Boolean          @default(true)
+}
+
+/// Configurable checklist. Items are copied into an inspection when it is
+/// created so later template edits never rewrite past records.
+model ChecklistTemplate {
+  id             String         @id @default(cuid())
+  name           String
+  inspectionType InspectionType
+  /// [{ description, requirement?, tolerance?, unit?, required }]
+  items          Json
+  documentRef    String?
+  approved       Boolean        @default(false)
+  approvedById   String?
+  approvedAt     DateTime?
+  active         Boolean        @default(true)
+  isDemo         Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+// ───────────────────────────── Welding ─────────────────────────────
+
+enum WeldStatus {
+  AWAITING_INSPECTION
+  ACCEPTED
+  REPAIR_REQUIRED
+  AWAITING_REINSPECTION
+  REJECTED
+}
+
+model Weld {
+  id             String           @id @default(cuid())
+  projectId      String
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId         String?
+  unit           Unit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  weldRef        String
+  componentRef   String?
+  drawingRef     String?
+  wpsRef         String?
+  welderId       String?
+  welderQualRef  String?
+  process        String?
+  materialDetails String?
+  stage          String?
+  inspectedAt    DateTime?
+  inspectorName  String?
+  visualResult   InspectionResult @default(PENDING)
+  criteriaRef    String?
+  ndtRequired    Boolean          @default(false)
+  status         WeldStatus       @default(AWAITING_INSPECTION)
+  notes          String?
+  isDemo         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  defects WeldDefect[]
+  photos  Photo[]
+  ndt     NdtRecord[]
+  ncrs    Ncr[]
+  repairs Repair[]
+
+  @@unique([projectId, weldRef])
+}
+
+enum DefectSource {
+  INSPECTOR
+  AI_SUGGESTION
+}
+
+model WeldDefect {
+  id           String       @id @default(cuid())
+  weldId       String
+  weld         Weld         @relation(fields: [weldId], references: [id], onDelete: Cascade)
+  category     String
+  /// Only true once an authorised inspector confirms it.
+  confirmed    Boolean      @default(false)
+  confirmedById String?
+  confirmedAt  DateTime?
+  source       DefectSource @default(INSPECTOR)
+  notes        String?
+  recordedById String?
+  recordedAt   DateTime     @default(now())
+  isDemo       Boolean      @default(false)
+}
+
+// ───────────────────────────── Materials ─────────────────────────────
+
+enum CertStatus {
+  MISSING
+  UPLOADED_UNVERIFIED
+  VERIFIED
+  REJECTED
+}
+
+enum MaterialStatus {
+  AWAITING_INSPECTION
+  ACCEPTED
+  REJECTED
+  QUARANTINED
+}
+
+model Material {
+  id                     String         @id @default(cuid())
+  code                   String         @unique
+  projectId              String?
+  project                Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  componentRef           String?
+  description            String
+  grade                  String?
+  supplier               String?
+  poRef                  String?
+  deliveryRef            String?
+  heatNumber             String?
+  certificateRef         String?
+  certificateDocId       String?
+  certStatus             CertStatus     @default(MISSING)
+  quantity               Decimal?
+  unit                   String?
+  receivingResult        InspectionResult @default(PENDING)
+  location               String?
+  status                 MaterialStatus @default(AWAITING_INSPECTION)
+  identificationMismatch Boolean        @default(false)
+  inspectorName          String?
+  inspectedAt            DateTime?
+  dispositionById        String?
+  dispositionAt          DateTime?
+  dispositionNotes       String?
+  isDemo                 Boolean        @default(false)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  photos Photo[]
+  ncrs   Ncr[]
+
+  @@index([heatNumber])
+  @@index([grade])
+}
+
+// ───────────────────────────── NDT & coating ─────────────────────────────
+
+enum TestResult {
+  PENDING
+  ACCEPT
+  REJECT
+}
+
+model NdtRecord {
+  id            String     @id @default(cuid())
+  code          String     @unique
+  projectId     String
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId        String?
+  unit          Unit?      @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  weldId        String?
+  weld          Weld?      @relation(fields: [weldId], references: [id], onDelete: SetNull)
+  method        String
+  procedureRef  String?
+  componentRef  String?
+  requestedAt   DateTime
+  reportNo      String?
+  reportDate    DateTime?
+  contractor    String?
+  personnelRef  String?
+  result        TestResult @default(PENDING)
+  reportDocId   String?
+  followUp      String?
+  isDemo        Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model CoatingRecord {
+  id            String           @id @default(cuid())
+  code          String           @unique
+  projectId     String
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId        String?
+  unit          Unit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  surfacePrep   String?
+  product       String?
+  batchRef      String?
+  /// Free-text environmental readings as recorded (temp, RH, dew point).
+  envReadings   String?
+  /// Measured dry film thickness readings, as entered.
+  dftReadings   String?
+  specRef       String?
+  result        InspectionResult @default(PENDING)
+  inspectorName String?
+  inspectedAt   DateTime?
+  notes         String?
+  isDemo        Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
+
+// ───────────────────────────── NCR / CAPA / rework ─────────────────────────────
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NcrStatus {
+  OPEN
+  CONTAINED
+  INVESTIGATING
+  ACTION_IN_PROGRESS
+  AWAITING_VERIFICATION
+  CLOSED
+  CANCELLED
+}
+
+model Ncr {
+  id                 String     @id @default(cuid())
+  code               String     @unique
+  projectId          String
+  project            Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId             String?
+  unit               Unit?      @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  componentRef       String?
+  raisedAt           DateTime   @default(now())
+  raisedById         String?
+  raisedByName       String?
+  description        String
+  defectCategory     String
+  requirementRef     String?
+  containment        String?
+  priority           Priority   @default(MEDIUM)
+  rootCauseCategory  String?
+  rootCauseMethod    String?
+  rootCause          String?
+  disposition        String?
+  repairMethod       String?
+  ownerName          String?
+  targetDate         DateTime?
+  status             NcrStatus  @default(OPEN)
+  verificationNotes  String?
+  reinspectionResult InspectionResult?
+  verifiedById       String?
+  verifiedAt         DateTime?
+  closedById         String?
+  closedByName       String?
+  closedAt           DateTime?
+  inspectionId       String?
+  inspection         Inspection? @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  weldId             String?
+  weld               Weld?      @relation(fields: [weldId], references: [id], onDelete: SetNull)
+  materialId         String?
+  material           Material?  @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  relatedCodes       String[]
+  isDemo             Boolean    @default(false)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  actions CorrectiveAction[]
+  photos  Photo[]
+  repairs Repair[]
+
+  @@index([projectId, status])
+  @@index([defectCategory])
+}
+
+enum ActionType {
+  CORRECTIVE
+  PREVENTIVE
+  CONTAINMENT
+}
+
+enum ActionStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+  CANCELLED
+}
+
+model CorrectiveAction {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  ncrId          String?
+  ncr            Ncr?         @relation(fields: [ncrId], references: [id], onDelete: Cascade)
+  auditFindingId String?
+  auditFinding   AuditFinding? @relation(fields: [auditFindingId], references: [id], onDelete: Cascade)
+  type           ActionType   @default(CORRECTIVE)
+  description    String
+  ownerName      String?
+  dueDate        DateTime?
+  status         ActionStatus @default(OPEN)
+  completedAt    DateTime?
+  verifiedById   String?
+  verifiedAt     DateTime?
+  notes          String?
+  isDemo         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Repair {
+  id                 String           @id @default(cuid())
+  code               String           @unique
+  projectId          String
+  project            Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId             String?
+  unit               Unit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  ncrId              String?
+  ncr                Ncr?             @relation(fields: [ncrId], references: [id], onDelete: SetNull)
+  weldId             String?
+  weld               Weld?            @relation(fields: [weldId], references: [id], onDelete: SetNull)
+  description        String
+  method             String?
+  performedBy        String?
+  performedAt        DateTime?
+  /// Actual hours/cost only when supplied. `costIsEstimate` marks estimates.
+  hours              Decimal?
+  cost               Decimal?
+  costIsEstimate     Boolean          @default(false)
+  reinspectionResult InspectionResult @default(PENDING)
+  reinspectedBy      String?
+  reinspectedAt      DateTime?
+  notes              String?
+  isDemo             Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  photos Photo[]
+}
+
+// ───────────────────────────── Audits ─────────────────────────────
+
+enum AuditStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CLOSED
+  CANCELLED
+}
+
+model QualityAudit {
+  id           String      @id @default(cuid())
+  code         String      @unique
+  title        String
+  auditType    String
+  scope        String?
+  /// References the organisation's own procedures/standards — never a claim
+  /// of compliance.
+  standardRefs String?
+  scheduledAt  DateTime
+  auditor      String?
+  status       AuditStatus @default(PLANNED)
+  checklist    Json?
+  summary      String?
+  isDemo       Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  findings AuditFinding[]
+}
+
+enum FindingType {
+  NONCONFORMITY
+  OBSERVATION
+  OPPORTUNITY
+}
+
+enum FindingStatus {
+  OPEN
+  ACTION_IN_PROGRESS
+  AWAITING_VERIFICATION
+  CLOSED
+}
+
+model AuditFinding {
+  id           String        @id @default(cuid())
+  code         String        @unique
+  auditId      String
+  audit        QualityAudit  @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  type         FindingType
+  description  String
+  clauseRef    String?
+  evidence     String?
+  ownerName    String?
+  dueDate      DateTime?
+  status       FindingStatus @default(OPEN)
+  closedAt     DateTime?
+  verifiedById String?
+  isDemo       Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  actions CorrectiveAction[]
+}
+
+// ───────────────────────────── Documents & calibration ─────────────────────────────
+
+enum DocStatus {
+  DRAFT
+  UNDER_REVIEW
+  APPROVED
+  SUPERSEDED
+  OBSOLETE
+}
+
+model Document {
+  id        String    @id @default(cuid())
+  docNo     String    @unique
+  title     String
+  docType   String
+  projectId String?
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  ownerName String?
+  status    DocStatus @default(DRAFT)
+  isDemo    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  revisions DocumentRevision[]
+}
+
+/// Revisions are append-only: an approved revision is never overwritten, a
+/// change is always a new revision.
+model DocumentRevision {
+  id           String    @id @default(cuid())
+  documentId   String
+  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  revision     String
+  storageKey   String?
+  fileName     String?
+  mimeType     String?
+  sizeBytes    Int?
+  sha256       String?
+  notes        String?
+  status       DocStatus @default(UNDER_REVIEW)
+  uploadedById String?
+  uploadedByName String?
+  uploadedAt   DateTime  @default(now())
+  approvedById String?
+  approvedByName String?
+  approvedAt   DateTime?
+
+  @@unique([documentId, revision])
+}
+
+model Equipment {
+  id           String   @id @default(cuid())
+  assetNo      String   @unique
+  description  String
+  serialNo     String?
+  location     String?
+  intervalDays Int?
+  active       Boolean  @default(true)
+  isDemo       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  calibrations CalibrationRecord[]
+}
+
+model CalibrationRecord {
+  id             String    @id @default(cuid())
+  equipmentId    String
+  equipment      Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  calibratedAt   DateTime
+  dueAt          DateTime
+  certificateRef String?
+  provider       String?
+  result         String?
+  documentId     String?
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+}
+
+// ───────────────────────────── Release ─────────────────────────────
+
+enum ReleaseStatus {
+  RELEASED
+  RELEASED_WITH_CONCESSION
+  REVOKED
+}
+
+model ReleaseRecord {
+  id             String        @id @default(cuid())
+  code           String        @unique
+  projectId      String
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId         String?
+  unit           Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  status         ReleaseStatus
+  /// The evaluated checklist at the moment of release.
+  checks         Json
+  concessionRef  String?
+  concessionReason String?
+  releasedById   String
+  releasedByName String
+  releasedAt     DateTime      @default(now())
+  notes          String?
+  revokedById    String?
+  revokedAt      DateTime?
+  revokeReason   String?
+  isDemo         Boolean       @default(false)
+}
+
+// ───────────────────────────── Notifications & reports ─────────────────────────────
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       String
+  severity   String    @default("info")
+  title      String
+  body       String?
+  href       String?
+  /// One notification per user per condition (e.g. "NCR_OVERDUE:ncrId").
+  dedupeKey  String
+  createdAt  DateTime  @default(now())
+  readAt     DateTime?
+  resolvedAt DateTime?
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt])
+}
+
+model ReportJob {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  reportType  String
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  params      Json
+  revision    Int       @default(1)
+  status      String    @default("PENDING")
+  storageKey  String?
+  sizeBytes   Int?
+  error       String?
+  createdById String?
+  createdByName String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+}

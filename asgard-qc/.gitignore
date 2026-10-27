@@ -1,0 +1,12 @@
+.next/
+node_modules/
+.env
+.env.local
+.env.test
+next-env.d.ts
+tsconfig.tsbuildinfo
+*.log
+# Uploaded evidence and generated reports — never committed.
+storage/
+backups/
+test-results/
