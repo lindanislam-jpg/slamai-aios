@@ -149,7 +149,7 @@ async function PermissionsTab() {
   const roles = Object.keys(ROLE_LABELS) as Role[];
   const sets = Object.fromEntries(roles.map((r) => [r, permissionsFor(r, overrides)])) as Record<Role, Set<Permission>>;
   return (
-    <Card title={`Role permissions${overrides ? " (customised)" : " (defaults)"}`} actions={overrides ? <ActionForm action={resetPermissions} submit="Reset to defaults" submitClass="btn-ghost btn-sm" inline confirm="Reset all role permissions to the defaults?" /> : null}>
+    <Card title={`Role permissions${overrides ? " (customised)" : " (defaults)"}`} actions={<ActionForm action={resetPermissions} submit="Reset to defaults" submitClass="btn-ghost btn-sm" inline confirm="Reset all role permissions to the defaults?" />}>
       <ActionForm action={savePermissions} submit="Save permissions">
         <div className="table-wrap">
           <table className="tbl">

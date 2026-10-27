@@ -83,7 +83,7 @@ export default async function NcrDetail({ params }: { params: Promise<{ id: stri
                     { name: "containment", label: "Containment", type: "textarea", defaultValue: n.containment, span: 2 },
                     { name: "rootCauseCategory", label: "Root cause category", type: "select", options: [...ROOT_CAUSE_CATEGORIES], defaultValue: n.rootCauseCategory },
                     { name: "rootCauseMethod", label: "Method", type: "select", options: [...ROOT_CAUSE_METHODS], defaultValue: n.rootCauseMethod },
-                    { name: "rootCause", label: "Root cause analysis", type: "textarea", defaultValue: n.rootCause ?? FIVE_WHYS, span: 2, hint: "5 Whys template pre-filled; replace with your analysis. For fishbone, list causes per category (Method, Machine, Material, Man, Measurement, Environment)." },
+                    { name: "rootCause", label: "Root cause analysis", type: "textarea", defaultValue: n.rootCause, placeholder: FIVE_WHYS, span: 2, hint: "Template shown as a placeholder (it is never saved). For fishbone, list causes per category (Method, Machine, Material, Man, Measurement, Environment)." },
                     { name: "disposition", label: "Disposition", defaultValue: n.disposition, hint: "e.g. Repair, Rework, Use-as-is (concession), Scrap — as approved." },
                     { name: "repairMethod", label: "Repair method", defaultValue: n.repairMethod },
                     { name: "ownerName", label: "Owner", defaultValue: n.ownerName },
