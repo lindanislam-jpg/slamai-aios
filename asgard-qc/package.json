@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "db:set-project-status": "tsx --conditions=react-server scripts/set-project-status-env.ts",
     "db:apply-itp": "tsx --conditions=react-server scripts/apply-itp-env.ts",
+    "db:create-users": "tsx --conditions=react-server scripts/create-users-env.ts",
     "db:import-projects": "tsx --conditions=react-server scripts/import-projects-env.ts",
     "db:purge-demo": "tsx --conditions=react-server scripts/purge-demo.ts",
     "import:forms": "tsx --conditions=react-server scripts/import-forms.ts"
