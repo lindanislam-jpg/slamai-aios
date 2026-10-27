@@ -259,7 +259,7 @@ async function IntegrationsTab() {
         <p className="mt-3 text-xs text-ink-300">No live QMS connection exists. To add one, an adapter must be built against the system’s documented API and authorised credentials supplied — see docs/INTEGRATIONS.md. Nothing is scraped or written to company systems.</p>
       </Card>
       <Card title="AI-assisted photo review">
-        <KV items={[["Status", <Badge key="a" tone={ai.configured ? "ok" : "neutral"} label={ai.configured ? "Enabled" : "Not configured"} />], ["Model", ai.configured ? ai.model : "—"], ["Detail", ai.reason ?? "Produces draft captions and possible observations only. Inspectors decide."]]} />
+        <KV items={[["Status", <Badge key="a" tone={ai.configured ? "ok" : "neutral"} label={ai.configured ? "Enabled" : "Not configured"} />], ["Provider", ai.provider === "openai" ? "OpenAI" : "Anthropic"], ["Model", ai.configured ? ai.model : "—"], ["Detail", ai.reason ?? "Produces draft captions and possible observations only. Inspectors decide."]]} />
       </Card>
       <Card title="File storage">
         <KV
