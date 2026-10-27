@@ -34,6 +34,10 @@ Legend: ✅ implemented and verified · ⚠️ implemented, limitation noted · 
 | Backup & restore script | ✅ | Backup restored into a fresh database; counts and files matched |
 | CI (typecheck, lint, tests on Postgres, build) | ⚠️ | Workflow written; runs on GitHub on push/PR |
 
+## Company forms imported (local demo database)
+
+The QF 6.42 Rev 2 Steel QC Structural Inspection workbook (from the Quality Department's Google Drive) was imported with `npm run import:forms`: 19 sections, 267 checks, all **unapproved** pending Quality Manager review. Two issues in the form itself were reported: Lifting Eyes row 2.12 has no check text, and AHU Platform Steel uses number 3.11 twice. The workbook is not stored in the repository.
+
 ## Limitations
 
 - ⚠️ **HEIC photos** are stored and downloadable, but the server cannot decode HEVC-HEIC, so there is no thumbnail, no PDF image and no AI review for them. iPhones can be set to "Most Compatible" (JPEG), or convert before upload.

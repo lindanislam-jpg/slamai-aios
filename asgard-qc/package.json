@@ -17,7 +17,8 @@
     "backup": "bash scripts/backup.sh",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:purge-demo": "tsx --conditions=react-server scripts/purge-demo.ts"
+    "db:purge-demo": "tsx --conditions=react-server scripts/purge-demo.ts",
+    "import:forms": "tsx --conditions=react-server scripts/import-forms.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

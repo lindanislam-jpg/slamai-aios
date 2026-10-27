@@ -77,3 +77,17 @@ The bell shows reminders for your role (overdue inspections/NCRs/actions, missin
 ## Exports
 
 Every register has an Excel link; *Analytics & Reports → Exports* has them all. Each workbook starts with an *About* sheet (who, when, filters, demo warning). The KPI workbook contains the raw inspection rows and live Excel formulas so anyone can check the dashboard numbers.
+
+## Importing your existing inspection forms (QF 6.42)
+
+Your QF 6.42 Steel QC / Structural Inspection workbook can be turned into checklist templates, so inspectors fill in the same numbered checks in the app:
+
+```bash
+npm run import:forms -- "path/to/QF_6_42 Steel QC Structural Inspection.xlsx"            # preview, writes nothing
+npm run import:forms -- "path/to/…xlsx" --apply --register-document --stages             # import
+```
+
+- Each section sheet (Floor, Walls, Roof, Secondary Steel, Painting, Skids, …) becomes one template, keeping the form's check numbers, wording, groups (Cutting / Fabrication / Welding) and the role that completes each check. Dimensional checks get a millimetre field; the form states no tolerance, so the item says so.
+- Front page, weld map and sign-off sheets are skipped. Rows whose text can't be read, or numbers used twice, are listed as warnings for you to fix in the form.
+- `--register-document` adds the workbook to the document register as a new revision (under review). `--stages` sets the production stages to the form's sections.
+- Imported templates are **not approved**. A Quality Manager reviews and approves each one in Settings → Checklist templates before use. Re-running skips templates that already exist.
