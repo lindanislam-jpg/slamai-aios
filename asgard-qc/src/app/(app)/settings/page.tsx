@@ -26,6 +26,7 @@ const RULE_LABELS: [string, string][] = [
   ["requireCertificatesVerified", "All material certificates verified"],
   ["requireWeldsAccepted", "All welds accepted"],
   ["requireNdtComplete", "No outstanding NDT / test reports"],
+  ["requireHoldPointsSigned", "All ITP Hold Points signed or not applicable (project release)"],
   ["allowConcession", "Allow release under a documented concession (Quality Manager only)"],
 ];
 
@@ -137,6 +138,7 @@ async function LimitsTab() {
             { name: "calibrationDueSoonDays", label: "Calibration due-soon (days)", type: "number", defaultValue: t.calibrationDueSoonDays, required: true },
             { name: "ndtOutstandingDays", label: "NDT outstanding after (days)", type: "number", defaultValue: t.ndtOutstandingDays, required: true },
             { name: "quarantineReviewDays", label: "Quarantine review after (days)", type: "number", defaultValue: t.quarantineReviewDays, required: true },
+            { name: "ncrEffectivenessDays", label: "NCR effectiveness check after closure (days, 0 = off)", type: "number", defaultValue: t.ncrEffectivenessDays, required: true },
           ]}
         />
       </ActionForm>

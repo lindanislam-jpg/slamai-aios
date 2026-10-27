@@ -17,6 +17,8 @@ export interface ReleaseRules {
   requireWeldsAccepted: boolean;
   requireNdtComplete: boolean;
   requiredPhotoCategories: string[];
+  /** Project release needs every ITP Hold Point signed or marked not applicable. */
+  requireHoldPointsSigned: boolean;
   allowConcession: boolean;
 }
 
@@ -31,6 +33,8 @@ export interface NotificationThresholds {
   calibrationDueSoonDays: number;
   ndtOutstandingDays: number;
   quarantineReviewDays: number;
+  /** Days after NCR closure before the effectiveness check is due (0 = off). */
+  ncrEffectivenessDays: number;
 }
 
 export interface Vocabulary {
@@ -55,6 +59,7 @@ export const SETTING_DEFAULTS = {
     requireWeldsAccepted: true,
     requireNdtComplete: true,
     requiredPhotoCategories: ["Final inspection", "Completed module"],
+    requireHoldPointsSigned: true,
     allowConcession: true,
   } satisfies ReleaseRules as ReleaseRules,
   uploadLimits: { maxFileMb: 25, maxFilesPerBatch: 40 } satisfies UploadLimits as UploadLimits,
@@ -64,6 +69,7 @@ export const SETTING_DEFAULTS = {
     calibrationDueSoonDays: 30,
     ndtOutstandingDays: 7,
     quarantineReviewDays: 5,
+    ncrEffectivenessDays: 30,
   } satisfies NotificationThresholds as NotificationThresholds,
   vocabulary: {
     photoCategories: [...DEFAULT_PHOTO_CATEGORIES],

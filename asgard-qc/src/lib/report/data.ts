@@ -18,13 +18,13 @@ export type ReportType = keyof typeof REPORT_TYPES;
 
 /** Which sections each report type contains. */
 export const SECTIONS: Record<ReportType, string[]> = {
-  EXECUTIVE: ["summary", "outstanding", "release"],
-  DETAILED: ["summary", "timeline", "materials", "fabrication", "inspections", "welding", "ndt", "coating", "ncrs", "repairs", "photos", "outstanding", "release", "documents"],
+  EXECUTIVE: ["summary", "itp", "outstanding", "release"],
+  DETAILED: ["summary", "timeline", "itp", "materials", "fabrication", "inspections", "welding", "ndt", "coating", "ncrs", "repairs", "photos", "outstanding", "release", "documents"],
   PHOTO: ["summary", "photos", "outstanding"],
   WELDING: ["summary", "welding", "ndt", "repairs", "photos:weld", "outstanding"],
   MATERIAL: ["summary", "materials", "photos:material", "outstanding"],
   NCR: ["summary", "ncrs", "repairs", "photos:ncr", "outstanding"],
-  HANDOVER: ["summary", "timeline", "materials", "fabrication", "inspections", "welding", "ndt", "coating", "ncrs", "repairs", "photos", "outstanding", "release", "documents"],
+  HANDOVER: ["summary", "timeline", "itp", "materials", "fabrication", "inspections", "welding", "ndt", "coating", "ncrs", "repairs", "photos", "outstanding", "release", "documents"],
 };
 
 export interface ReportParams {
@@ -46,6 +46,7 @@ export async function gatherReportData(p: ReportParams) {
     getSetting("branding"),
     getSetting("releaseRules"),
   ]);
+  const itpPlans = await db.itpPlan.findMany({ where: { projectId: p.projectId }, orderBy: { createdAt: "asc" }, include: { points: { orderBy: { order: "asc" } } } });
   const [inspections, welds, materials, ndt, coatings, ncrs, repairs, photos, documents, releases] = await Promise.all([
     db.inspection.findMany({ where: { ...scope, status: { not: "CANCELLED" } }, include: { unit: { select: { ref: true } }, items: { orderBy: { order: "asc" } } }, orderBy: [{ inspectedAt: "asc" }, { createdAt: "asc" }] }),
     db.weld.findMany({ where: scope, include: { unit: { select: { ref: true } }, defects: true, repairs: true }, orderBy: { weldRef: "asc" } }),
@@ -105,6 +106,7 @@ export async function gatherReportData(p: ReportParams) {
     photos: periodPhotos,
     documents,
     releases,
+    itpPlans,
     activeRelease,
     checks,
     missing,

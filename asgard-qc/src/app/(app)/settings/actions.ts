@@ -31,6 +31,7 @@ export async function saveReleaseRules(_: ActionState, fd: FormData) {
       requireCertificatesVerified: b("requireCertificatesVerified"),
       requireWeldsAccepted: b("requireWeldsAccepted"),
       requireNdtComplete: b("requireNdtComplete"),
+      requireHoldPointsSigned: b("requireHoldPointsSigned"),
       requiredPhotoCategories: fd.getAll("requiredPhotoCategories").map(String),
       allowConcession: b("allowConcession"),
     });
@@ -54,6 +55,7 @@ export async function saveLimits(_: ActionState, fd: FormData) {
       calibrationDueSoonDays: int(fd, "calibrationDueSoonDays"),
       ndtOutstandingDays: int(fd, "ndtOutstandingDays"),
       quarantineReviewDays: int(fd, "quarantineReviewDays"),
+      ncrEffectivenessDays: int(fd, "ncrEffectivenessDays"),
     });
     return "Limits and thresholds saved.";
   }, ["/settings"]);

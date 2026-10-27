@@ -1,4 +1,4 @@
-import { ActionStatus, ActionType, InspectionResult, NcrStatus, Priority, type Prisma } from "@prisma/client";
+import { ActionStatus, ActionType, EffectivenessStatus, ImpactLevel, InspectionResult, NcrSeverity, NcrStatus, Priority, type Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db";
 import { diff, recordEvent } from "../audit";
@@ -6,6 +6,7 @@ import { ValidationError } from "../errors";
 import type { Actor } from "../permissions";
 import { nextCode } from "../sequence";
 import { optDate, optId, optStr, reqStr } from "../validation";
+import { getSetting } from "../settings";
 import { assertCan, found, transaction } from "./base";
 
 export const OPEN_NCR: NcrStatus[] = ["OPEN", "CONTAINED", "INVESTIGATING", "ACTION_IN_PROGRESS", "AWAITING_VERIFICATION"];
@@ -19,6 +20,11 @@ export const ncrInput = z.object({
   requirementRef: optStr(500),
   containment: optStr(2000),
   priority: z.nativeEnum(Priority).default("MEDIUM"),
+  severity: z.preprocess((v) => (v === "" ? null : v), z.nativeEnum(NcrSeverity).nullable().optional()),
+  department: optStr(120),
+  stageOfDetection: optStr(200),
+  detectedBy: optStr(200),
+  drawingRef: optStr(200),
   ownerName: optStr(200),
   targetDate: optDate,
   inspectionId: optId,
@@ -44,8 +50,23 @@ export async function raiseNcr(actor: Actor, raw: z.input<typeof ncrInput>) {
   });
 }
 
+const impact = z.preprocess((v) => (v === "" ? null : v), z.nativeEnum(ImpactLevel).nullable().optional());
+
 export const investigationInput = z.object({
   containment: optStr(2000),
+  contributingFactors: optStr(4000),
+  severity: ncrInput.shape.severity,
+  department: optStr(120),
+  stageOfDetection: optStr(200),
+  detectedBy: optStr(200),
+  drawingRef: optStr(200),
+  impactStructural: impact,
+  impactSafety: impact,
+  impactSchedule: impact,
+  impactCustomer: impact,
+  impactCost: impact,
+  impactQms: impact,
+  impactNotes: optStr(4000),
   rootCauseCategory: optStr(120),
   rootCauseMethod: optStr(120),
   rootCause: optStr(6000),
@@ -144,11 +165,67 @@ export async function closeNcr(actor: Actor, id: string, raw: z.input<typeof clo
     const problems = closureProblems({ ...n, ...input });
     if (problems.length) throw new ValidationError(`Cannot close ${n.code}: ${problems.join(" ")}`);
     const now = new Date();
+    const days = (await getSetting("notificationThresholds", tx)).ncrEffectivenessDays;
     const row = await tx.ncr.update({
       where: { id },
-      data: { ...input, status: "CLOSED", verifiedById: actor.id, verifiedAt: now, closedById: actor.id, closedByName: actor.name, closedAt: now },
+      data: {
+        ...input,
+        status: "CLOSED",
+        verifiedById: actor.id,
+        verifiedAt: now,
+        closedById: actor.id,
+        closedByName: actor.name,
+        closedAt: now,
+        // Company form section 7: effectiveness is checked after closure.
+        effectivenessStatus: days > 0 ? "PENDING" : null,
+        effectivenessDueAt: days > 0 ? new Date(now.getTime() + days * 86_400_000) : null,
+      },
     });
     await recordEvent(tx, actor, "ncr.close", "Ncr", id, { summary: `${n.code} closed by ${actor.name}`, after: input });
+    return row;
+  });
+}
+
+/** NCRs in the same category raised since this one closed — evidence for
+ *  the effectiveness check ("no repeat NCRs within 30 days"). */
+export async function recurrencesSinceClosure(ncr: { id: string; defectCategory: string; closedAt: Date | null; projectId: string }) {
+  if (!ncr.closedAt) return [];
+  return db.ncr.findMany({
+    where: { id: { not: ncr.id }, defectCategory: ncr.defectCategory, raisedAt: { gte: ncr.closedAt } },
+    select: { id: true, code: true, raisedAt: true, project: { select: { code: true } } },
+    orderBy: { raisedAt: "asc" },
+  });
+}
+
+/**
+ * Record the verification of effectiveness for a closed NCR. If the action
+ * was not effective the NCR is reopened to Action in progress so the
+ * preventive action plan can be escalated.
+ */
+export async function recordEffectiveness(actor: Actor, id: string, status: Exclude<EffectivenessStatus, "PENDING">, notes: string) {
+  assertCan(actor, "ncr.close");
+  if (!notes?.trim()) throw new ValidationError("Record the evidence reviewed for the effectiveness check.");
+  return transaction(async (tx) => {
+    const n = found(await tx.ncr.findUnique({ where: { id } }), "NCR");
+    if (n.status !== "CLOSED") throw new ValidationError("The effectiveness check is done after the NCR is closed.");
+    if (n.effectivenessStatus && n.effectivenessStatus !== "PENDING") throw new ValidationError("Effectiveness has already been recorded.");
+    const now = new Date();
+    const reopen = status === "NOT_EFFECTIVE";
+    const row = await tx.ncr.update({
+      where: { id },
+      data: {
+        effectivenessStatus: status,
+        effectivenessNotes: notes,
+        effectivenessById: actor.id,
+        effectivenessByName: actor.name,
+        effectivenessAt: now,
+        ...(reopen ? { status: "ACTION_IN_PROGRESS" as const, closedAt: null, closedById: null, closedByName: null } : {}),
+      },
+    });
+    await recordEvent(tx, actor, "ncr.effectiveness", "Ncr", id, {
+      summary: `${n.code}: corrective action ${reopen ? "NOT effective — NCR reopened for escalation" : "effective"} (${notes})`,
+      after: { effectivenessStatus: status },
+    });
     return row;
   });
 }

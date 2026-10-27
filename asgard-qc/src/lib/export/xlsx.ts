@@ -143,10 +143,14 @@ export async function buildExport(actor: Actor, kind: ExportKind, f: ExportFilte
       const rows = count(await db.ncr.findMany({ where: { ...proj, ...(range ? { raisedAt: range } : {}) }, orderBy: { code: "asc" }, include: { project: { select: { code: true } }, unit: { select: { ref: true } }, actions: true } }));
       addSheet(wb, "NCRs", [
         { header: "NCR ID", key: "code" }, { header: "Project", key: "project" }, { header: "Frame", key: "unit" }, { header: "Raised", key: "raisedAt", date: true }, { header: "Raised by", key: "raisedByName" },
-        { header: "Category", key: "defectCategory", width: 22 }, { header: "Priority", key: "priority" }, { header: "Description", key: "description", width: 50 }, { header: "Containment", key: "containment", width: 30 },
+        { header: "Category", key: "defectCategory", width: 22 }, { header: "Priority", key: "priority" }, { header: "Severity", key: "severity" },
+        { header: "Department", key: "department" }, { header: "Stage of detection", key: "stageOfDetection", width: 22 }, { header: "Drawing ref", key: "drawingRef" }, { header: "Description", key: "description", width: 50 }, { header: "Containment", key: "containment", width: 30 },
         { header: "Root cause category", key: "rootCauseCategory" }, { header: "Method", key: "rootCauseMethod" }, { header: "Root cause", key: "rootCause", width: 40 }, { header: "Disposition", key: "disposition", width: 24 },
         { header: "Owner", key: "ownerName" }, { header: "Target", key: "targetDate", date: true }, { header: "Status", key: "status" }, { header: "Days open", key: "days", note: "Raised to closed, or to today if open" },
-        { header: "Overdue", key: "overdue" }, { header: "Closed", key: "closedAt", date: true }, { header: "Closed by", key: "closedByName" }, { header: "Source", key: "source" },
+        { header: "Overdue", key: "overdue" }, { header: "Closed", key: "closedAt", date: true }, { header: "Closed by", key: "closedByName" },
+        { header: "Impact structural", key: "impactStructural" }, { header: "Impact safety", key: "impactSafety" }, { header: "Impact schedule", key: "impactSchedule" },
+        { header: "Impact customer", key: "impactCustomer" }, { header: "Impact cost", key: "impactCost" }, { header: "Impact QMS", key: "impactQms" },
+        { header: "Effectiveness", key: "effectivenessStatus" }, { header: "Effectiveness due", key: "effectivenessDueAt", date: true }, { header: "Source", key: "source" },
       ], rows.map((n) => ({ ...n, project: n.project.code, unit: n.unit?.ref, days: Math.round(((n.closedAt ?? new Date()).getTime() - n.raisedAt.getTime()) / 86_400_000), overdue: !n.closedAt && n.targetDate && n.targetDate < new Date() ? "Yes" : "No", source: src(n.isDemo) })));
       addSheet(wb, "Actions (CAPA)", [
         { header: "Action ID", key: "code" }, { header: "NCR", key: "ncr" }, { header: "Type", key: "type" }, { header: "Description", key: "description", width: 50 }, { header: "Owner", key: "ownerName" },
@@ -197,6 +201,13 @@ export async function buildExport(actor: Actor, kind: ExportKind, f: ExportFilte
           for (const c of r.checks) rows.push({ project: p.code, scope: scope ? scope.ref : "Whole project", check: c.label, state: c.state, detail: c.detail, items: c.items?.join("; "), released: r.current ? `${r.current.code} ${r.current.status}` : "Not released", source: src(p.isDemo) });
         }
       }
+      const points = await db.controlPoint.findMany({ where: { plan: f.projectId ? { projectId: f.projectId } : {} }, orderBy: [{ planId: "asc" }, { order: "asc" }], include: { plan: { include: { project: { select: { code: true } } } } } });
+      addSheet(wb, "ITP control points", [
+        { header: "Project", key: "project" }, { header: "Discipline", key: "discipline" }, { header: "Section", key: "section", width: 26 }, { header: "Item", key: "itemNo" },
+        { header: "Activity", key: "activity", width: 40 }, { header: "Acceptance criteria", key: "acceptanceCriteria", width: 50 }, { header: "Responsibility", key: "responsibility" },
+        { header: "Sign-off document", key: "signoffDocument", width: 24 }, { header: "Sub", key: "subPoint" }, { header: "AMM", key: "pointType" }, { header: "Client", key: "clientPoint" }, { header: "3rd party", key: "thirdPartyPoint" },
+        { header: "Status", key: "status" }, { header: "Signed by", key: "signedByName" }, { header: "Signed", key: "signedAt", date: true }, { header: "Evidence", key: "evidence", width: 30 },
+      ], points.map((x) => ({ ...x, project: x.plan.project.code, discipline: x.plan.discipline })));
       addSheet(wb, "Release checklist", [
         { header: "Project", key: "project" }, { header: "Scope", key: "scope" }, { header: "Check", key: "check", width: 44 }, { header: "State", key: "state" }, { header: "Detail", key: "detail", width: 30 },
         { header: "Outstanding items", key: "items", width: 60 }, { header: "Release record", key: "released", width: 24 }, { header: "Source", key: "source" },

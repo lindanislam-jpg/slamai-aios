@@ -68,7 +68,7 @@ function typeFor(sheet: string): InspectionType {
 
 /** exceljs cannot read some workbooks with embedded drawings (weld maps).
  *  Drawings are irrelevant to the checklist, so drop them before parsing. */
-async function withoutDrawings(buf: Buffer): Promise<Buffer> {
+export async function withoutDrawings(buf: Buffer): Promise<Buffer> {
   const zip = await JSZip.loadAsync(buf);
   for (const name of Object.keys(zip.files)) {
     if (/^xl\/worksheets\/sheet\d+\.xml$/.test(name)) {

@@ -6,8 +6,18 @@ import { BeforeAfter, Thumbs } from "@/components/ncr/Thumbs";
 import { Badge, Card, DemoTag, fmtDate, fmtDateTime, History, KV, PageHeader } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { humanize, ROOT_CAUSE_CATEGORIES, ROOT_CAUSE_METHODS } from "@/lib/domain/constants";
-import { allowedTransitions, closureProblems, getNcr, OPEN_NCR } from "@/lib/services/ncrs";
-import { actionStatusAction, addActionAction, closeNcrAction, moveNcrAction, updateNcrAction } from "../actions";
+import { allowedTransitions, closureProblems, getNcr, OPEN_NCR, recurrencesSinceClosure } from "@/lib/services/ncrs";
+import { actionStatusAction, addActionAction, closeNcrAction, effectivenessAction, impactAction, moveNcrAction, updateNcrAction } from "../actions";
+
+const IMPACT_LEVELS = ["NONE", "LOW", "MEDIUM", "HIGH"].map((v) => ({ value: v, label: v.charAt(0) + v.slice(1).toLowerCase() }));
+const IMPACTS = [
+  ["impactStructural", "Structural integrity"],
+  ["impactSafety", "Safety risk"],
+  ["impactSchedule", "Schedule"],
+  ["impactCustomer", "Customer"],
+  ["impactCost", "Cost"],
+  ["impactQms", "Quality system"],
+] as const;
 
 export const metadata = { title: "NCR" };
 
@@ -62,6 +72,11 @@ export default async function NcrDetail({ params }: { params: Promise<{ id: stri
             <KV
               items={[
                 ["Description", n.description],
+                ["Severity", n.severity ? <Badge value={n.severity === "MINOR" ? "MEDIUM" : "HIGH"} label={humanize(n.severity)} /> : "Not recorded"],
+                ["Can product be released?", isOpen ? <span className="font-semibold text-bad-400">No — NCR open</span> : n.status === "CLOSED" ? "NCR closed" : "—"],
+                ["Department", n.department],
+                ["Stage of detection / detected by", [n.stageOfDetection, n.detectedBy].filter(Boolean).join(" · ") || null],
+                ["Drawing ref.", n.drawingRef],
                 ["Raised", `${fmtDateTime(n.raisedAt)} by ${n.raisedByName ?? "—"}`],
                 ["Module / frame", n.unit ? n.unit.ref : "—"],
                 ["Component", n.componentRef],
@@ -81,9 +96,14 @@ export default async function NcrDetail({ params }: { params: Promise<{ id: stri
                 <Fields
                   fields={[
                     { name: "containment", label: "Containment", type: "textarea", defaultValue: n.containment, span: 2 },
+                    { name: "severity", label: "Severity", type: "select", options: [{ value: "MINOR", label: "Minor" }, { value: "MAJOR", label: "Major" }, { value: "CRITICAL", label: "Critical" }], defaultValue: n.severity },
+                    { name: "department", label: "Department", defaultValue: n.department },
+                    { name: "stageOfDetection", label: "Stage of detection", defaultValue: n.stageOfDetection },
+                    { name: "drawingRef", label: "Drawing ref. & revision", defaultValue: n.drawingRef },
                     { name: "rootCauseCategory", label: "Root cause category", type: "select", options: [...ROOT_CAUSE_CATEGORIES], defaultValue: n.rootCauseCategory },
                     { name: "rootCauseMethod", label: "Method", type: "select", options: [...ROOT_CAUSE_METHODS], defaultValue: n.rootCauseMethod },
                     { name: "rootCause", label: "Root cause analysis", type: "textarea", defaultValue: n.rootCause, placeholder: FIVE_WHYS, span: 2, hint: "Template shown as a placeholder (it is never saved). For fishbone, list causes per category (Method, Machine, Material, Man, Measurement, Environment)." },
+                    { name: "contributingFactors", label: "Contributing factors", type: "textarea", defaultValue: n.contributingFactors, span: 2, hint: "One per line." },
                     { name: "disposition", label: "Disposition", defaultValue: n.disposition, hint: "e.g. Repair, Rework, Use-as-is (concession), Scrap — as approved." },
                     { name: "repairMethod", label: "Repair method", defaultValue: n.repairMethod },
                     { name: "ownerName", label: "Owner", defaultValue: n.ownerName },
@@ -99,10 +119,27 @@ export default async function NcrDetail({ params }: { params: Promise<{ id: stri
                   ["Containment", n.containment],
                   ["Root cause", n.rootCause ? `${n.rootCauseCategory ? `[${n.rootCauseCategory}] ` : ""}${n.rootCause}` : null],
                   ["Method", n.rootCauseMethod],
+                  ["Contributing factors", n.contributingFactors],
                   ["Disposition", n.disposition],
                   ["Repair method", n.repairMethod],
                 ]}
               />
+            )}
+          </Card>
+
+          <Card title="Impact assessment">
+            {isOpen && can("ncr.manage") ? (
+              <ActionForm action={impactAction.bind(null, n.id)} submit="Save impact assessment">
+                <Fields
+                  cols={3}
+                  fields={[
+                    ...IMPACTS.map(([name, label]) => ({ name, label, type: "select" as const, options: IMPACT_LEVELS, defaultValue: n[name] })),
+                    { name: "impactNotes", label: "Impact notes", type: "textarea", defaultValue: n.impactNotes, span: 3, hint: "e.g. load-bearing connection — do not dispatch; 1–2 day delay; customer to be notified if date slips." },
+                  ]}
+                />
+              </ActionForm>
+            ) : (
+              <KV cols={3} items={[...IMPACTS.map(([name, label]) => [label, n[name] ? humanize(n[name]) : "—"] as [string, string]), ["Notes", n.impactNotes]]} />
             )}
           </Card>
 
@@ -209,6 +246,12 @@ export default async function NcrDetail({ params }: { params: Promise<{ id: stri
             )}
           </Card>
 
+          {(n.status === "CLOSED" || n.effectivenessStatus) && (
+            <Card title="Verification of effectiveness">
+              <Effectiveness n={n} canClose={can("ncr.close")} />
+            </Card>
+          )}
+
           <Card title="Evidence photographs" actions={can("photo.upload") ? <Link className="link text-xs" href={`/photos?upload=1&projectId=${n.project.id}&ncrId=${n.id}`}>Upload</Link> : undefined}>
             <Thumbs photos={n.photos} />
           </Card>
@@ -269,6 +312,56 @@ export default async function NcrDetail({ params }: { params: Promise<{ id: stri
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+async function Effectiveness({ n, canClose }: { n: Awaited<ReturnType<typeof getNcr>>["ncr"]; canClose: boolean }) {
+  const repeats = await recurrencesSinceClosure(n);
+  if (n.effectivenessStatus && n.effectivenessStatus !== "PENDING") {
+    return (
+      <KV
+        items={[
+          ["Result", <Badge key="r" value={n.effectivenessStatus === "EFFECTIVE" ? "PASS" : "FAIL"} label={n.effectivenessStatus === "EFFECTIVE" ? "Effective" : "Not effective — reopened"} />],
+          ["Checked", `${fmtDateTime(n.effectivenessAt)} by ${n.effectivenessByName ?? "—"}`],
+          ["Evidence", n.effectivenessNotes],
+        ]}
+      />
+    );
+  }
+  const due = n.effectivenessDueAt;
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-ink-300">
+        After closure the corrective action is checked for effectiveness — for example no repeat NCR of the same kind within the review period.
+        {due && <> Due <span className={due < new Date() ? "font-semibold text-bad-400" : "text-ink-100"}>{fmtDate(due)}</span>.</>}
+      </p>
+      <div>
+        <div className="label">Same-category NCRs raised since closure</div>
+        {repeats.length ? (
+          <ul className="space-y-1">
+            {repeats.map((r) => (
+              <li key={r.id}>
+                <Link className="link" href={`/ncr/${r.id}`}>{r.code}</Link> · {r.project.code} · {fmtDate(r.raisedAt)}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-ok-400">None recorded.</p>
+        )}
+      </div>
+      {canClose ? (
+        <ActionForm action={effectivenessAction.bind(null, n.id)} submit="Record effectiveness check">
+          <Fields
+            fields={[
+              { name: "effectiveness", label: "Result", type: "select", required: true, options: [{ value: "EFFECTIVE", label: "Effective" }, { value: "NOT_EFFECTIVE", label: "Not effective — reopen NCR and escalate" }] },
+              { name: "notes", label: "Evidence reviewed", type: "textarea", required: true, span: 2, hint: "e.g. inspection data reviewed, drawing register audited, no repeat missing-weld NCRs." },
+            ]}
+          />
+        </ActionForm>
+      ) : (
+        <p className="text-ink-300">The effectiveness check is recorded by a Quality Manager.</p>
+      )}
     </div>
   );
 }

@@ -10,6 +10,12 @@ import { raiseNcrAction } from "../actions";
 
 export const metadata = { title: "Raise NCR" };
 
+const SEVERITIES = [
+  { value: "MINOR", label: "Minor" },
+  { value: "MAJOR", label: "Major" },
+  { value: "CRITICAL", label: "Critical" },
+];
+
 export default async function NewNcr({ searchParams }: { searchParams: Promise<SP> }) {
   await requirePagePermission("ncr.raise");
   const sp = await searchParams;
@@ -43,6 +49,11 @@ export default async function NewNcr({ searchParams }: { searchParams: Promise<S
               { name: "projectId", label: "Project", type: "select", options: projects, required: true, defaultValue: projectId },
               { name: "unitId", label: "Module / frame", type: "select", options: units, defaultValue: str(sp, "unitId") },
               { name: "defectCategory", label: "Defect category", type: "select", options: [...NCR_DEFECT_CATEGORIES], required: true, defaultValue: str(sp, "category") },
+              { name: "severity", label: "Severity", type: "select", options: SEVERITIES, hint: "As on the NCR form: Major = structural integrity / safety affected." },
+              { name: "department", label: "Department", options: undefined, placeholder: "e.g. Fabrication" },
+              { name: "stageOfDetection", label: "Stage of detection", placeholder: "e.g. Fabrication — in-process QC inspection" },
+              { name: "detectedBy", label: "Detected by", placeholder: "e.g. QC Inspector" },
+              { name: "drawingRef", label: "Drawing ref. & revision" },
               { name: "priority", label: "Priority", type: "select", options: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((p) => ({ value: p, label: p.toLowerCase() })), defaultValue: "MEDIUM", allowEmpty: false },
               { name: "componentRef", label: "Component / drawing ref" },
               { name: "requirementRef", label: "Requirement / document reference", hint: "The clause, drawing or procedure the condition does not meet." },

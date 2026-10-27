@@ -51,6 +51,18 @@ The report lists everything that is missing (unverified certificates, open NCRs,
 - Quarantine or reject with a reason. Changing a heat number/grade/certificate later resets verification.
 - Search by heat number from the top search bar or the material register.
 
+## Project numbers and importing projects
+
+New projects can use your own number (e.g. **AMM764**); leave it blank to get PRJ-0001 style numbering. The number cannot be changed later because it appears on every record and report.
+To load many projects at once: *Project Register → Import projects from Excel*. Download the template, fill the **Projects** sheet (one row per project) and the **Units** sheet (modules / frames, with an optional parent), then **Preview**. Nothing is written until you press **Import**. Existing projects and units are skipped, never overwritten, and release can't be imported — it is only ever recorded in the app.
+
+## Inspection & Test Plan (QF 6.14)
+
+Open a project → **ITP** tab → upload the ITP workbook and tick the disciplines that apply (Structural, Architectural, Electrical, Mechanical, Process Pipe). Every row becomes a control point with its acceptance criteria, method, frequency, responsibility, sign-off document and the Sub / AMM / Client / 3rd-party codes exactly as in the ITP.
+- **Sign** a control point with the evidence reference (report number, form, dossier). Inspectors sign I/R/W/M/S points; **Hold (H)** and **Accept (A)** points need a Quality Manager.
+- A point that does not apply is marked **not applicable** with a reason (Quality Manager). Signed points can be reopened with a reason; everything is in the history.
+- **Project release is blocked while any Hold Point is open** (Settings → Release rules → "All ITP Hold Points signed"). Single module/frame releases are not blocked by project-level hold points such as the handover pack.
+
 ## NCR and CAPA
 
 1. **Raise** (from an inspection, weld or material page, or *NCR → New*). Add containment.
@@ -60,6 +72,9 @@ The report lists everything that is missing (unverified certificates, open NCRs,
 5. **Awaiting verification** → a Quality Manager records verification evidence and the re-inspection result and **closes** it.
 
 Uploading a repair photo does not close anything. Reopening a closed NCR needs a reason and is recorded.
+
+The NCR follows the company NCR form (QC-NCR-001): severity (Minor / Major / Critical), department, stage of detection, detected by, drawing reference, containment, 5-Why root cause, contributing factors, and an **impact assessment** (structural, safety, schedule, customer, cost, quality system). While an NCR is open the page states **Can product be released? No**.
+**Verification of effectiveness:** when an NCR closes, an effectiveness check is scheduled (30 days by default, Settings → Limits). The page lists any same-category NCRs raised since closure. A Quality Manager records *Effective* or *Not effective*; *Not effective* reopens the NCR to Action in progress for escalation.
 
 ## Final inspection and release
 

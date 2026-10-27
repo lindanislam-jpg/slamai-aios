@@ -5,9 +5,18 @@ import { diff, recordEvent } from "../audit";
 import type { Actor } from "../permissions";
 import { nextCode } from "../sequence";
 import { optDate, optStr, reqStr } from "../validation";
+import { ValidationError } from "../errors";
 import { assertCan, found, transaction } from "./base";
 
+/** Company project number, e.g. AMM764. Optional — a PRJ-0001 style number
+ *  is issued when it is left blank. */
+export const projectCode = z.preprocess(
+  (v) => (typeof v === "string" ? (v.trim() === "" ? undefined : v.trim().toUpperCase()) : v),
+  z.string().regex(/^[A-Z0-9][A-Z0-9-]{1,19}$/, "Project number: letters, digits and dashes only (e.g. AMM764)").optional(),
+);
+
 export const projectInput = z.object({
+  code: projectCode,
   name: reqStr(200),
   customerRef: optStr(200),
   description: optStr(4000),
@@ -63,7 +72,8 @@ export async function createProject(actor: Actor, raw: ProjectInput) {
   assertCan(actor, "project.write");
   const input = projectInput.parse(raw);
   return transaction(async (tx) => {
-    const code = await nextCode(tx, "PRJ", 4);
+    if (input.code && (await tx.project.findUnique({ where: { code: input.code } }))) throw new ValidationError(`Project ${input.code} already exists.`);
+    const code = input.code ?? (await nextCode(tx, "PRJ", 4));
     const project = await tx.project.create({
       data: { ...input, stages: input.stages ?? [], code, createdById: actor.id },
     });
@@ -74,7 +84,9 @@ export async function createProject(actor: Actor, raw: ProjectInput) {
 
 export async function updateProject(actor: Actor, id: string, raw: Partial<ProjectInput>) {
   assertCan(actor, "project.write");
-  const input = projectInput.partial().parse(raw);
+  // The project number is an identifier used on every record and report; it
+  // is fixed once created.
+  const input = projectInput.omit({ code: true }).partial().parse(raw);
   return transaction(async (tx) => {
     const before = found(await tx.project.findUnique({ where: { id } }), "Project");
     if (input.status === "RELEASED" && before.status !== "RELEASED") {

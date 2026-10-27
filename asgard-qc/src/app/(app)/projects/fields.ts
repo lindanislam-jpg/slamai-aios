@@ -8,6 +8,7 @@ type P = Partial<Record<string, unknown>> | null;
 export function projectFieldDefs(p: P, opts: { withStatus: boolean }): FieldDef[] {
   const v = (k: string) => p?.[k];
   return [
+    ...(p ? [] : [{ name: "code", label: "Project number", placeholder: "e.g. AMM764", hint: "Your company project number. Leave blank to get PRJ-0001 style numbering. Cannot be changed later." }]),
     { name: "name", label: "Project name", required: true, defaultValue: v("name") },
     { name: "customerRef", label: "Customer reference", defaultValue: v("customerRef"), hint: "Only if authorised for internal records." },
     ...(opts.withStatus ? [{ name: "status", label: "Status", type: "select" as const, options: statusOpts, allowEmpty: false, defaultValue: v("status"), hint: "Release is recorded from Final Inspection & Release, not here." }] : []),

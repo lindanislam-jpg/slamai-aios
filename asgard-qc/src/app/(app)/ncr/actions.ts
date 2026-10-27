@@ -3,7 +3,7 @@
 import type { ActionStatus, InspectionResult, NcrStatus } from "@prisma/client";
 import { run, type ActionState } from "@/lib/action";
 import { formToObject } from "@/lib/validation";
-import { addAction, closeNcr, moveNcr, raiseNcr, updateActionStatus, updateNcr } from "@/lib/services/ncrs";
+import { addAction, closeNcr, moveNcr, raiseNcr, recordEffectiveness, updateActionStatus, updateNcr } from "@/lib/services/ncrs";
 
 export async function raiseNcrAction(_p: ActionState, fd: FormData) {
   return run(async (actor) => {
@@ -49,5 +49,20 @@ export async function closeNcrAction(id: string, _p: ActionState, fd: FormData) 
       reinspectionResult: String(fd.get("reinspectionResult") ?? "") as InspectionResult,
     });
     return "NCR closed.";
+  }, [`/ncr/${id}`, "/ncr"]);
+}
+
+export async function impactAction(id: string, _p: ActionState, fd: FormData) {
+  return run(async (actor) => {
+    await updateNcr(actor, id, formToObject(fd));
+    return "Impact assessment saved.";
+  }, [`/ncr/${id}`]);
+}
+
+export async function effectivenessAction(id: string, _p: ActionState, fd: FormData) {
+  return run(async (actor) => {
+    const status = String(fd.get("effectiveness")) === "NOT_EFFECTIVE" ? "NOT_EFFECTIVE" : "EFFECTIVE";
+    await recordEffectiveness(actor, id, status, String(fd.get("notes") ?? ""));
+    return status === "EFFECTIVE" ? "Recorded as effective." : "Recorded as not effective — NCR reopened.";
   }, [`/ncr/${id}`, "/ncr"]);
 }

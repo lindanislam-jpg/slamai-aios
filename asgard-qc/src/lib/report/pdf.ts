@@ -253,6 +253,33 @@ export async function renderReportPdf(data: ReportData, meta: RenderMeta): Promi
     if (events.some((e) => e[1])) para("* Record date shown because the event date was not recorded.", { color: C.muted, size: 7.5 });
   }
 
+  // ── Inspection & Test Plan ──
+  if (sections.includes("itp")) {
+    heading("Inspection & Test Plan status");
+    if (!data.itpPlans.length) empty("No ITP has been applied to this project in the system.");
+    for (const plan of data.itpPlans) {
+      const closed = plan.points.filter((x) => x.status !== "OPEN").length;
+      para(`${plan.discipline} — ${plan.documentRef ?? "ITP"}: ${closed} of ${plan.points.length} control points closed.`, { bold: true });
+      const shown = data.params.type === "EXECUTIVE" ? plan.points.filter((x) => x.pointType === "H") : plan.points.filter((x) => x.pointType === "H" || x.pointType === "W" || x.status !== "OPEN");
+      if (!shown.length) {
+        empty("No hold or witness points, and no control points signed yet.");
+        continue;
+      }
+      table(
+        [{ header: "Item", width: 0.7 }, { header: "Activity", width: 3.2 }, { header: "AMM / Client", width: 1.1 }, { header: "Sign-off document", width: 1.8 }, { header: "Status", width: 1.2 }, { header: "Signed / evidence", width: 2.6 }],
+        shown.map((x) => [
+          x.itemNo,
+          `${x.section ? `[${x.section}] ` : ""}${x.activity}`,
+          `${x.pointType ?? "—"} / ${x.clientPoint ?? "—"}`,
+          x.signoffDocument ?? "—",
+          x.status === "SIGNED" ? "Signed" : x.status === "NOT_APPLICABLE" ? "N/A" : x.pointType === "H" ? "OPEN — HOLD" : "Open",
+          x.signedByName ? `${x.signedByName} ${fmtDate(x.signedAt)} — ${x.evidence ?? ""}` : "—",
+        ]),
+        { stateCol: 4 },
+      );
+    }
+  }
+
   // ── Materials ──
   if (sections.includes("materials")) {
     heading("Incoming materials and traceability");
@@ -356,6 +383,19 @@ export async function renderReportPdf(data: ReportData, meta: RenderMeta): Promi
           ["Verification", n.verificationNotes ? `${n.verificationNotes} (re-inspection ${human(n.reinspectionResult)})` : "Not verified"],
           ["Closed", n.closedAt ? `${fmtDate(n.closedAt)} by ${n.closedByName}` : "Open"],
           ["Owner / target", `${n.ownerName ?? "—"} / ${fmtDate(n.targetDate)}`],
+          ["Severity / department", `${n.severity ? human(n.severity) : "Not recorded"} / ${n.department ?? "—"}`],
+          ["Stage of detection / detected by", `${n.stageOfDetection ?? "—"} / ${n.detectedBy ?? "—"}`],
+          ["Contributing factors", n.contributingFactors ?? "Not recorded"],
+          [
+            "Impact (structural · safety · schedule · customer · cost · QMS)",
+            [n.impactStructural, n.impactSafety, n.impactSchedule, n.impactCustomer, n.impactCost, n.impactQms].some(Boolean)
+              ? [n.impactStructural, n.impactSafety, n.impactSchedule, n.impactCustomer, n.impactCost, n.impactQms].map((v) => (v ? human(v) : "—")).join(" · ")
+              : "Not assessed",
+          ],
+          [
+            "Effectiveness check",
+            n.effectivenessStatus === "PENDING" ? `Pending — due ${fmtDate(n.effectivenessDueAt)}` : n.effectivenessStatus ? `${human(n.effectivenessStatus)} — ${n.effectivenessByName ?? ""} ${fmtDate(n.effectivenessAt)}: ${n.effectivenessNotes ?? ""}` : "Not applicable (NCR not closed)",
+          ],
         ]);
         if (n.actions.length) table([{ header: "Action", width: 1 }, { header: "Type", width: 1.2 }, { header: "Description", width: 4 }, { header: "Owner", width: 1.4 }, { header: "Due", width: 1.1 }, { header: "Status", width: 1.2 }], n.actions.map((a) => [a.code, human(a.type), a.description, a.ownerName ?? "—", fmtDate(a.dueDate), human(a.status)]), { stateCol: 5 });
       }

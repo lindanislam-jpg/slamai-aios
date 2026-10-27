@@ -17,9 +17,10 @@ import { materialFlags } from "@/lib/services/materials";
 import { getSetting } from "@/lib/settings";
 import { createUnitAction, updateProjectAction, updateUnitAction } from "../actions";
 import { projectFieldDefs, unitFieldDefs } from "../fields";
+import { ItpTab } from "./ItpTab";
 import { ReportGenerator } from "./ReportGenerator";
 
-const TABS = ["overview", "timeline", "photos", "materials", "fabrication", "welding", "inspections", "ncrs", "documents", "release", "reports"] as const;
+const TABS = ["overview", "timeline", "photos", "materials", "fabrication", "welding", "inspections", "ncrs", "documents", "itp", "release", "reports"] as const;
 
 export default async function ProjectDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<SP> }) {
   const actor = await requirePagePermission("records.view");
@@ -66,6 +67,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
           { key: "inspections", label: "Inspections", count: c.inspections },
           { key: "ncrs", label: "NCRs", count: c.ncrs },
           { key: "documents", label: "Documents", count: c.documents },
+          { key: "itp", label: "ITP" },
           { key: "release", label: "Final release" },
           { key: "reports", label: "Reports", count: c.reports },
         ]}
@@ -79,6 +81,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
       {tab === "welding" && <Welding projectId={id} />}
       {tab === "ncrs" && <Ncrs projectId={id} />}
       {tab === "documents" && <Documents projectId={id} />}
+      {tab === "itp" && <ItpTab actor={actor} projectId={id} />}
       {tab === "release" && <Release actor={actor} projectId={id} units={project.units} />}
       {tab === "reports" && <Reports actor={actor} projectId={id} units={project.units} />}
     </div>

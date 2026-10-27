@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ProjectImport } from "@/components/projects/ProjectImport";
 import { FileDown } from "lucide-react";
 import { ActionForm } from "@/components/ActionForm";
 import { Fields, FilterBar, FilterInput, FilterSelect } from "@/components/fields";
@@ -32,6 +33,14 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
             <ActionForm action={createProjectAction} submit="Create project">
               <Fields fields={projectFieldDefs(null, { withStatus: false })} />
             </ActionForm>
+          </div>
+        </details>
+      )}
+      {actor.permissions.has("project.write") && (
+        <details className="card mb-4" open={sp.import === "1"}>
+          <summary className="cursor-pointer px-5 py-3 text-sm font-semibold text-gold-300">Import projects from Excel</summary>
+          <div className="border-t border-ink-600/70 p-5">
+            <ProjectImport />
           </div>
         </details>
       )}

@@ -26,6 +26,9 @@ export interface ReleaseContext {
   welds: { weldRef: string; status: string }[];
   ndt: { code: string; result: string }[];
   photoCategories: string[];
+  /** ITP Hold Points for the project, or null when releasing a single
+   *  module/frame (hold points are checked at project release). */
+  holdPoints: { discipline: string; section?: string | null; itemNo: string; activity: string; status: string }[] | null;
 }
 
 /**
@@ -83,6 +86,13 @@ export function evaluateRelease(ctx: ReleaseContext, rules: ReleaseRules): Relea
   const missing = rules.requiredPhotoCategories.filter((c) => !have.has(c));
   add("evidence", "Required photographic evidence present", rules.requiredPhotoCategories.length > 0, missing.map((c) => `No photo in “${c}”`), "Required evidence categories present.", `${missing.length} evidence category(ies) missing.`);
 
+  if (ctx.holdPoints === null) {
+    checks.push({ key: "holdpoints", label: "ITP Hold Points signed", state: "NOT_REQUIRED", detail: "ITP Hold Points are checked when the whole project is released." });
+  } else {
+    const open = ctx.holdPoints.filter((h) => h.status === "OPEN");
+    add("holdpoints", "ITP Hold Points signed", rules.requireHoldPointsSigned, open.map((h) => `${h.discipline}${h.section ? ` / ${h.section}` : ""} item ${h.itemNo} — ${h.activity}`), ctx.holdPoints.length ? `${ctx.holdPoints.length} hold point(s) signed or not applicable.` : "No ITP hold points recorded for this project.", `${open.length} hold point(s) not signed.`);
+  }
+
   return checks;
 }
 
@@ -97,7 +107,10 @@ export async function loadReleaseContext(projectId: string, unitId?: string | nu
     db.ndtRecord.findMany({ where: scope, select: { code: true, result: true } }),
     db.photo.findMany({ where: { ...scope, deletedAt: null, reviewStatus: { not: "REJECTED" } }, select: { category: true }, distinct: ["category"] }),
   ]);
-  return { inspections, ncrs, materials, welds, ndt, photoCategories: photos.map((p) => p.category) };
+  const holdPoints = unitId
+    ? null
+    : (await db.controlPoint.findMany({ where: { plan: { projectId }, pointType: "H" }, select: { itemNo: true, section: true, activity: true, status: true, plan: { select: { discipline: true } } }, orderBy: { order: "asc" } })).map((h) => ({ discipline: h.plan.discipline, section: h.section, itemNo: h.itemNo, activity: h.activity, status: h.status }));
+  return { inspections, ncrs, materials, welds, ndt, photoCategories: photos.map((p) => p.category), holdPoints };
 }
 
 export async function releaseReadiness(actor: Actor, projectId: string, unitId?: string | null) {

@@ -10,7 +10,7 @@ import { jpeg, makeActor, resetDb } from "./helpers";
 
 beforeEach(resetDb);
 
-const ok: ReleaseContext = { inspections: [{ id: "i1", code: "INS-1", type: "FINAL", status: "ACCEPTED", result: "PASS", reinspectionOfId: null }], ncrs: [], materials: [], welds: [], ndt: [], photoCategories: ["Final inspection", "Completed module"] };
+const ok: ReleaseContext = { inspections: [{ id: "i1", code: "INS-1", type: "FINAL", status: "ACCEPTED", result: "PASS", reinspectionOfId: null }], ncrs: [], materials: [], welds: [], ndt: [], photoCategories: ["Final inspection", "Completed module"], holdPoints: [] };
 
 describe("release rules (pure)", () => {
   it("passes a complete record and fails each gap", () => {

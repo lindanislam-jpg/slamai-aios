@@ -135,6 +135,7 @@ model Project {
   updatedAt       DateTime      @updatedAt
 
   units       Unit[]
+  itpPlans    ItpPlan[]
   photos      Photo[]
   inspections Inspection[]
   welds       Weld[]
@@ -556,6 +557,26 @@ enum Priority {
   CRITICAL
 }
 
+/// Matches the severity used on the company NCR form (QC-NCR-001).
+enum NcrSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum ImpactLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum EffectivenessStatus {
+  PENDING
+  EFFECTIVE
+  NOT_EFFECTIVE
+}
+
 enum NcrStatus {
   OPEN
   CONTAINED
@@ -582,6 +603,26 @@ model Ncr {
   requirementRef     String?
   containment        String?
   priority           Priority   @default(MEDIUM)
+  severity           NcrSeverity?
+  department         String?
+  stageOfDetection   String?
+  detectedBy         String?
+  drawingRef         String?
+  contributingFactors String?
+  impactStructural   ImpactLevel?
+  impactSafety       ImpactLevel?
+  impactSchedule     ImpactLevel?
+  impactCustomer     ImpactLevel?
+  impactCost         ImpactLevel?
+  impactQms          ImpactLevel?
+  impactNotes        String?
+  /// Verification of effectiveness after closure (company form section 7).
+  effectivenessDueAt   DateTime?
+  effectivenessStatus  EffectivenessStatus?
+  effectivenessNotes   String?
+  effectivenessById    String?
+  effectivenessByName  String?
+  effectivenessAt      DateTime?
   rootCauseCategory  String?
   rootCauseMethod    String?
   rootCause          String?
@@ -892,4 +933,72 @@ model ReportJob {
   createdByName String?
   createdAt   DateTime  @default(now())
   completedAt DateTime?
+}
+
+// ───────────────────────────── Inspection & Test Plan ─────────────────────────────
+
+/// H = hold, W = witness, I = inspect, R = review, M = monitor, S = surveillance,
+/// A = accept — as defined on the company ITP (QF 6.14).
+enum ControlPointType {
+  H
+  W
+  I
+  R
+  M
+  S
+  A
+}
+
+enum ControlPointStatus {
+  OPEN
+  SIGNED
+  NOT_APPLICABLE
+}
+
+/// An ITP applied to one project (one discipline, e.g. Structural).
+model ItpPlan {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  discipline  String
+  documentRef String?
+  sourceFile  String?
+  isDemo      Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  points ControlPoint[]
+
+  @@unique([projectId, discipline])
+}
+
+model ControlPoint {
+  id                 String             @id @default(cuid())
+  planId             String
+  plan               ItpPlan            @relation(fields: [planId], references: [id], onDelete: Cascade)
+  order              Int
+  itemNo             String
+  section            String?
+  activity           String
+  acceptanceCriteria String?
+  method             String?
+  frequency          String?
+  extent             String?
+  responsibility     String?
+  signoffDocument    String?
+  verifyingDocument  String?
+  /// Control point for the manufacturer (AMM column). Client / third-party
+  /// points are kept as recorded on the ITP.
+  pointType          ControlPointType?
+  subPoint           String?
+  clientPoint        String?
+  thirdPartyPoint    String?
+  status             ControlPointStatus @default(OPEN)
+  signedById         String?
+  signedByName       String?
+  signedAt           DateTime?
+  evidence           String?
+  isDemo             Boolean            @default(false)
+
+  @@index([planId, status])
 }

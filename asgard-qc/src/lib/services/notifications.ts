@@ -16,6 +16,8 @@ export const NOTIFICATION_KINDS: Record<string, { label: string; audience: Permi
   CALIBRATION_DUE: { label: "Calibration due / expired", audience: "calibration.write" },
   AUDIT_ACTION_DUE: { label: "Audit findings due", audience: "audit.write" },
   AWAITING_RELEASE: { label: "Projects awaiting final release", audience: "release.approve" },
+  NCR_EFFECTIVENESS_DUE: { label: "NCR effectiveness checks due", audience: "ncr.close" },
+  HOLD_POINT_OPEN: { label: "ITP Hold Points open on projects awaiting release", audience: "release.approve" },
 };
 
 interface Condition {
@@ -66,6 +68,16 @@ export async function collectConditions(now = new Date()): Promise<Condition[]> 
     else if (due.getTime() - now.getTime() < t.calibrationDueSoonDays * DAY) out.push({ kind: "CALIBRATION_DUE", key: e.id, severity: "info", title: `${e.assetNo} calibration due ${due.toISOString().slice(0, 10)}`, href: `/documents?tab=calibration` });
   }
   for (const f of findings) out.push({ kind: "AUDIT_ACTION_DUE", key: f.id, severity: f.dueDate! < now ? "critical" : "warning", title: `Audit finding ${f.code} ${f.dueDate! < now ? "overdue" : "due soon"}`, href: `/audits/${f.auditId}` });
+  const effectiveness = await db.ncr.findMany({ where: { status: "CLOSED", effectivenessStatus: "PENDING", effectivenessDueAt: { lt: new Date(now.getTime() + t.ncrDueSoonDays * DAY) } }, select: { id: true, code: true, effectivenessDueAt: true } });
+  for (const n of effectiveness) out.push({ kind: "NCR_EFFECTIVENESS_DUE", key: n.id, severity: n.effectivenessDueAt! < now ? "warning" : "info", title: `${n.code} effectiveness check ${n.effectivenessDueAt! < now ? "overdue" : "due"}`, body: `Due ${n.effectivenessDueAt!.toISOString().slice(0, 10)}`, href: `/ncr/${n.id}` });
+  if (awaiting.length) {
+    const holds = await db.controlPoint.groupBy({ by: ["planId"], where: { pointType: "H", status: "OPEN", plan: { projectId: { in: awaiting.map((p) => p.id) } } }, _count: true });
+    const plans = await db.itpPlan.findMany({ where: { id: { in: holds.map((h) => h.planId) } }, select: { id: true, projectId: true } });
+    for (const p of awaiting) {
+      const n = holds.filter((h) => plans.find((pl) => pl.id === h.planId)?.projectId === p.id).reduce((s, h) => s + h._count, 0);
+      if (n) out.push({ kind: "HOLD_POINT_OPEN", key: p.id, severity: "warning", title: `${p.code}: ${n} ITP Hold Point(s) open`, body: "Release is blocked until signed", href: `/projects/${p.id}?tab=itp` });
+    }
+  }
   for (const p of awaiting) out.push({ kind: "AWAITING_RELEASE", key: p.id, severity: "info", title: `${p.code} awaiting final release`, body: p.name, href: `/release?projectId=${p.id}` });
 
   if (rules.requiredPhotoCategories.length && activeProjects.length) {
