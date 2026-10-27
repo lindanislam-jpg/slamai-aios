@@ -7,8 +7,8 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 *.log
 # Uploaded evidence and generated reports — never committed.
-storage/
-backups/
+/storage/
+/backups/
 test-results/
 
 # Netlify CLI link state
