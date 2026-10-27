@@ -15,7 +15,7 @@ if [ -n "$DATABASE_URL" ]; then
     photos=false
     if [ -n "${VERCEL:-}" ] && [ -n "${BLOB_READ_WRITE_TOKEN:-}" ]; then photos="${SEED_DEMO_PHOTOS:-true}"; fi
     SEED_DEMO_PHOTOS="$photos" npm run db:seed
-    if [ -n "${PROJECT_IMPORT_JSON:-}" ]; then
+    if [ -n "${PROJECT_IMPORT_ROWS:-}" ]; then
       npm run db:import-projects
     fi
     if [ "${PURGE_DEMO_DATA:-}" = "true" ]; then
