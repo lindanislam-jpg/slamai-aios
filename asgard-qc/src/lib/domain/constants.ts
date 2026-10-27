@@ -151,3 +151,28 @@ export function humanize(v: string | null | undefined): string {
   const s = v.replace(/_/g, " ").toLowerCase();
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/** Categories for files attached to a project (not controlled documents). */
+export const PROJECT_FILE_CATEGORIES = [
+  "Drawing",
+  "Specification",
+  "Purchase order / contract",
+  "Material certificate",
+  "Inspection / test report",
+  "Client correspondence",
+  "Method statement / procedure",
+  "Handover / QC pack",
+  "Other",
+] as const;
+
+/** File types that may be attached to a project, by extension. Files are always
+ *  served back as downloads (never rendered inline), so this list is about
+ *  keeping executables and scripts out, not about trusting content. */
+export const PROJECT_FILE_EXTENSIONS = [
+  "pdf", "doc", "docx", "xls", "xlsx", "xlsm", "csv", "ppt", "pptx", "txt", "rtf", "odt", "ods",
+  "jpg", "jpeg", "png", "heic", "tif", "tiff",
+  "dwg", "dxf", "step", "stp", "igs", "iges",
+  "zip", "msg", "eml",
+] as const;
+
+export const PROJECT_FILE_MAX_MB = 100;

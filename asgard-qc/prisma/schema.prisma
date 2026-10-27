@@ -147,6 +147,7 @@ model Project {
   ncrs        Ncr[]
   repairs     Repair[]
   documents   Document[]
+  files       ProjectFile[]
   releases    ReleaseRecord[]
   reports     ReportJob[]
 
@@ -179,6 +180,7 @@ model Unit {
   updatedAt   DateTime @updatedAt
 
   photos      Photo[]
+  files       ProjectFile[]
   inspections Inspection[]
   welds       Weld[]
   ncrs        Ncr[]
@@ -1003,4 +1005,33 @@ model ControlPoint {
   isDemo             Boolean            @default(false)
 
   @@index([planId, status])
+}
+
+/// Any file kept against a project (drawings, purchase orders, certificates,
+/// client correspondence, QC packs). Not a controlled document: no approval
+/// workflow. Removal is a recorded withdrawal; the stored bytes are kept.
+model ProjectFile {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId         String?
+  unit           Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  category       String
+  notes          String?
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  sha256         String
+  storageKey     String    @unique
+  uploadedAt     DateTime  @default(now())
+  uploadedById   String?
+  uploadedByName String?
+  removedAt      DateTime?
+  removedByName  String?
+  removeReason   String?
+  isDemo         Boolean   @default(false)
+
+  @@index([projectId, removedAt])
+  @@index([sha256])
 }

@@ -120,6 +120,7 @@ export async function purgeDemoData(actor: Actor) {
       tx.ndtRecord.count({ where: { projectId: { in: demoProjects }, isDemo: false } }),
       tx.coatingRecord.count({ where: { projectId: { in: demoProjects }, isDemo: false } }),
       tx.releaseRecord.count({ where: { projectId: { in: demoProjects }, isDemo: false } }),
+      tx.projectFile.count({ where: { projectId: { in: demoProjects }, isDemo: false } }),
       // Children that would be cascade-deleted with a demo parent.
       tx.correctiveAction.count({ where: { isDemo: false, OR: [{ ncr: { isDemo: true } }, { auditFinding: { isDemo: true } }] } }),
       tx.auditFinding.count({ where: { isDemo: false, audit: { isDemo: true } } }),

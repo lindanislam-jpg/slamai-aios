@@ -23,6 +23,7 @@ Legend: ✅ implemented and verified · ⚠️ implemented, limitation noted · 
 | Rework & repair (actual vs estimated cost kept separate) | ✅ | Tests + browser |
 | Final inspection & release gate, concession, revoke | ✅ | Tests + browser |
 | Audits (schedule, checklist, findings, CAPA, closure evidence) | ✅ | Browser |
+| Project files (multi-file upload up to 100 MB, categories, module link, duplicate check, download, withdraw with reason; direct browser→Vercel Blob upload on Vercel) | ✅ / ⚠️ | Tests (types, duplicates, permissions, cross-project keys, withdrawal) + browser upload/download on the local driver. The Vercel direct-upload path is verified only by build and type checks until used on the live site |
 | Documents (append-only revisions, second-person approval, supersede) & calibration status | ✅ | Tests + browser |
 | PDF reports — 7 types, from live records, revisions, DEMO watermark, missing-info list, blank approval block | ✅ | Tests (all types) + visual check of rendered pages |
 | Excel exports — 10 workbooks, About sheet, KPI workbook with formulas + data dictionary | ✅ | Tests + downloaded and opened |

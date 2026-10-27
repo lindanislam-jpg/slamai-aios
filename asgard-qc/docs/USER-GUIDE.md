@@ -81,6 +81,12 @@ The NCR follows the company NCR form (QC-NCR-001): severity (Minor / Major / Cri
 *Final Inspection & Release* shows every configured check for a project or a single frame: final inspection, unresolved inspections, open NCRs and actions, materials and certificates, welds, NDT, and required photo categories.
 Release is refused while a check fails. A Quality Manager can release under a **documented concession** (reference + justification), which is recorded and shown on reports. Releases can be revoked with a reason. The AI never releases anything.
 
+## Project files
+
+Project → **Files** keeps any file that belongs to the project: drawings, specifications, purchase orders, material certificates, test reports, client correspondence (.msg/.eml), method statements and handover/QC packs. Drag several files in at once, choose a category (and optionally the module/frame), add a note such as "Rev C issued for construction", and upload. Up to 100 MB per file; PDF, Office, images, CAD (DWG/DXF/STEP/IGES), ZIP and e-mail files are accepted. Each file gets a number (FL-000123), is fingerprinted so the same file can't be attached twice, and every upload and download is in the audit trail. Files always download; they are never opened inside the app.
+
+Inspectors can add files; only a Quality Manager or administrator can remove one, with a reason (e.g. "superseded by Rev D"). Removal hides the file from the project but keeps the record and the stored file. Use **Documents** instead when a document needs a revision history with second-person approval.
+
 ## Documents and calibration
 
 Every document has numbered revisions. A new revision never overwrites an old one; approving a revision supersedes the previous approved one, and the uploader cannot approve their own revision. Calibration records show *Current / Due soon / Expired / No record*.

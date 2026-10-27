@@ -27,6 +27,8 @@ export const PERMISSIONS = {
   "release.approve": "Authorise final release",
   "release.concession": "Release with a documented concession",
   "audit.write": "Plan audits and record findings",
+  "file.upload": "Attach files to projects",
+  "file.remove": "Withdraw files attached to projects",
   "document.write": "Register documents and upload revisions",
   "document.approve": "Approve document revisions",
   "calibration.write": "Manage equipment calibration",
@@ -41,7 +43,7 @@ export type Permission = keyof typeof PERMISSIONS;
 const ALL = Object.keys(PERMISSIONS) as Permission[];
 
 const INSPECTOR_BASE: Permission[] = [
-  "records.view", "photo.upload", "photo.edit", "photo.download",
+  "records.view", "photo.upload", "photo.edit", "photo.download", "file.upload",
   "inspection.write", "ncr.raise", "rework.write", "report.generate", "export.excel",
 ];
 

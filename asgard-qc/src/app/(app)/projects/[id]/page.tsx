@@ -7,20 +7,24 @@ import { Thumb } from "@/components/photos/Thumb";
 import { Badge, Card, DemoTag, Empty, fmtDate, fmtDateTime, History, KV, PageHeader, Tabs } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { DEFAULT_PRODUCTION_STAGES, humanize, INSPECTION_TYPE_LABELS } from "@/lib/domain/constants";
+import { DEFAULT_PRODUCTION_STAGES, humanize, INSPECTION_TYPE_LABELS, PROJECT_FILE_CATEGORIES, PROJECT_FILE_EXTENSIONS, PROJECT_FILE_MAX_MB } from "@/lib/domain/constants";
 import { str, type SP } from "@/lib/params";
 import { REPORT_TYPES } from "@/lib/report/data";
+import { listProjectFiles } from "@/lib/services/files";
 import { listPhotos, missingEvidence } from "@/lib/services/photos";
 import { getProject, projectTimeline } from "@/lib/services/projects";
 import { releaseReadiness } from "@/lib/services/release";
 import { materialFlags } from "@/lib/services/materials";
 import { getSetting } from "@/lib/settings";
+import { storage } from "@/lib/storage";
+import { FileUploader } from "@/components/projects/FileUploader";
+import { removeFileAction } from "./file-actions";
 import { createUnitAction, updateProjectAction, updateUnitAction } from "../actions";
 import { projectFieldDefs, unitFieldDefs } from "../fields";
 import { ItpTab } from "./ItpTab";
 import { ReportGenerator } from "./ReportGenerator";
 
-const TABS = ["overview", "timeline", "photos", "materials", "fabrication", "welding", "inspections", "ncrs", "documents", "itp", "release", "reports"] as const;
+const TABS = ["overview", "timeline", "photos", "materials", "fabrication", "welding", "inspections", "ncrs", "files", "documents", "itp", "release", "reports"] as const;
 
 export default async function ProjectDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<SP> }) {
   const actor = await requirePagePermission("records.view");
@@ -30,7 +34,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const project = await getProject(actor, id);
   const counts = await db.project.findUnique({
     where: { id },
-    select: { _count: { select: { photos: { where: { deletedAt: null } }, materials: true, inspections: true, welds: true, ncrs: true, documents: true, reports: true } } },
+    select: { _count: { select: { photos: { where: { deletedAt: null } }, materials: true, inspections: true, welds: true, ncrs: true, documents: true, reports: true, files: { where: { removedAt: null } } } } },
   });
   const c = counts!._count;
   const fabCount = await db.inspection.count({ where: { projectId: id, type: { in: ["FABRICATION", "DIMENSIONAL"] } } });
@@ -66,6 +70,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
           { key: "welding", label: "Welding", count: c.welds },
           { key: "inspections", label: "Inspections", count: c.inspections },
           { key: "ncrs", label: "NCRs", count: c.ncrs },
+          { key: "files", label: "Files", count: c.files },
           { key: "documents", label: "Documents", count: c.documents },
           { key: "itp", label: "ITP" },
           { key: "release", label: "Final release" },
@@ -80,6 +85,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
       {tab === "inspections" && <InspectionList projectId={id} empty="No inspections recorded." newHref={`/inspections/new?projectId=${id}`} />}
       {tab === "welding" && <Welding projectId={id} />}
       {tab === "ncrs" && <Ncrs projectId={id} />}
+      {tab === "files" && <Files actor={actor} projectId={id} units={project.units} />}
       {tab === "documents" && <Documents projectId={id} />}
       {tab === "itp" && <ItpTab actor={actor} projectId={id} />}
       {tab === "release" && <Release actor={actor} projectId={id} units={project.units} />}
@@ -348,6 +354,68 @@ async function Ncrs({ projectId }: { projectId: string }) {
         </div>
       )}
     </Card>
+  );
+}
+
+const fileSize = (n: number) => (n > 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+async function Files({ actor, projectId, units }: { actor: Actor; projectId: string; units: Project["units"] }) {
+  const rows = await listProjectFiles(actor, projectId);
+  const canUpload = actor.permissions.has("file.upload");
+  const canRemove = actor.permissions.has("file.remove");
+  return (
+    <div className="space-y-4">
+      {canUpload && (
+        <Card title="Add files">
+          <FileUploader
+            projectId={projectId}
+            units={units.map((u) => ({ value: u.id, label: u.ref }))}
+            categories={PROJECT_FILE_CATEGORIES}
+            extensions={PROJECT_FILE_EXTENSIONS}
+            maxFileMb={PROJECT_FILE_MAX_MB}
+            direct={storage().driver === "vercel-blob"}
+          />
+        </Card>
+      )}
+      {!rows.length ? (
+        <Empty title="No files attached to this project">Drawings, purchase orders, certificates, reports and correspondence can be kept here. Controlled documents that need approval belong in <Link className="link" href="/documents">Documents</Link>.</Empty>
+      ) : (
+        <Card pad={false}>
+          <div className="table-wrap border-0">
+            <table className="tbl">
+              <thead><tr><th>File</th><th>Category</th><th>Module / frame</th><th>Size</th><th>Uploaded</th><th>Notes</th>{canRemove && <th />}</tr></thead>
+              <tbody>
+                {rows.map((f) => (
+                  <tr key={f.id}>
+                    <td>
+                      <Link prefetch={false} className="link" href={`/api/files/project-file/${f.id}`}>{f.fileName}</Link>
+                      <div className="text-[11px] text-ink-400">{f.code}</div>
+                    </td>
+                    <td>{f.category}</td>
+                    <td>{f.unit?.ref ?? "—"}</td>
+                    <td className="whitespace-nowrap">{fileSize(f.sizeBytes)}</td>
+                    <td className="whitespace-nowrap">{fmtDateTime(f.uploadedAt)}<div className="text-[11px] text-ink-400">{f.uploadedByName}</div></td>
+                    <td className="max-w-xs text-xs text-ink-300">{f.notes}</td>
+                    {canRemove && (
+                      <td>
+                        <details>
+                          <summary className="cursor-pointer text-xs text-bad-400">Remove…</summary>
+                          <div className="mt-2 w-56">
+                            <ActionForm action={removeFileAction.bind(null, projectId, f.id)} submit="Remove file" submitClass="btn-danger" confirm={`Remove ${f.fileName} from this project? The record is kept in the audit trail.`}>
+                              <input name="reason" required className="input" placeholder="Reason, e.g. superseded by Rev D" aria-label="Reason for removal" />
+                            </ActionForm>
+                          </div>
+                        </details>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
 
