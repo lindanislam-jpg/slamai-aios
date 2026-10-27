@@ -4,6 +4,12 @@ const nextConfig: NextConfig = {
   // Native/server-only packages must not be bundled into route handlers.
   serverExternalPackages: ["sharp", "pdfkit", "exceljs", "@prisma/client"],
   poweredByHeader: false,
+  // pdfkit loads its font metrics from disk at runtime; make sure serverless
+  // bundles include them.
+  outputFileTracingIncludes: {
+    "/api/reports": ["./node_modules/pdfkit/js/data/**/*"],
+    "/api/reports/[id]": ["./node_modules/pdfkit/js/data/**/*"],
+  },
   experimental: {
     // Photo batches go through route handlers, not server actions; this only
     // covers form posts.

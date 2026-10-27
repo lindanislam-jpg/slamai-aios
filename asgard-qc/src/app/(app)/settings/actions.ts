@@ -1,5 +1,6 @@
 "use server";
 
+import { addDemoPhotos } from "@/lib/demo/photos";
 import type { Role } from "@prisma/client";
 import { run, type ActionState } from "@/lib/action";
 import { ValidationError } from "@/lib/errors";
@@ -114,4 +115,12 @@ export async function purgeDemoAction(_: ActionState, fd: FormData) {
     const r = await purgeDemoData(actor);
     return `Demo data removed: ${Object.entries(r).map(([k, v]) => `${k} ${v}`).join(", ")}.`;
   }, ["/settings"]);
+}
+
+export async function loadDemoPhotosAction(_: ActionState, _fd: FormData) {
+  void _fd;
+  return run(async (actor) => {
+    const r = await addDemoPhotos(actor);
+    return r.skipped ? "Demo photos already present." : `${r.created} demo photo(s) added.`;
+  }, ["/settings", "/photos"]);
 }

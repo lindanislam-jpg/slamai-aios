@@ -13,7 +13,7 @@ import { PERMISSIONS, permissionsFor, ROLE_LABELS, type Permission } from "@/lib
 import { demoCounts } from "@/lib/services/settings";
 import { getSetting } from "@/lib/settings";
 import {
-  approveTemplateAction, purgeDemoAction, resetPermissions, saveBranding, saveLimits, savePermissions, saveReleaseRules, saveTemplateAction, saveVocabulary,
+  approveTemplateAction, loadDemoPhotosAction, purgeDemoAction, resetPermissions, saveBranding, saveLimits, savePermissions, saveReleaseRules, saveTemplateAction, saveVocabulary,
 } from "./actions";
 
 export const metadata = { title: "Settings & Integrations" };
@@ -281,6 +281,7 @@ async function IntegrationsTab() {
 async function DataTab() {
   const counts = await demoCounts();
   const totalDemo = counts.reduce((s, c) => s + c.demo, 0);
+  const demoPhotosMissing = (await db.project.count({ where: { isDemo: true } })) > 0 && (await db.photo.count({ where: { isDemo: true } })) === 0;
   return (
     <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
       <Card title="Records by source" pad={false}>
@@ -293,6 +294,14 @@ async function DataTab() {
           </tbody>
         </table>
       </Card>
+      <div className="space-y-4">
+      {demoPhotosMissing && (
+        <Card title="Demo photographs">
+          <ActionForm action={loadDemoPhotosAction} submit="Load demo photos" submitClass="btn-secondary">
+            <p className="text-sm text-ink-200">The demo projects have no photos yet (hosted builds cannot create files). This adds 11 generated placeholder images, clearly marked DEMO, to the demo projects.</p>
+          </ActionForm>
+        </Card>
+      )}
       <Card title="Remove demo data">
         {totalDemo === 0 ? (
           <p className="text-sm text-ink-300">No demo records are present.</p>
@@ -303,6 +312,7 @@ async function DataTab() {
           </ActionForm>
         )}
       </Card>
+      </div>
     </div>
   );
 }

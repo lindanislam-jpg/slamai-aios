@@ -14,7 +14,6 @@
  * Runs through the same services the app uses, so it also exercises them.
  */
 import { PrismaClient, type Role } from "@prisma/client";
-import sharp from "sharp";
 import { hashPassword } from "../src/lib/session";
 import { permissionsFor, type Actor } from "../src/lib/permissions";
 import { createProject, createUnit, updateProject } from "../src/lib/services/projects";
@@ -25,7 +24,7 @@ import { addAction, closeNcr, moveNcr, raiseNcr, updateActionStatus, updateNcr }
 import { saveCoating, saveNdt } from "../src/lib/services/ndt-coating";
 import { addFinding, saveAudit } from "../src/lib/services/audits";
 import { addCalibration, addRevision, approveRevision, createDocument, createEquipment } from "../src/lib/services/documents";
-import { uploadPhotos } from "../src/lib/services/photos";
+import { addDemoPhotos } from "../src/lib/demo/photos";
 import { runNotificationScan } from "../src/lib/services/notifications";
 
 const db = new PrismaClient();
@@ -43,23 +42,6 @@ async function ensureUser(email: string, name: string, role: Role, password: str
 }
 
 const actorOf = (u: { id: string; name: string; email: string; role: Role }): Actor => ({ ...u, permissions: permissionsFor(u.role) });
-
-async function demoPhoto(label: string, hue: number, takenAt: Date | null) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},25%,32%)"/><stop offset="1" stop-color="hsl(${hue + 30},30%,14%)"/></linearGradient></defs>
-    <rect width="1200" height="900" fill="url(#g)"/>
-    <g stroke="hsl(${hue},20%,55%)" stroke-width="18" fill="none" opacity="0.55"><path d="M120 760 L600 160 L1080 760"/><path d="M300 760 L600 400 L900 760"/><line x1="120" y1="760" x2="1080" y2="760"/></g>
-    <text x="60" y="110" font-family="sans-serif" font-size="64" font-weight="700" fill="#e6c77f">DEMO PHOTO</text>
-    <text x="60" y="180" font-family="sans-serif" font-size="40" fill="#ffffff">${label.replace(/&/g, "&amp;")}</text>
-    <text x="60" y="850" font-family="sans-serif" font-size="28" fill="#c9d3de">Synthetic placeholder — not a factory photograph</text>
-  </svg>`;
-  let img = sharp(Buffer.from(svg)).jpeg({ quality: 82 });
-  if (takenAt) {
-    const s = takenAt.toISOString().slice(0, 19).replace("T", " ").replace(/-/g, ":");
-    img = img.withExif({ IFD2: { DateTimeOriginal: s } });
-  }
-  return img.toBuffer();
-}
 
 async function main() {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
@@ -263,42 +245,6 @@ async function main() {
   const dft = await createEquipment(QM, { assetNo: "DEMO-DFT-01", description: "Demo DFT gauge", location: "Paint shop", intervalDays: 180 });
   await addCalibration(QM, dft.id, { calibratedAt: ago(160), dueAt: ago(-20), certificateRef: "DEMO-CAL-1120", provider: "Demo Calibration Lab", result: "Pass" });
 
-  // ── Photos (generated placeholders) ──
-  const photoPlan: { label: string; category: string; stage: string; unit?: string; days: number | null; weld?: number; ncr?: string; repairPhase?: "BEFORE" | "AFTER"; material?: number; project?: string }[] = [
-    { label: "Project kick-off, bay 2", category: "Project commencement", stage: "Project commencement", days: 47 },
-    { label: "RHS delivery, heat DEMO-H-77423", category: "Steel identification & heat numbers", stage: "Incoming materials", days: 45, material: 0 },
-    { label: "Plate delivery", category: "Incoming materials", stage: "Incoming materials", days: null, material: 1 },
-    { label: "Saw cutting RHS", category: "Cutting & preparation", stage: "Cutting & preparation", unit: "F-1041", days: 38 },
-    { label: "Frame F-1042 on jig", category: "Frame assembly", stage: "Frame assembly", unit: "F-1042", days: 31 },
-    { label: "Welding F-1043 base", category: "Welding in progress", stage: "Welding", unit: "F-1043", days: 27 },
-    { label: "Weld F-1042-W2 undercut (before)", category: "Repair & rework — before", stage: "Welding", unit: "F-1042", days: 21, weld: 4, ncr: "n1", repairPhase: "BEFORE" },
-    { label: "Weld F-1041-W2 visual", category: "Weld visual inspection", stage: "Welding", unit: "F-1041", days: 19, weld: 1 },
-    { label: "Flat bar stencil mismatch", category: "Steel identification & heat numbers", stage: "Incoming materials", days: 9, material: 3 },
-    { label: "Skid final inspection", category: "Final inspection", stage: "Final inspection", days: 2, project: "p2" },
-    { label: "Skid coated", category: "Painting & coating", stage: "Painting & coating", days: 9, project: "p2" },
-  ];
-  const repairForPhotos = await db.repair.findFirst({ where: { weldId: welds[4].id } });
-  for (const [i, ph] of photoPlan.entries()) {
-    const projectId = ph.project === "p2" ? p2.id : p1.id;
-    const unitId = ph.project === "p2" ? skid.id : ph.unit ? frames1.find((f) => f.ref === ph.unit)?.id : undefined;
-    const buf = await demoPhoto(ph.label, (i * 37) % 360, ph.days == null ? null : ago(ph.days, 10));
-    const [res] = await uploadPhotos(i % 2 ? QC : WI, projectId, [{ name: `demo-${i + 1}.jpg`, data: buf }], {
-      category: ph.category,
-      stage: ph.stage,
-      unitId,
-      caption: `${ph.label} (demo)`,
-      weldId: ph.weld != null ? welds[ph.weld].id : undefined,
-      weldRef: ph.weld != null ? welds[ph.weld].weldRef : undefined,
-      ncrId: ph.ncr === "n1" ? n1.id : undefined,
-      repairId: ph.repairPhase ? repairForPhotos?.id : undefined,
-      reworkPhase: ph.repairPhase,
-      materialId: ph.material != null ? matRows[ph.material].id : undefined,
-      heatNumber: ph.material != null ? matRows[ph.material].heatNumber ?? undefined : undefined,
-      tags: "demo",
-    });
-    if (!res.ok) console.warn("photo failed", res);
-  }
-
   // Mark everything created during this run as demo data.
   const since = { gte: started };
   await db.$transaction([
@@ -321,6 +267,12 @@ async function main() {
     db.calibrationRecord.updateMany({ where: { createdAt: since }, data: { isDemo: true } }),
     db.releaseRecord.updateMany({ where: { releasedAt: since }, data: { isDemo: true } }),
   ]);
+  // Hosted builds cannot write to file storage; there the photos are added
+  // afterwards from Settings → Data.
+  if (process.env.SEED_DEMO_PHOTOS !== "false") {
+    const photos = await addDemoPhotos(A);
+    console.log(`Demo photos: ${photos.created}`);
+  }
   const scan = await runNotificationScan();
   console.log(`Demo data created. Notifications: ${scan.conditions} conditions.`);
   if (!users) console.log("DEMO_USER_PASSWORD not set — demo role accounts were not created.");
