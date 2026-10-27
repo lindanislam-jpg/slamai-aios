@@ -1,7 +1,7 @@
 # Netlify build for the ASGARD Quality Command Centre (see docs/DEPLOYMENT.md).
 # Secrets (ADMIN_PASSWORD etc.) are set in the Netlify UI/CLI, never here.
 [build]
-  command = "bash scripts/netlify-build.sh"
+  command = "bash scripts/deploy-build.sh"
   publish = ".next"
 
 [build.environment]

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Role } from "@prisma/client";
 import { ActionForm } from "@/components/ActionForm";
 import { Fields } from "@/components/fields";
+import { storage } from "@/lib/storage";
 import { Badge, Card, Empty, fmtDateTime, KV, PageHeader, Tabs } from "@/components/ui";
 import { aiStatus } from "@/lib/ai/vision";
 import { requirePagePermission } from "@/lib/auth";
@@ -251,7 +252,7 @@ async function IntegrationsTab() {
   } catch {
     dbStatus = "Not reachable";
   }
-  const driver = (process.env.STORAGE_DRIVER ?? "local").toLowerCase();
+  const driver = storage().driver;
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <Card title="External QMS / document system">
@@ -264,8 +265,8 @@ async function IntegrationsTab() {
       <Card title="File storage">
         <KV
           items={[
-            ["Driver", driver === "s3" ? "S3-compatible object storage" : "Local disk (server)"],
-            ["Location", driver === "s3" ? `Bucket ${process.env.S3_BUCKET ?? "(not set)"}${process.env.S3_ENDPOINT ? " at custom endpoint" : ""}` : process.env.STORAGE_DIR ?? "./storage"],
+            ["Driver", { s3: "S3-compatible object storage", "netlify-blobs": "Netlify Blobs (private)", "vercel-blob": "Vercel Blob (private)" }[driver] ?? "Local disk (server)"],
+            ["Location", driver === "s3" ? `Bucket ${process.env.S3_BUCKET ?? "(not set)"}${process.env.S3_ENDPOINT ? " at custom endpoint" : ""}` : driver === "local" ? process.env.STORAGE_DIR ?? "./storage" : "Managed by the hosting platform"],
             ["Access", "Private. Files are served only to signed-in users through permission-checked routes."],
           ]}
         />

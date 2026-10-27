@@ -26,8 +26,16 @@ Schedule `npm run notifications:run` every 15 minutes (reminders also refresh at
 |---|---|---|
 | **On-premises server / VM** (Windows or Linux) behind the company reverse proxy (IIS/nginx) with TLS | Best fit for factory evidence and internal use | Local storage driver; data stays on site; IT controls backup. Run with a process manager (pm2, NSSM, systemd). |
 | **Docker container** + managed Postgres | Good | Mount `STORAGE_DIR` as a persistent volume. |
-| **Vercel / serverless** | Not recommended as-is | No persistent disk → must use S3 storage; large photo batches and PDF generation can hit function time/size limits. |
+| **Vercel** (preview / demo) | Good for a hosted preview | See *Vercel* below. Private Vercel Blob storage and Neon Postgres. Very large photo batches and PDF packs can hit function time limits. |
+| **Netlify** (preview / demo) | Good for a hosted preview | `netlify.toml` included; Netlify DB + private Netlify Blobs selected automatically. |
 | **Azure App Service / AWS** with managed Postgres + blob/S3 | Good for cloud | Use S3 driver (Azure Blob needs an S3-compatible gateway or a new driver). |
+
+### Vercel
+
+1. Vercel → **Add New → Project → Import** the Git repository. Set **Root Directory** to `asgard-qc` (the framework and build command come from `vercel.json`).
+2. In the project's **Storage** tab, connect a **Neon** Postgres database (sets `DATABASE_URL` / `DATABASE_URL_UNPOOLED`) and a **Blob** store (sets `BLOB_READ_WRITE_TOKEN`; files are stored with private access).
+3. **Settings → Environment Variables** (mark as sensitive): `ADMIN_EMAIL`, `ADMIN_PASSWORD`; for a demo also `SEED_DEMO_DATA=true` and `DEMO_USER_PASSWORD`; optionally `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for AI photo review.
+4. **Redeploy**. The build applies migrations, creates the admin and (if asked) demo data with demo photos, then builds. Branches other than the production branch get preview URLs.
 
 Approvals you will need: IT (hosting, TLS, network access from the factory floor/Wi-Fi, backups), Information security / data owner (storage of factory photos and customer references, use of any AI service), Quality Manager (release rules, required evidence categories, checklist templates and acceptance criteria, role permissions).
 
