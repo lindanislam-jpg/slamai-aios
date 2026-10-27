@@ -15,6 +15,10 @@ if [ -n "$DATABASE_URL" ]; then
     photos=false
     if [ -n "${VERCEL:-}" ] && [ -n "${BLOB_READ_WRITE_TOKEN:-}" ]; then photos="${SEED_DEMO_PHOTOS:-true}"; fi
     SEED_DEMO_PHOTOS="$photos" npm run db:seed
+    if [ "${PURGE_DEMO_DATA:-}" = "true" ]; then
+      # Removes only records flagged as demo; refuses if real records depend on them.
+      npm run db:purge-demo -- --yes
+    fi
   else
     echo "ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping first-admin seed."
   fi

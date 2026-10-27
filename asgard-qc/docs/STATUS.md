@@ -30,7 +30,7 @@ Legend: ✅ implemented and verified · ⚠️ implemented, limitation noted · 
 | Auth, roles, configurable permissions matrix, lockout, session revocation | ✅ | Tests + browser as several roles |
 | Audit trail (every change, before/after) + Activity log page | ✅ | Tests + browser |
 | In-app notifications with de-duplication, preferences, scheduled script | ✅ | Tests |
-| Demo data clearly labelled; purge tool | ⚠️ | Seeding verified; purge reviewed and typechecked, not run against the dev database |
+| Demo data clearly labelled; purge tool | ✅ | Seed then purge run on a fresh database: all demo records and their files removed, admin kept |
 | Backup & restore script | ✅ | Backup restored into a fresh database; counts and files matched |
 | CI (typecheck, lint, tests on Postgres, build) | ⚠️ | Workflow written; runs on GitHub on push/PR |
 

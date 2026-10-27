@@ -36,6 +36,7 @@ Schedule `npm run notifications:run` every 15 minutes (reminders also refresh at
 2. In the project's **Storage** tab, connect a **Neon** Postgres database (sets `DATABASE_URL` / `DATABASE_URL_UNPOOLED`) and a **Blob** store (sets `BLOB_READ_WRITE_TOKEN`; files are stored with private access).
 3. **Settings → Environment Variables** (mark as sensitive): `ADMIN_EMAIL`, `ADMIN_PASSWORD`; for a demo also `SEED_DEMO_DATA=true` and `DEMO_USER_PASSWORD`; optionally `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for AI photo review.
 4. **Redeploy**. The build applies migrations, creates the admin and (if asked) demo data with demo photos, then builds. Branches other than the production branch get preview URLs.
+5. To remove demo data from a hosted database without signing in, set `SEED_DEMO_DATA=false` and `PURGE_DEMO_DATA=true` and redeploy (same as Settings → Data → Purge demo data). Remove `PURGE_DEMO_DATA` afterwards.
 
 Approvals you will need: IT (hosting, TLS, network access from the factory floor/Wi-Fi, backups), Information security / data owner (storage of factory photos and customer references, use of any AI service), Quality Manager (release rules, required evidence categories, checklist templates and acceptance criteria, role permissions).
 
