@@ -18,7 +18,7 @@ if [ -n "$DATABASE_URL" ]; then
     if [ -n "${PROJECT_IMPORT_ROWS:-}" ]; then
       npm run db:import-projects
     fi
-    if [ -n "${PROJECT_STATUS_UPDATES:-}" ]; then
+    if [ -n "${PROJECT_STATUS_UPDATES:-}${PROJECT_FIELD_UPDATES:-}" ]; then
       npm run db:set-project-status
     fi
     if [ "${PURGE_DEMO_DATA:-}" = "true" ]; then

@@ -1,5 +1,7 @@
-/** One-off status changes during a hosted build.
+/** One-off project changes during a hosted build.
  *    PROJECT_STATUS_UPDATES  "AMM770=ACTIVE,AMM856=ACTIVE,..." (project number = status)
+ *    PROJECT_FIELD_UPDATES   "AMM973|customerRef=Cental|startDate=2026-10-20~AMM972|..."
+ *                            projects separated by "~", fields by "|" (see FIELDS).
  *  Each change goes through updateProject as the first administrator, so it is
  *  validated and written to the audit trail. Unknown numbers are reported, not created. */
 import type { ProjectStatus } from "@prisma/client";
@@ -8,13 +10,43 @@ import { updateProject } from "../src/lib/services/projects";
 import { actorFromUser } from "../src/lib/session";
 
 const STATUSES = ["PLANNED", "ACTIVE", "ON_HOLD", "AWAITING_RELEASE", "CLOSED", "CANCELLED"];
+const FIELDS = ["customerRef", "startDate", "targetDate", "projectManager", "departments", "drawingRefs", "scope", "description", "requirements"];
+
+async function fieldUpdates(actor: Awaited<ReturnType<typeof actorFromUser>>, raw: string) {
+  const changed: string[] = [];
+  const problems: string[] = [];
+  for (const block of raw.split("~").map((s) => s.trim()).filter(Boolean)) {
+    const [codeRaw, ...pairs] = block.split("|");
+    const code = codeRaw.trim().toUpperCase();
+    const p = await db.project.findUnique({ where: { code }, select: { id: true } });
+    if (!p) {
+      problems.push(`${code}: not found`);
+      continue;
+    }
+    const data: Record<string, string> = {};
+    for (const pair of pairs) {
+      const i = pair.indexOf("=");
+      const key = pair.slice(0, i).trim();
+      if (i < 1 || !FIELDS.includes(key)) problems.push(`${code}: unknown field in "${pair.slice(0, 40)}"`);
+      else data[key] = pair.slice(i + 1).trim();
+    }
+    if (Object.keys(data).length) {
+      await updateProject(actor, p.id, data);
+      changed.push(`${code}: ${Object.keys(data).join(", ")}`);
+    }
+  }
+  console.log("Project field updates:", JSON.stringify({ changed, problems }));
+}
 
 async function main() {
   const raw = process.env.PROJECT_STATUS_UPDATES?.trim();
-  if (!raw) return console.log("PROJECT_STATUS_UPDATES not set — no status changes.");
+  const fields = process.env.PROJECT_FIELD_UPDATES?.trim();
+  if (!raw && !fields) return console.log("No project status or field updates.");
   const admin = await db.user.findFirst({ where: { role: "ADMIN", active: true }, orderBy: { createdAt: "asc" } });
   if (!admin) throw new Error("No active administrator found.");
   const actor = await actorFromUser(admin);
+  if (fields) await fieldUpdates(actor, fields);
+  if (!raw) return;
   const changed: string[] = [];
   const unchanged: string[] = [];
   const problems: string[] = [];
