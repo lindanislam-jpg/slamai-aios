@@ -48,7 +48,7 @@ export async function saveChecklistAction(id: string, _p: ActionState, fd: FormD
   }, [`/inspections/${id}`]);
 }
 
-export async function submitInspectionAction(id: string, _p: ActionState): Promise<ActionState> {
+export async function submitInspectionAction(id: string): Promise<ActionState> {
   return run(async (actor) => {
     const r = await submitInspection(actor, id);
     return `${r.code} submitted for review.`;

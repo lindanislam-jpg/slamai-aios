@@ -103,9 +103,11 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                                   <td><Badge value={r.status} label={r.status === "UNDER_REVIEW" ? "Under review — not verified" : undefined} /></td>
                                   <td className="whitespace-nowrap">{r.approvedAt ? `${fmtDate(r.approvedAt)} · ${r.approvedByName}` : "—"}</td>
                                   <td>
-                                    {r.status === "UNDER_REVIEW" && can("document.approve") && (
+                                    {r.status === "UNDER_REVIEW" && can("document.approve") && (r.uploadedById !== actor.id || actor.role === "ADMIN" ? (
                                       <ActionForm inline action={approveRevisionAction.bind(null, r.id)} submit="Approve" submitClass="btn-ok btn-sm" confirm={`Approve ${d.docNo} rev ${r.revision}? The current approved revision will be superseded.`} />
-                                    )}
+                                    ) : (
+                                      <span className="text-xs text-ink-300">Needs another approver</span>
+                                    ))}
                                   </td>
                                 </tr>
                               ))}
