@@ -43,7 +43,7 @@ The QF 6.42 Rev 2 Steel QC Structural Inspection workbook (from the Quality Depa
 
 - **NCR form (QC-NCR-001):** severity, department, stage of detection, detected by, drawing ref, contributing factors, six-area impact assessment, "can product be released", and the post-closure verification of effectiveness (reopens the NCR if not effective). In the PDF report and NCR Excel export. Tested.
 - **ITP (QF 6.14 Rev 3):** importer reads all five discipline sheets (333 control points, 32 Hold Points in Rev 3) into a project; sign-off by role; Hold Points block project release; ITP status in PDF reports and the release export; reminders for open hold points on projects awaiting release. Tested with a synthetic workbook and verified in the browser with the real QF 6.14.
-- **Project register import:** Excel import with preview, company project numbers (AMM764), units with parents. A pre-filled file built from the June 2026 QC updates (AMM764, AMM820, AMM819, AMM717, AMM602, AMM770 — 37 units) was imported into the local database; statuses are as of June and flagged for confirmation. Historic NCRs were not imported: their root cause and verification details are not in the available sources.
+- **Project register import:** Excel import with preview, company project numbers (AMM764), units with parents. A pre-filled file built from the company QC updates was imported into a local test database; statuses are as of June and flagged for confirmation. Historic NCRs were not imported: their root cause and verification details are not in the available sources.
 
 ## Limitations
 
