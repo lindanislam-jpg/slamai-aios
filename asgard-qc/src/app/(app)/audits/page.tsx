@@ -48,7 +48,7 @@ export default async function Audits() {
       <PageHeader
         title="Audit & Compliance Centre"
         subtitle="Audit schedule, checklists, findings, owners and verified closure."
-        actions={actor.permissions.has("export.excel") && <a className="btn-secondary" href="/api/export/audits"><FileDown className="h-4 w-4" /> Excel</a>}
+        actions={actor.permissions.has("export.excel") && <a className="btn-secondary" href={"/api/export/audits"} download><FileDown className="h-4 w-4" /> Excel</a>}
       />
       <div className="rounded-lg border border-gold-600/40 bg-gold-600/5 px-4 py-2 text-xs text-gold-300">
         Having an audit checklist here does not mean ASGARD complies with ISO 9001, EN 1090 or any other standard. Applicable standards, editions, scope and acceptance criteria must be verified by authorised personnel.
