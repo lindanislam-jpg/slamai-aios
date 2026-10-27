@@ -15,7 +15,9 @@ export const metadata = { title: "Project Register" };
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const actor = await requirePagePermission("records.view");
   const sp = await searchParams;
-  const status = enumParam(sp, "status", [...PROJECT_STATUSES, "RELEASED"] as const);
+  // Active projects by default; "ALL" shows every status.
+  const showAll = str(sp, "status") === "ALL";
+  const status = showAll ? null : (enumParam(sp, "status", [...PROJECT_STATUSES, "RELEASED"] as const) ?? "ACTIVE");
   const q = str(sp, "q");
   const projects = await listProjects(actor, { q, status: status as never });
 
@@ -46,11 +48,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       )}
       <FilterBar reset="/projects">
         <FilterInput name="q" label="Search" value={q} placeholder="ID, name, customer ref, PM" />
-        <FilterSelect name="status" label="Status" value={status} options={[...PROJECT_STATUSES, "RELEASED"].map((s) => ({ value: s, label: s.replace(/_/g, " ").toLowerCase() }))} />
+        <FilterSelect name="status" label="Status" value={showAll ? "ALL" : status === "ACTIVE" ? null : status} empty="Active" options={[{ value: "ALL", label: "All statuses" }, ...[...PROJECT_STATUSES, "RELEASED"].filter((s) => s !== "ACTIVE").map((s) => ({ value: s, label: s.replace(/_/g, " ").toLowerCase() }))]} />
       </FilterBar>
       <Card pad={false}>
         {projects.length === 0 ? (
-          <div className="p-5"><Empty title="No projects match">Create the first project to start recording quality evidence.</Empty></div>
+          <div className="p-5"><Empty title="No projects match">{status === "ACTIVE" && !str(sp, "q") ? <>No active projects. <Link className="link" href="/projects?status=ALL">Show all statuses</Link> and set the ones in production to Active.</> : "Create the first project to start recording quality evidence."}</Empty></div>
         ) : (
           <div className="table-wrap border-0">
             <table className="tbl">

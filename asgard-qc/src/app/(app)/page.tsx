@@ -9,6 +9,7 @@ import { computeKpis, KPI_DEFINITIONS, type DataScope } from "@/lib/kpi";
 import { projectOptions } from "@/lib/options";
 import { enumParam, PERIODS, periodRange, str, type SP } from "@/lib/params";
 import { materialFlags } from "@/lib/services/materials";
+import { listProjects } from "@/lib/services/projects";
 import { qmsStatus } from "@/lib/integrations/qms";
 
 export const metadata = { title: "Executive Quality Overview" };
@@ -26,18 +27,20 @@ function delta(cur: number | null, prev: number | null, kind: "pct" | "count", g
 }
 
 export default async function Overview({ searchParams }: { searchParams: Promise<SP> }) {
-  await requirePagePermission("records.view");
+  const actor = await requirePagePermission("records.view");
   const sp = await searchParams;
   const range = periodRange(sp);
   const projectId = str(sp, "projectId");
   const data = enumParam<DataScope>(sp, "data", ["all", "real", "demo"]) ?? "all";
   const span = range.to.getTime() - range.from.getTime();
-  const [k, prev, projects, materials] = await Promise.all([
+  const [k, prev, projects, materials, activeAll] = await Promise.all([
     computeKpis({ from: range.from, to: range.to, projectId, data }),
     computeKpis({ from: new Date(range.from.getTime() - span), to: range.from, projectId, data }),
     projectOptions(),
     db.material.findMany({ where: projectId ? { projectId } : {}, orderBy: { updatedAt: "desc" }, take: 5 }),
+    listProjects(actor, { status: "ACTIVE" }),
   ]);
+  const active = activeAll.filter((p) => data === "all" || p.isDemo === (data === "demo"));
   const qms = qmsStatus();
   const q = new URLSearchParams(Object.entries(sp).filter(([, v]) => typeof v === "string") as [string, string][]).toString();
   const d = (key: string) => KPI_DEFINITIONS[key].definition;
@@ -90,6 +93,31 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         <Stat label="Overdue inspections" value={k.inspections.overdue} tone={k.inspections.overdue ? "warn" : undefined} sub={`${k.ndt.outstanding} NDT reports outstanding`} href="/inspections?overdue=1" title={d("overdueInspections")} />
         <Stat label="Audit actions outstanding" value={k.audit.outstanding} sub={`${k.evidence.missing} evidence gaps`} href="/audits" title={d("outstandingAudit")} />
       </div>
+
+      <Card title={`Active projects (${active.length})`} actions={<Link href="/projects" className="btn-secondary btn-sm">Project register</Link>} pad={false}>
+        {active.length === 0 ? (
+          <div className="p-5"><Empty title="No active projects">Set a project&apos;s status to Active in the Project Register to track it here.</Empty></div>
+        ) : (
+          <div className="table-wrap border-0">
+            <table className="tbl">
+              <thead><tr><th>Project</th><th>Client</th><th>Target</th><th className="text-right">Frames</th><th className="text-right">Inspections</th><th className="text-right">Photos</th><th className="text-right">Open NCRs</th></tr></thead>
+              <tbody>
+                {active.map((p) => (
+                  <tr key={p.id}>
+                    <td><Link className="link font-medium" href={`/projects/${p.id}`}>{p.code}</Link> <span className="text-ink-200">{p.name}</span></td>
+                    <td>{p.customerRef ?? <span className="text-ink-400">—</span>}</td>
+                    <td className="whitespace-nowrap">{p.targetDate ? fmtDate(p.targetDate) : <span className="text-ink-400">—</span>}</td>
+                    <td className="text-right tabular-nums">{p._count.units}</td>
+                    <td className={`text-right tabular-nums ${p._count.inspections ? "" : "text-warn-400"}`} title={p._count.inspections ? undefined : "No inspections recorded yet"}>{p._count.inspections}</td>
+                    <td className="text-right tabular-nums">{p._count.photos}</td>
+                    <td className={`text-right tabular-nums ${p.ncrs.length ? "text-warn-400" : ""}`}>{p.ncrs.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr]">
         <Card title="Quality performance trend (weekly)">
