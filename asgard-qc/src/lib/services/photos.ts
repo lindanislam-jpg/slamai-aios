@@ -82,48 +82,88 @@ export async function uploadPhotos(actor: Actor, projectId: string, files: Uploa
   for (const file of files) {
     const name = file.name.slice(0, 200) || "photo";
     try {
-      const img = await processImage(file.data, limits.maxFileMb * 1_048_576);
-      const dupe = await db.photo.findFirst({ where: { projectId, sha256: img.sha256, deletedAt: null }, select: { code: true } });
-      if (dupe) throw new ValidationError(`Already uploaded to this project as ${dupe.code}.`);
-
-      const now = new Date();
-      const base = `photos/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${randomUUID()}`;
-      const storageKey = `${base}.${img.ext}`;
-      const thumbKey = img.thumbnail ? `${base}.thumb.jpg` : null;
-      await storage().put(storageKey, file.data, img.mimeType);
-      if (img.thumbnail && thumbKey) await storage().put(thumbKey, img.thumbnail, "image/jpeg");
-
-      const photo = await transaction(async (tx) => {
-        const code = await nextCode(tx, "EV", 6);
-        const row = await tx.photo.create({
-          data: {
-            ...meta,
-            tags: meta.tags ?? [],
-            code,
-            projectId,
-            takenAt: img.takenAt,
-            uploadedById: actor.id,
-            uploadedByName: actor.name,
-            storageKey,
-            thumbKey,
-            originalName: name,
-            mimeType: img.mimeType,
-            sizeBytes: file.data.length,
-            width: img.width,
-            height: img.height,
-            sha256: img.sha256,
-          },
-        });
-        await recordEvent(tx, actor, "photo.upload", "Photo", row.id, { summary: `${code} ${name}`, after: { ...meta, sha256: img.sha256 } });
-        return row;
-      });
-      results.push({ name, ok: true, id: photo.id, code: photo.code, takenAt: img.takenAt, previewAvailable: !!thumbKey });
+      results.push(await storePhoto(actor, projectId, meta, name, file.data, limits.maxFileMb, null));
     } catch (err) {
       results.push({ name, ok: false, error: err instanceof ValidationError ? err.message : "Could not store this file." });
       if (!(err instanceof ValidationError)) console.error("photo upload failed", err);
     }
   }
   return results;
+}
+
+/**
+ * Validate, fingerprint and record one photo. When `uploadedKey` is given the
+ * original is already in storage (browser-direct upload) and is kept where it
+ * is; otherwise it is written under a new key.
+ */
+async function storePhoto(actor: Actor, projectId: string, meta: z.output<typeof photoMetaInput>, name: string, data: Buffer, maxFileMb: number, uploadedKey: string | null): Promise<UploadResult> {
+  const img = await processImage(data, maxFileMb * 1_048_576);
+  const dupe = await db.photo.findFirst({ where: { projectId, sha256: img.sha256, deletedAt: null }, select: { code: true } });
+  if (dupe) throw new ValidationError(`Already uploaded to this project as ${dupe.code}.`);
+
+  const now = new Date();
+  const base = `photos/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${randomUUID()}`;
+  const storageKey = uploadedKey ?? `${base}.${img.ext}`;
+  const thumbKey = img.thumbnail ? `${base}.thumb.jpg` : null;
+  if (!uploadedKey) await storage().put(storageKey, data, img.mimeType);
+  if (img.thumbnail && thumbKey) await storage().put(thumbKey, img.thumbnail, "image/jpeg");
+
+  const photo = await transaction(async (tx) => {
+    const code = await nextCode(tx, "EV", 6);
+    const row = await tx.photo.create({
+      data: {
+        ...meta,
+        tags: meta.tags ?? [],
+        code,
+        projectId,
+        takenAt: img.takenAt,
+        uploadedById: actor.id,
+        uploadedByName: actor.name,
+        storageKey,
+        thumbKey,
+        originalName: name,
+        mimeType: img.mimeType,
+        sizeBytes: data.length,
+        width: img.width,
+        height: img.height,
+        sha256: img.sha256,
+      },
+    });
+    await recordEvent(tx, actor, "photo.upload", "Photo", row.id, { summary: `${code} ${name}`, after: { ...meta, sha256: img.sha256 } });
+    return row;
+  });
+  return { name, ok: true, id: photo.id, code: photo.code, takenAt: img.takenAt, previewAvailable: !!thumbKey };
+}
+
+export const PHOTO_EXTENSIONS = ["jpg", "jpeg", "png", "heic", "heif"] as const;
+
+/** Key for a browser-direct upload; tied to the project like project files. */
+export function photoUploadKeyBelongsTo(key: string, projectId: string) {
+  return new RegExp(`^photo-uploads/${projectId}/[0-9a-f-]{36}\\.(${PHOTO_EXTENSIONS.join("|")})$`).test(key);
+}
+
+/** Record a photo the browser uploaded straight to storage (Vercel Blob). */
+export async function registerUploadedPhoto(actor: Actor, projectId: string, key: string, fileName: string, rawMeta: PhotoMeta): Promise<UploadResult> {
+  assertCan(actor, "photo.upload");
+  const limits = await getSetting("uploadLimits");
+  const meta = photoMetaInput.parse(rawMeta);
+  found(await db.project.findUnique({ where: { id: projectId }, select: { id: true } }), "Project");
+  await assertLinksInProject(db, projectId, meta);
+  if (!photoUploadKeyBelongsTo(key, projectId)) throw new ValidationError("Upload does not belong to this project.");
+  if (await db.photo.findFirst({ where: { storageKey: key }, select: { id: true } })) throw new ValidationError("This upload is already recorded.");
+  let data: Buffer;
+  try {
+    data = await storage().get(key);
+  } catch {
+    throw new ValidationError("Uploaded photo not found. Try again.");
+  }
+  try {
+    return await storePhoto(actor, projectId, meta, fileName.slice(0, 200) || "photo", data, limits.maxFileMb, key);
+  } catch (err) {
+    // Not recorded (not an image, duplicate, too large): the stray upload is not evidence.
+    await storage().remove(key).catch(() => undefined);
+    throw err;
+  }
 }
 
 export interface PhotoFilter {

@@ -1,5 +1,6 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import clsx from "clsx";
 import { Camera, CheckCircle2, ImagePlus, Upload, XCircle } from "lucide-react";
 import Link from "next/link";
@@ -17,6 +18,8 @@ interface Props {
   maxFileMb: number;
   maxFiles: number;
   defaults: Record<string, string | undefined>;
+  /** Upload each photo straight from the browser to Vercel Blob, then register it. */
+  direct?: boolean;
 }
 
 interface Pending {
@@ -37,7 +40,7 @@ function isAllowed(f: File) {
   return /\.(jpe?g|png|heic|heif)$/.test(n) || ["image/jpeg", "image/png", "image/heic", "image/heif"].includes(f.type);
 }
 
-export function PhotoUploader({ projects, units, categories, stages, inspectionTypes, maxFileMb, maxFiles, defaults }: Props) {
+export function PhotoUploader({ projects, units, categories, stages, inspectionTypes, maxFileMb, maxFiles, defaults, direct = false }: Props) {
   const router = useRouter();
   const [projectId, setProjectId] = useState(defaults.projectId ?? "");
   const [files, setFiles] = useState<Pending[]>([]);
@@ -88,7 +91,27 @@ export function PhotoUploader({ projects, units, categories, stages, inspectionT
     setBusy(true);
     const all: Result[] = [];
     try {
-      for (let i = 0; i < valid.length; i += BATCH) {
+      if (direct) {
+        const fields: Record<string, string> = {};
+        for (const [k, v] of meta.entries()) if (typeof v === "string" && v !== "") fields[k] = v;
+        for (const [i, p] of valid.entries()) {
+          setProgress(`Uploading ${i + 1} of ${valid.length}…`);
+          try {
+            const found = /\.([a-z0-9]{1,5})$/i.exec(p.file.name)?.[1].toLowerCase() ?? "";
+            const ext = ["jpg", "jpeg", "png", "heic", "heif"].includes(found) ? found : "jpg";
+            const key = `photo-uploads/${projectId}/${crypto.randomUUID()}.${ext}`;
+            await upload(key, p.file, { access: "private", handleUploadUrl: "/api/photos/blob", multipart: p.file.size > 8 * 1_048_576 });
+            const res = await fetch("/api/photos/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...fields, projectId, key, fileName: p.file.name }) });
+            const body = await res.json().catch(() => ({ error: `Upload failed (${res.status})` }));
+            all.push(res.ok ? (body.result as Result) : { name: p.file.name, ok: false, error: body.error ?? "Upload failed" });
+            if (res.status === 401 || res.status === 403) break;
+          } catch (err) {
+            all.push({ name: p.file.name, ok: false, error: err instanceof Error ? err.message : "Upload failed" });
+          }
+          setResults([...all]);
+        }
+      }
+      for (let i = 0; !direct && i < valid.length; i += BATCH) {
         const batch = valid.slice(i, i + BATCH);
         setProgress(`Uploading ${Math.min(i + BATCH, valid.length)} of ${valid.length}…`);
         const fd = new FormData();

@@ -17,6 +17,7 @@
     "backup": "bash scripts/backup.sh",
     "test": "vitest run",
     "test:watch": "vitest",
+    "db:import-projects": "tsx --conditions=react-server scripts/import-projects-env.ts",
     "db:purge-demo": "tsx --conditions=react-server scripts/purge-demo.ts",
     "import:forms": "tsx --conditions=react-server scripts/import-forms.ts"
   },

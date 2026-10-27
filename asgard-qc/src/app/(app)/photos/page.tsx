@@ -3,6 +3,7 @@ import Link from "next/link";
 import { FilterBar, FilterInput, FilterSelect } from "@/components/fields";
 import { PhotoGrid } from "@/components/photos/PhotoGrid";
 import { PhotoUploader } from "@/components/photos/PhotoUploader";
+import { storage } from "@/lib/storage";
 import { Card, Empty, PageHeader } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -75,6 +76,7 @@ export default async function PhotosPage({ searchParams }: { searchParams: Promi
             maxFileMb={limits.maxFileMb}
             maxFiles={limits.maxFilesPerBatch}
             defaults={defaults}
+            direct={storage().driver === "vercel-blob"}
           />
         </Card>
       )}
