@@ -39,6 +39,7 @@ Sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 - [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) — QMS / SharePoint, AI vision, storage, email
 - [docs/KPI-DEFINITIONS.md](docs/KPI-DEFINITIONS.md) — how every dashboard number is calculated
 - [docs/STATUS.md](docs/STATUS.md) — what is complete, what needs company data, credentials or approval
+- [docs/PILOT.md](docs/PILOT.md) — two-week pilot plan with go / no-go criteria
 
 ## Architecture
 

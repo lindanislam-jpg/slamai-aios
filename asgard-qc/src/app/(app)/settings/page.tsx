@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Role } from "@prisma/client";
 import { ActionForm } from "@/components/ActionForm";
 import { Fields } from "@/components/fields";
@@ -192,7 +193,7 @@ async function TemplatesTab({ edit }: { edit: string | null }) {
     : "";
   return (
     <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-      <Card title="Checklist templates" pad={false}>
+      <Card title="Checklist templates" pad={false} actions={<Link className="btn-secondary btn-sm" href="/api/export/templates" prefetch={false}>Download QM review pack (Excel)</Link>}>
         {templates.length ? (
           <table className="tbl">
             <thead><tr><th>Name</th><th>Type</th><th>Items</th><th>Status</th><th></th></tr></thead>

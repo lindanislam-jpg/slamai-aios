@@ -24,7 +24,8 @@ const EXPORT_NOTES: Record<keyof typeof EXPORTS, string> = {
   rework: "Repairs and rework; cost marked ACTUAL or ESTIMATE, never inferred.",
   audits: "Audits and findings with open actions.",
   photos: "Photo evidence index with links, capture/upload times and SHA-256 fingerprints.",
-  release: "Release gate checklist for each active project and frame.",
+  release: "Release gate checklist for each active project and frame, plus ITP control points.",
+  templates: "Quality Manager review pack: every checklist template and check, release rules and role permissions, with decision columns.",
 };
 
 export default async function Analytics({ searchParams }: { searchParams: Promise<SP> }) {

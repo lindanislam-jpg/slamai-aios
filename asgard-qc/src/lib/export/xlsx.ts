@@ -7,6 +7,8 @@ import { assertCan } from "../services/base";
 import { materialFlags } from "../services/materials";
 import { releaseReadiness } from "../services/release";
 import { INSPECTION_TYPE_LABELS } from "../domain/constants";
+import { DEFAULT_ROLE_PERMISSIONS, PERMISSIONS, permissionsFor, ROLE_LABELS } from "../permissions";
+import { getSetting } from "../settings";
 
 export const EXPORTS = {
   kpis: "Executive KPIs (formula workbook)",
@@ -19,6 +21,7 @@ export const EXPORTS = {
   audits: "Audit readiness",
   photos: "Photo evidence index",
   release: "Final release checklist",
+  templates: "Checklist templates & release rules (QM review pack)",
 } as const;
 export type ExportKind = keyof typeof EXPORTS;
 
@@ -212,6 +215,37 @@ export async function buildExport(actor: Actor, kind: ExportKind, f: ExportFilte
         { header: "Project", key: "project" }, { header: "Scope", key: "scope" }, { header: "Check", key: "check", width: 44 }, { header: "State", key: "state" }, { header: "Detail", key: "detail", width: 30 },
         { header: "Outstanding items", key: "items", width: 60 }, { header: "Release record", key: "released", width: 24 }, { header: "Source", key: "source" },
       ], rows);
+      break;
+    }
+    case "templates": {
+      // Review pack: everything a Quality Manager approves before go-live,
+      // with blank Decision / Comment columns. Reading it changes nothing.
+      const templates = await db.checklistTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+      const approvers = new Map((await db.user.findMany({ select: { id: true, name: true } })).map((u) => [u.id, u.name]));
+      addSheet(wb, "Templates", [
+        { header: "Template", key: "name", width: 50 }, { header: "Inspection type", key: "type", width: 18 }, { header: "Source document", key: "documentRef", width: 18 },
+        { header: "Checks", key: "count" }, { header: "Status", key: "status", width: 16 }, { header: "Approved by", key: "approvedBy", width: 20 }, { header: "Approved", key: "approvedAt", date: true },
+        { header: "QM decision (Approve / Change)", key: "decision", width: 28 }, { header: "QM comments", key: "comments", width: 50 },
+      ], templates.map((t) => ({ name: t.name, type: INSPECTION_TYPE_LABELS[t.inspectionType], documentRef: t.documentRef, count: Array.isArray(t.items) ? t.items.length : 0, status: t.approved ? "Approved" : "Not approved", approvedBy: t.approvedById ? approvers.get(t.approvedById) : "", approvedAt: t.approvedAt })));
+      const items = templates.flatMap((t) => ((t.items as { description: string; requirement?: string | null; tolerance?: string | null; unit?: string | null; required?: boolean }[]) ?? []).map((i) => ({ template: t.name, ...i, required: i.required === false ? "No" : "Yes", criteria: i.requirement ? "Defined" : "Requires configuration" })));
+      addSheet(wb, "Checks", [
+        { header: "Template", key: "template", width: 40 }, { header: "Check", key: "description", width: 60 }, { header: "Requirement / criterion", key: "requirement", width: 60 },
+        { header: "Criteria status", key: "criteria", width: 20 }, { header: "Tolerance", key: "tolerance" }, { header: "Unit", key: "unit" }, { header: "Required", key: "required" },
+        { header: "QM comment / correction", key: "comment", width: 50 },
+      ], items);
+      const rules = await getSetting("releaseRules");
+      const RULE_LABELS: Record<string, string> = {
+        requireFinalInspectionPass: "Final inspection passed and accepted", requireNoUnresolvedInspections: "All inspections complete and resolved", requireNoOpenNcrs: "No open NCRs",
+        requireNoOpenActions: "All corrective actions verified", requireMaterialsAccepted: "Materials accepted", requireCertificatesVerified: "Material certificates verified",
+        requireWeldsAccepted: "All welds accepted", requireNdtComplete: "NDT / test reports received", requireHoldPointsSigned: "ITP Hold Points signed (project release)",
+        requiredPhotoCategories: "Required photo evidence categories", allowConcession: "Release under documented concession allowed",
+      };
+      addSheet(wb, "Release rules", [{ header: "Rule", key: "rule", width: 50 }, { header: "Current setting", key: "value", width: 50 }, { header: "QM decision", key: "decision", width: 24 }, { header: "QM comments", key: "comments", width: 50 }],
+        Object.entries(RULE_LABELS).map(([k, rule]) => { const v = (rules as unknown as Record<string, unknown>)[k]; return { rule, value: Array.isArray(v) ? v.join(", ") || "(none)" : v ? "Required / on" : "Off" }; }));
+      const overrides = await getSetting("rolePermissions");
+      const roles = Object.keys(DEFAULT_ROLE_PERMISSIONS) as (keyof typeof DEFAULT_ROLE_PERMISSIONS)[];
+      addSheet(wb, "Role permissions", [{ header: "Permission", key: "perm", width: 55 }, ...roles.map((r) => ({ header: ROLE_LABELS[r], key: r, width: 16 })), { header: "QM comments", key: "comments", width: 40 }],
+        (Object.keys(PERMISSIONS) as (keyof typeof PERMISSIONS)[]).map((perm) => ({ perm: PERMISSIONS[perm], ...Object.fromEntries(roles.map((r) => [r, permissionsFor(r, overrides).has(perm) ? "Yes" : ""])) })));
       break;
     }
     case "kpis": {
