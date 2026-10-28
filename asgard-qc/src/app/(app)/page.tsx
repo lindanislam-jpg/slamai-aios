@@ -33,13 +33,16 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   const projectId = str(sp, "projectId");
   const data = enumParam<DataScope>(sp, "data", ["all", "real", "demo"]) ?? "all";
   const span = range.to.getTime() - range.from.getTime();
-  const [k, prev, projects, materials, activeAll] = await Promise.all([
+  const [k, prev, projects, materials, activeAll, demoProjects] = await Promise.all([
     computeKpis({ from: range.from, to: range.to, projectId, data }),
     computeKpis({ from: new Date(range.from.getTime() - span), to: range.from, projectId, data }),
     projectOptions(),
     db.material.findMany({ where: projectId ? { projectId } : {}, orderBy: { updatedAt: "desc" }, take: 5 }),
     listProjects(actor, { status: "ACTIVE" }),
+    db.project.count({ where: { isDemo: true } }),
   ]);
+  // Only mention demo data while some exists (it is removed once a company goes live).
+  const hasDemo = demoProjects > 0;
   const active = activeAll.filter((p) => data === "all" || p.isDemo === (data === "demo"));
   const qms = qmsStatus();
   const q = new URLSearchParams(Object.entries(sp).filter(([, v]) => typeof v === "string") as [string, string][]).toString();
@@ -67,7 +70,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         <form method="get" className="flex flex-wrap items-end gap-2">
           <FilterSelect name="projectId" label="Project" options={projects} value={projectId} empty="All projects" />
           <FilterSelect name="period" label="Period" options={PERIODS.map((p) => ({ value: p.value, label: p.label }))} value={str(sp, "period") ?? "30"} empty="Last 30 days" />
-          <FilterSelect name="data" label="Data" options={[{ value: "real", label: "Real records only" }, { value: "demo", label: "Demo records only" }]} value={data === "all" ? null : data} empty="All records" />
+          {hasDemo && <FilterSelect name="data" label="Data" options={[{ value: "real", label: "Real records only" }, { value: "demo", label: "Demo records only" }]} value={data === "all" ? null : data} empty="All records" />}
           <button className="btn-secondary">Apply</button>
           <a href={`/api/export/kpis?${q}`} className="btn-ghost" title="Download KPI workbook with formulas"><FileDown className="h-4 w-4" />Excel</a>
         </form>
@@ -75,7 +78,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
 
       {!qms.connected && (
         <div className="rounded-lg border border-gold-600/40 bg-gold-600/5 px-4 py-2 text-xs text-gold-300">
-          Source: ASGARD Quality Command Centre database. External QMS: {qms.label}. Records marked DEMO are synthetic and must not be reported as company results.
+          Source: ASGARD Quality Command Centre database. External QMS: {qms.label}.{hasDemo && " Records marked DEMO are synthetic and must not be reported as company results."}
         </div>
       )}
 
