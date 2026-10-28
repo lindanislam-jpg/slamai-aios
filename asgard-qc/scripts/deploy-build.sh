@@ -28,6 +28,10 @@ if [ -n "$DATABASE_URL" ]; then
     if [ -n "${itp_targets// /}" ] && [ -n "${itp_rows// /}" ]; then
       npm run db:apply-itp
     fi
+    insp_rows="${INSPECTION_IMPORT_GZ:-}"
+    if [ -n "${insp_rows// /}" ]; then
+      npm run db:import-inspections
+    fi
     if [ "${PURGE_DEMO_DATA:-}" = "true" ]; then
       # Removes only records flagged as demo; refuses if real records depend on them.
       npm run db:purge-demo -- --yes
