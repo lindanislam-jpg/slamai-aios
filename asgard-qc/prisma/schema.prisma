@@ -1207,3 +1207,48 @@ model ProjectFile {
   @@index([projectId, removedAt])
   @@index([sha256])
 }
+
+// ───────────────────────── Scheduled system & quality review ─────────────────────────
+
+enum SystemRunStatus {
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  MISSED
+}
+
+/// One scheduled (09:00 / 12:00 / 18:00 Europe/Dublin) or manual review.
+/// `runKey` is unique so a slot can never run twice; a retry gets its own key.
+model SystemCheckRun {
+  id            String          @id @default(cuid())
+  code          String          @unique
+  runKey        String          @unique
+  kind          String
+  slotDate      String?
+  slotTime      String?
+  scheduledFor  DateTime?
+  status        SystemRunStatus @default(RUNNING)
+  /// Technical health only (HEALTHY / WARNING / CRITICAL / FAILED).
+  health        String?
+  /// Manufacturing quality attention level, kept separate from technical health.
+  qualityStatus String?
+  startedAt     DateTime        @default(now())
+  finishedAt    DateTime?
+  durationMs    Int?
+  triggeredBy   String
+  retryOfId     String?
+  passed        Int             @default(0)
+  warnings      Int             @default(0)
+  failed        Int             @default(0)
+  notRun        Int             @default(0)
+  checks        Json?
+  summary       Json?
+  changes       Json?
+  actions       Json?
+  notifications Json?
+  error         String?
+
+  @@index([startedAt])
+  @@index([status])
+}

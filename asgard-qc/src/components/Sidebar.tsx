@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import {
   Activity, BadgeCheck, BarChart3, Boxes, Camera, ClipboardCheck, FileText, Flame, FolderKanban, Gauge, Layers, Paintbrush,
-  Hammer, Radar, Ruler, Settings, ShieldCheck, Siren, TriangleAlert, Users, Wrench, Menu, X,
+  Hammer, HeartPulse, Radar, Ruler, Settings, ShieldCheck, Siren, TriangleAlert, Users, Wrench, Menu, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -31,6 +31,7 @@ export const NAV = [
   { href: "/analytics", label: "Analytics & Reports", icon: BarChart3 },
   { href: "/users", label: "User Management", icon: Users, perm: "users.manage" },
   { href: "/settings", label: "Settings & Integrations", icon: Settings, perm: "settings.manage" },
+  { href: "/system", label: "System Monitor", icon: HeartPulse, perm: "system.view" },
   { href: "/activity", label: "Activity Log", icon: Activity },
 ] as const;
 

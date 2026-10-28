@@ -36,6 +36,7 @@ export const PERMISSIONS = {
   "cmr.work": "Acknowledge, assign and record maintenance work on CMRs",
   "cmr.verify": "Verify repairs and approve equipment return to service",
   "alert.manage": "Acknowledge, assign, resolve and dismiss quality alerts",
+  "system.view": "View scheduled system & quality review reports",
   "report.generate": "Generate PDF quality reports",
   "export.excel": "Export to Excel",
   "users.manage": "Manage users and roles",
@@ -58,10 +59,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   WELDING_INSPECTOR: [...INSPECTOR_BASE, "weld.write", "weld.confirm", "ndt.write", "fabrication.write"],
   MATERIAL_INSPECTOR: [...INSPECTOR_BASE, "material.write", "material.disposition"],
   PRODUCTION_VIEWER: ["records.view"],
-  AUDITOR: ["records.view", "photo.download", "report.generate", "export.excel"],
-  PRODUCTION_SUPERVISOR: ["records.view", "photo.upload", "photo.download", "file.upload", "ncr.raise", "rework.write", "cmr.raise", "alert.manage", "report.generate", "export.excel"],
+  AUDITOR: ["records.view", "photo.download", "report.generate", "export.excel", "system.view"],
+  PRODUCTION_SUPERVISOR: ["records.view", "system.view", "photo.upload", "photo.download", "file.upload", "ncr.raise", "rework.write", "cmr.raise", "alert.manage", "report.generate", "export.excel"],
   MAINTENANCE_TECHNICIAN: ["records.view", "photo.upload", "cmr.raise", "cmr.work", "export.excel"],
-  PROJECT_MANAGER: ["records.view", "project.write", "photo.upload", "photo.download", "file.upload", "ncr.raise", "cmr.raise", "alert.manage", "report.generate", "export.excel"],
+  PROJECT_MANAGER: ["records.view", "system.view", "project.write", "photo.upload", "photo.download", "file.upload", "ncr.raise", "cmr.raise", "alert.manage", "report.generate", "export.excel"],
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

@@ -10,7 +10,7 @@ import { assertCan, transaction } from "./base";
 
 const lines = z.array(z.string().trim().min(1).max(120)).max(100);
 const permList = z.array(z.string().refine((p) => p in PERMISSIONS, "Unknown permission"));
-const ROLES = ["ADMIN", "QUALITY_MANAGER", "QC_INSPECTOR", "WELDING_INSPECTOR", "MATERIAL_INSPECTOR", "PRODUCTION_VIEWER", "AUDITOR"] as const;
+const ROLES = ["ADMIN", "QUALITY_MANAGER", "QC_INSPECTOR", "WELDING_INSPECTOR", "MATERIAL_INSPECTOR", "PRODUCTION_VIEWER", "AUDITOR", "PRODUCTION_SUPERVISOR", "MAINTENANCE_TECHNICIAN", "PROJECT_MANAGER"] as const satisfies readonly Role[];
 
 export const SETTING_SCHEMAS = {
   releaseRules: z.object({
@@ -34,6 +34,17 @@ export const SETTING_SCHEMAS = {
     ndtOutstandingDays: z.number().int().min(0).max(365),
     quarantineReviewDays: z.number().int().min(0).max(365),
     ncrEffectivenessDays: z.number().int().min(0).max(365).default(30),
+  }),
+  systemMonitor: z.object({
+    enabled: z.boolean(),
+    enabledSince: z.string().nullable(),
+    catchUpHours: z.number().int().min(0).max(12),
+    checkTimeoutSeconds: z.number().int().min(5).max(60),
+    retentionDays: z.number().int().min(30).max(3650),
+    alertOverdueDays: z.number().int().min(1).max(365),
+    recipientUserIds: z.array(z.string().min(1)).max(200),
+    notifyOn: z.enum(["changes", "every"]),
+    escalateCritical: z.boolean(),
   }),
   vocabulary: z.object({ photoCategories: lines.min(1), productionStages: lines.min(1) }),
   branding: z.object({ companyName: z.string().trim().min(1).max(120), departmentName: z.string().trim().min(1).max(120), reportFooter: z.string().trim().max(300) }),

@@ -73,3 +73,14 @@ The Neon integration gives Preview the same database (and the Blob token the sam
 - `src/middleware.ts` returns 503 for any running preview deployment.
 
 All three lift only when `PREVIEW_DB_ISOLATED=true` is set for the **Preview** environment. Set it only after previews have their own database: in Vercel → Storage → the Neon database → Settings, enable a **database branch for Preview deployments** (or point Preview's `DATABASE_URL`/`DATABASE_URL_UNPOOLED` at a separate database), and give Preview its own Blob store token.
+
+## Scheduled whole-system review (09:00, 12:00, 18:00 Europe/Dublin)
+
+**How it runs.** `vercel.json` registers six once-a-day Vercel Cron Jobs that call `GET /api/cron/system-review` at 08, 09, 11, 12, 17 and 18 UTC. Ireland is UTC+0 in winter and UTC+1 in summer, so each Dublin slot is covered in both seasons. The endpoint works out which Dublin slot is due and runs it once — the run key `YYYY-MM-DD@HH:MM` is unique in the database, so repeated, overlapping or unexpected calls do nothing.
+
+- **Vercel Hobby:** cron jobs may fire at any minute within their hour, so a "09:00" review runs between 09:00 and 09:59 Irish time. On Vercel Pro they fire on the minute.
+- **Missed slots:** a slot can still run up to *catch-up window* hours late (default 3) after an outage; after that it is recorded as **Missed** and can be retried by an administrator.
+- **Safety net:** if the host scheduler stops calling, a due slot is also picked up the next time anyone opens the app (at most every 10 minutes, after the page is sent). The System Monitor warns when the host scheduler has been silent for 8 hours.
+- **Security:** Vercel Cron bypasses deployment protection. Optionally add a `CRON_SECRET` environment variable (Production) — Vercel then sends it and the endpoint requires it.
+- **Check it is registered:** Vercel → asgard-qc → Settings → Cron Jobs should list six jobs for `/api/cron/system-review`. You can trigger one with *Run* there; it only runs a slot that is due.
+- **Other hosting:** call `GET /api/cron/system-review` at the same six UTC times with any scheduler (cron, systemd timer, GitHub Actions), sending `Authorization: Bearer <CRON_SECRET>` if set.

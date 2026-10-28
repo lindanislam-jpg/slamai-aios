@@ -31,7 +31,13 @@ export const NOTIFICATION_KINDS: Record<string, { label: string; audience: Permi
   EQUIPMENT_UNAVAILABLE: { label: "Equipment out of service", audience: "cmr.work" },
   REPEAT_NCR: { label: "Repeat non-conformances", audience: "ncr.manage" },
   REWORK_AWAITING_INSPECTION: { label: "Rework awaiting inspection", audience: "inspection.review" },
+  SYSTEM_REVIEW: { label: "Scheduled system & quality review reports", audience: "system.view" },
+  SYSTEM_ESCALATION: { label: "Critical escalations from the scheduled review", audience: "system.view" },
 };
+
+/** Notifications written by the scheduled review, not by rule conditions; the
+ *  condition scan must not resolve them. */
+export const REPORT_NOTIFICATION_KINDS = ["SYSTEM_REVIEW", "SYSTEM_ESCALATION"];
 
 
 const DAY = 86_400_000;
@@ -114,7 +120,7 @@ export async function runNotificationScan(now = new Date()) {
     const perms = permissionsFor(u.role, overrides);
     const muted = new Set(((u.notificationPrefs as { muted?: string[] } | null)?.muted ?? []) as string[]);
     for (const c of conditions) {
-      if (!perms.has(NOTIFICATION_KINDS[c.kind].audience) || muted.has(c.kind)) continue;
+      if (!NOTIFICATION_KINDS[c.kind] || !perms.has(NOTIFICATION_KINDS[c.kind].audience) || muted.has(c.kind)) continue;
       const dedupeKey = `${c.kind}:${c.key}`;
       const res = await db.notification.upsert({
         where: { userId_dedupeKey: { userId: u.id, dedupeKey } },
@@ -125,11 +131,11 @@ export async function runNotificationScan(now = new Date()) {
       if (res.createdAt.getTime() >= now.getTime() - 1000) created++;
     }
   }
-  const stale = await db.notification.findMany({ where: { resolvedAt: null }, select: { id: true, dedupeKey: true } });
+  const stale = await db.notification.findMany({ where: { resolvedAt: null, kind: { notIn: REPORT_NOTIFICATION_KINDS } }, select: { id: true, dedupeKey: true } });
   const toResolve = stale.filter((n) => !liveKeys.has(n.dedupeKey)).map((n) => n.id);
   if (toResolve.length) await db.notification.updateMany({ where: { id: { in: toResolve } }, data: { resolvedAt: now } });
   await db.setting.upsert({ where: { key: "lastNotificationScan" }, create: { key: "lastNotificationScan", value: now.toISOString() }, update: { value: now.toISOString() } });
-  return { conditions: conditions.length, created, resolved: toResolve.length, alerts };
+  return { conditions: conditions.length, created, resolved: toResolve.length, alerts, conditionList: conditions };
 }
 
 /** Run a scan if the last one is older than `minutes`. Cheap to call on page load. */

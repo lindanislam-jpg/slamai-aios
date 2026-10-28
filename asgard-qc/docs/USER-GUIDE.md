@@ -135,3 +135,12 @@ Alerts are raised automatically from the records by rules (Settings → *Alert r
 ## Roles added
 
 Production Supervisor, Maintenance Technician and Project Manager. Default permissions are in Settings → Permissions and can be changed by an administrator.
+
+## System Monitor (scheduled reviews)
+
+At 09:00, 12:00 and 18:00 Irish time the system reviews itself and the quality records: database, file storage, PDF/Excel, scheduler, data integrity, overdue inspections/NCRs/CAPA/CMRs, material traceability, NDT, calibration, evidence, release blockers and Smart Quality Alerts. Results appear on the dashboard (*System Health & Scheduled Review*) and under **System Monitor**, with a full report per run and a trend table.
+
+- **System health** (Healthy / Warning / Critical / Failed) is about the application only. **Quality status** (Clear / Attention / Critical) reflects open records and alerts. Neither means a project is compliant.
+- The review only reads and checks. It never approves, closes, releases, deletes or changes quality records; it recommends actions with links.
+- Administrators: enable/disable, run a check now, retry failed or missed runs, set recipients, retention, time limits and catch-up window on the System Monitor page. Alert thresholds stay in Settings → Alert rules.
+- Notifications are in-app. Email is not configured, so nothing is emailed.

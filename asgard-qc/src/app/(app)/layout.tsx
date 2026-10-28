@@ -1,5 +1,6 @@
 import { Bell, LogOut } from "lucide-react";
 import Link from "next/link";
+import { after } from "next/server";
 import { Sidebar } from "@/components/Sidebar";
 import { SearchBox } from "@/components/SearchBox";
 import { requireActor } from "@/lib/auth";
@@ -7,6 +8,7 @@ import { db } from "@/lib/db";
 import { demoRecordCount } from "@/lib/kpi";
 import { ROLE_LABELS } from "@/lib/permissions";
 import { maybeScan } from "@/lib/services/notifications";
+import { pageLoadTick } from "@/lib/monitor/run";
 import { qmsStatus } from "@/lib/integrations/qms";
 import { logout } from "../login/actions";
 
@@ -16,6 +18,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const actor = await requireActor();
   // Refresh reminders at most every 10 minutes; never blocks the page on error.
   await maybeScan(10).catch((e) => console.error("notification scan failed", e));
+  // The host cron runs the 09:00/12:00/18:00 reviews; this only catches a slot it missed, after the response.
+  after(() => pageLoadTick().catch((e) => console.error("scheduled review safety net failed", e)));
   const [unread, demo] = await Promise.all([db.notification.count({ where: { userId: actor.id, readAt: null, resolvedAt: null } }), demoRecordCount()]);
   const qms = qmsStatus();
   const now = new Date();

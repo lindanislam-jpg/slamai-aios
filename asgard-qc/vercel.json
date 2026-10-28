@@ -2,5 +2,31 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "bash scripts/deploy-build.sh",
-  "ignoreCommand": "bash scripts/vercel-ignore.sh"
+  "ignoreCommand": "bash scripts/vercel-ignore.sh",
+  "crons": [
+    {
+      "path": "/api/cron/system-review",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/system-review",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/system-review",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/system-review",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/system-review",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/system-review",
+      "schedule": "0 18 * * *"
+    }
+  ]
 }

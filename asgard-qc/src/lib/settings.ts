@@ -37,6 +37,27 @@ export interface NotificationThresholds {
   ncrEffectivenessDays: number;
 }
 
+/** Scheduled whole-system review (09:00, 12:00, 18:00 Europe/Dublin). */
+export interface SystemMonitorSettings {
+  enabled: boolean;
+  /** Set the first time the monitor runs; earlier slots are never reported as missed. */
+  enabledSince: string | null;
+  /** A slot may still run this many hours late (e.g. after an outage); after that it is recorded as missed. */
+  catchUpHours: number;
+  /** Per-check time limit. */
+  checkTimeoutSeconds: number;
+  /** Run reports older than this are deleted (system reports only, never quality records). */
+  retentionDays: number;
+  /** Open alerts older than this are flagged overdue in the review. */
+  alertOverdueDays: number;
+  /** In-app recipients for scheduled review reports (user ids). Administrators always receive failures. */
+  recipientUserIds: string[];
+  /** "changes" = notify only on new issues, failures or escalations; "every" = every run. */
+  notifyOn: "changes" | "every";
+  /** Notify immediately on a critical technical failure or new critical quality alert. */
+  escalateCritical: boolean;
+}
+
 export interface Vocabulary {
   photoCategories: string[];
   productionStages: string[];
@@ -71,6 +92,17 @@ export const SETTING_DEFAULTS = {
     quarantineReviewDays: 5,
     ncrEffectivenessDays: 30,
   } satisfies NotificationThresholds as NotificationThresholds,
+  systemMonitor: {
+    enabled: true,
+    enabledSince: null,
+    catchUpHours: 3,
+    checkTimeoutSeconds: 20,
+    retentionDays: 365,
+    alertOverdueDays: 7,
+    recipientUserIds: [],
+    notifyOn: "changes",
+    escalateCritical: true,
+  } satisfies SystemMonitorSettings as SystemMonitorSettings,
   vocabulary: {
     photoCategories: [...DEFAULT_PHOTO_CATEGORIES],
     productionStages: [...DEFAULT_PRODUCTION_STAGES],

@@ -13,6 +13,8 @@ import { listProjects } from "@/lib/services/projects";
 import { qmsStatus } from "@/lib/integrations/qms";
 import { alertCounts } from "@/lib/services/alerts";
 import { cmrCounts } from "@/lib/services/cmrs";
+import { SystemHealthPanel } from "@/components/system/SystemHealthPanel";
+import { monitorStatus } from "@/lib/monitor/run";
 
 export const metadata = { title: "Executive Quality Overview" };
 
@@ -35,7 +37,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   const projectId = str(sp, "projectId");
   const data = enumParam<DataScope>(sp, "data", ["all", "real", "demo"]) ?? "all";
   const span = range.to.getTime() - range.from.getTime();
-  const [k, prev, projects, materials, activeAll, demoProjects, cmr, alerts] = await Promise.all([
+  const [k, prev, projects, materials, activeAll, demoProjects, cmr, alerts, monitor] = await Promise.all([
     computeKpis({ from: range.from, to: range.to, projectId, data }),
     computeKpis({ from: new Date(range.from.getTime() - span), to: range.from, projectId, data }),
     projectOptions(),
@@ -44,6 +46,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
     db.project.count({ where: { isDemo: true } }),
     cmrCounts(),
     alertCounts(),
+    monitorStatus(),
   ]);
   // Only mention demo data while some exists (it is removed once a company goes live).
   const hasDemo = demoProjects > 0;
@@ -106,6 +109,8 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         <Stat label="Medium / low alerts" value={alerts.bySeverity.MEDIUM + alerts.bySeverity.LOW} sub={`${alerts.bySeverity.INFO} informational`} href="/alerts" title="Open Smart Quality Alerts with Medium or Low severity." />
         <Stat label="Alerts open > 30 days" value={alerts.ageing["> 30 days"]} tone={alerts.ageing["> 30 days"] ? "warn" : undefined} sub={`${alerts.total} open in total`} href="/alerts" title="Ageing of open alerts since first raised." />
       </div>
+
+      <SystemHealthPanel compact canOpen={actor.permissions.has("system.view")} latest={monitor.latest} lastGood={monitor.lastGood} next={monitor.next} enabled={monitor.enabled} schedulerSilent={monitor.schedulerSilent} running={monitor.running} />
 
       <Card title={`Active projects (${active.length})`} actions={<Link href="/projects" className="btn-secondary btn-sm">Project register</Link>} pad={false}>
         {active.length === 0 ? (
