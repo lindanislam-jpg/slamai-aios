@@ -17,7 +17,10 @@ export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const r = await tickSchedule(new Date(), req.headers.get("user-agent")?.includes("vercel-cron") ? "Vercel Cron" : "scheduler endpoint");
+    const by = req.headers.get("user-agent")?.includes("vercel-cron") ? "Vercel Cron" : "scheduler endpoint";
+    const r = await tickSchedule(new Date(), by);
+    // One line per call so the hosting logs show whether the schedule fired.
+    console.log(`scheduled review tick (${by}):`, JSON.stringify(r));
     return NextResponse.json(r);
   } catch (e) {
     console.error("scheduled review tick failed", e);
