@@ -15,7 +15,7 @@ if [ -n "$DATABASE_URL" ]; then
     photos=false
     if [ -n "${VERCEL:-}" ] && [ -n "${BLOB_READ_WRITE_TOKEN:-}" ]; then photos="${SEED_DEMO_PHOTOS:-true}"; fi
     SEED_DEMO_PHOTOS="$photos" npm run db:seed
-    if [ -n "${USER_CREATE:-}" ]; then
+    if [ -n "${USER_CREATE:-}${USER_ROLE_UPDATES:-}" ]; then
       npm run db:create-users
     fi
     if [ -n "${PROJECT_IMPORT_ROWS:-}" ]; then
