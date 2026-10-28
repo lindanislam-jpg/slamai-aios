@@ -2,6 +2,8 @@
  *    PROJECT_STATUS_UPDATES  "AMM770=ACTIVE,AMM856=ACTIVE,..." (project number = status)
  *    PROJECT_FIELD_UPDATES   "AMM973|customerRef=Cental|startDate=2026-10-20~AMM972|..."
  *                            projects separated by "~", fields by "|" (see FIELDS).
+ *                            "field?=value" fills the field only when it is empty,
+ *                            so a value someone already entered is never replaced.
  *  Each change goes through updateProject as the first administrator, so it is
  *  validated and written to the audit trail. Unknown numbers are reported, not created. */
 import type { ProjectStatus } from "@prisma/client";
@@ -18,7 +20,7 @@ async function fieldUpdates(actor: Awaited<ReturnType<typeof actorFromUser>>, ra
   for (const block of raw.split("~").map((s) => s.trim()).filter(Boolean)) {
     const [codeRaw, ...pairs] = block.split("|");
     const code = codeRaw.trim().toUpperCase();
-    const p = await db.project.findUnique({ where: { code }, select: { id: true } });
+    const p = await db.project.findUnique({ where: { code } });
     if (!p) {
       problems.push(`${code}: not found`);
       continue;
@@ -26,8 +28,10 @@ async function fieldUpdates(actor: Awaited<ReturnType<typeof actorFromUser>>, ra
     const data: Record<string, string> = {};
     for (const pair of pairs) {
       const i = pair.indexOf("=");
-      const key = pair.slice(0, i).trim();
+      const ifEmpty = pair.slice(0, i).trim().endsWith("?");
+      const key = pair.slice(0, i).trim().replace(/\?$/, "");
       if (i < 1 || !FIELDS.includes(key)) problems.push(`${code}: unknown field in "${pair.slice(0, 40)}"`);
+      else if (ifEmpty && (p as Record<string, unknown>)[key] != null && String((p as Record<string, unknown>)[key]).trim() !== "") problems.push(`${code}: ${key} already set — kept`);
       else data[key] = pair.slice(i + 1).trim();
     }
     if (Object.keys(data).length) {
