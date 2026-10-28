@@ -64,6 +64,8 @@ The app has no imports from the parent repo. Copy the `asgard-qc` folder (plus t
 
 `INSPECTION_IMPORT_GZ` (base64 of gzip of the JSON records) + `INSPECTION_IMPORT_SHA256` make the build import transcribed historical inspection records through the audited inspection service. Records keep the original inspector and date, name their SharePoint source, are submitted for Quality Manager review only when complete, and are skipped if already imported. Blank both variables after the deploy.
 
+`NCR_IMPORT_GZ` + `NCR_IMPORT_SHA256` (same encoding) handle failed historical inspections. An entry with `mode: "transcribe"` copies an NCR that already exists in the paper NCR/CAPA register, keeping its number, dates and status. An entry with `mode: "raise"` raises a new Open NCR, through the audited NCR service, for a failure that has no NCR anywhere, so the Quality Manager can investigate or cancel it. Both kinds link to the inspection, and re-runs skip entries already applied. Blank both variables after the deploy.
+
 ## Preview deployments and the database
 
 The Neon integration gives Preview the same database (and the Blob token the same store) as Production. To protect live records:

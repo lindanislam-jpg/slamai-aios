@@ -40,6 +40,10 @@ if [ -n "$DATABASE_URL" ] && [ "$db_writes" = "true" ]; then
     if [ -n "${insp_rows// /}" ]; then
       npm run db:import-inspections
     fi
+    ncr_rows="${NCR_IMPORT_GZ:-}"
+    if [ -n "${ncr_rows// /}" ]; then
+      npm run db:import-ncrs
+    fi
     if [ "${PURGE_DEMO_DATA:-}" = "true" ]; then
       # Removes only records flagged as demo; refuses if real records depend on them.
       npm run db:purge-demo -- --yes
