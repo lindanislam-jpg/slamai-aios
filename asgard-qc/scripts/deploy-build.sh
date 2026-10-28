@@ -24,7 +24,8 @@ if [ -n "$DATABASE_URL" ]; then
     if [ -n "${PROJECT_STATUS_UPDATES:-}${PROJECT_FIELD_UPDATES:-}" ]; then
       npm run db:set-project-status
     fi
-    if [ -n "${ITP_APPLY:-}" ] && [ -n "${ITP_ROWS:-}" ]; then
+    itp_targets="${ITP_APPLY:-}"; itp_rows="${ITP_ROWS:-}${ITP_ROWS_GZ:-}"
+    if [ -n "${itp_targets// /}" ] && [ -n "${itp_rows// /}" ]; then
       npm run db:apply-itp
     fi
     if [ "${PURGE_DEMO_DATA:-}" = "true" ]; then
