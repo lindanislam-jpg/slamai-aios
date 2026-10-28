@@ -63,3 +63,13 @@ The app has no imports from the parent repo. Copy the `asgard-qc` folder (plus t
 ## One-off historical inspection import (hosted builds)
 
 `INSPECTION_IMPORT_GZ` (base64 of gzip of the JSON records) + `INSPECTION_IMPORT_SHA256` make the build import transcribed historical inspection records through the audited inspection service. Records keep the original inspector and date, name their SharePoint source, are submitted for Quality Manager review only when complete, and are skipped if already imported. Blank both variables after the deploy.
+
+## Preview deployments and the database
+
+The Neon integration gives Preview the same database (and the Blob token the same store) as Production. To protect live records:
+
+- `vercel.json` → `ignoreCommand` (`scripts/vercel-ignore.sh`) skips every non-production build.
+- `scripts/deploy-build.sh` never migrates, seeds or imports data outside production.
+- `src/middleware.ts` returns 503 for any running preview deployment.
+
+All three lift only when `PREVIEW_DB_ISOLATED=true` is set for the **Preview** environment. Set it only after previews have their own database: in Vercel → Storage → the Neon database → Settings, enable a **database branch for Preview deployments** (or point Preview's `DATABASE_URL`/`DATABASE_URL_UNPOOLED` at a separate database), and give Preview its own Blob store token.

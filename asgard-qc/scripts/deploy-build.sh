@@ -5,7 +5,15 @@
 set -euo pipefail
 export DATABASE_URL="${DATABASE_URL:-${NETLIFY_DB_URL:-${POSTGRES_PRISMA_URL:-}}}"
 npx prisma generate
-if [ -n "$DATABASE_URL" ]; then
+# Only a production build may change the database. Vercel previews share the
+# production database unless an isolated one was configured
+# (PREVIEW_DB_ISOLATED=true), so they get no migrations, seed or data steps.
+db_writes=true
+if [ -n "${VERCEL_ENV:-}" ] && [ "${VERCEL_ENV}" != "production" ] && [ "${PREVIEW_DB_ISOLATED:-}" != "true" ]; then
+  db_writes=false
+  echo "Non-production build (${VERCEL_ENV}) without an isolated database — skipping migrations and data steps."
+fi
+if [ -n "$DATABASE_URL" ] && [ "$db_writes" = "true" ]; then
   # Migrations need a direct (unpooled) connection when the provider offers one (Neon on Vercel).
   DATABASE_URL="${DATABASE_URL_UNPOOLED:-$DATABASE_URL}" npx prisma migrate deploy
   if [ -n "${ADMIN_EMAIL:-}" ] && [ -n "${ADMIN_PASSWORD:-}" ]; then
@@ -39,7 +47,7 @@ if [ -n "$DATABASE_URL" ]; then
   else
     echo "ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping first-admin seed."
   fi
-else
+elif [ "$db_writes" = "true" ]; then
   echo "WARNING: no DATABASE_URL in the build — migrations not applied."
 fi
 npx next build
