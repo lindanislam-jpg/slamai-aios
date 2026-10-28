@@ -8,6 +8,7 @@ import type { Condition } from "../services/alert-rules";
 import { OPEN_ALERT } from "../services/alerts";
 import { OPEN_NCR } from "../services/ncrs";
 import { evaluateRelease, loadReleaseContext } from "../services/release";
+import { emailStatus } from "../email";
 import { getSetting } from "../settings";
 import { storage } from "../storage";
 
@@ -137,7 +138,9 @@ const application: CheckDef[] = [
     key: "app.notifications", group: "application", label: "Notification services",
     run: async () => {
       await db.notification.count({ where: { createdAt: { gte: new Date(Date.now() - DAY) } } });
-      return { status: "PASS", detail: "In-app notification centre available. No email provider is configured, so nothing is sent by email." };
+      const mail = emailStatus();
+      const cfg = await getSetting("systemMonitor");
+      return { status: "PASS", detail: `In-app notification centre available. Email: ${mail.configured ? `Microsoft 365 configured (sender ${mail.sender}); review emails ${cfg.emailReports ? "on" : "off"}` : "not configured, so nothing is sent by email"}. Not tested by sending.` };
     },
   },
   {

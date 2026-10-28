@@ -86,3 +86,14 @@ All three lift only when `PREVIEW_DB_ISOLATED=true` is set for the **Preview** e
 - **Security:** Vercel Cron bypasses deployment protection. Optionally add a `CRON_SECRET` environment variable (Production) — Vercel then sends it and the endpoint requires it.
 - **Check it is registered:** Vercel → asgard-qc → Settings → Cron Jobs should list six jobs for `/api/cron/system-review`. You can trigger one with *Run* there; it only runs a slot that is due.
 - **Other hosting:** call `GET /api/cron/system-review` at the same six UTC times with any scheduler (cron, systemd timer, GitHub Actions), sending `Authorization: Bearer <CRON_SECRET>` if set.
+
+## Emailing review reports (Microsoft 365)
+
+Nothing is emailed until all of the following are in place:
+
+1. In the Microsoft Entra admin centre, open **App registrations → New registration** (single tenant). Under **API permissions**, add **Microsoft Graph → Application → Mail.Send**, then click **Grant admin consent**. Under **Certificates & secrets**, create a client secret.
+2. Recommended: limit the app to a single mailbox (for example `quality@asgardmm.com`) using an Exchange Online application access policy, so it cannot send as anyone else.
+3. Add these server environment variables in Vercel (Production only): `M365_TENANT_ID`, `M365_CLIENT_ID`, `M365_CLIENT_SECRET` and `M365_SENDER` (the sender mailbox). Optionally add `APP_URL=https://asgard-qc.vercel.app` so emails link to the report. Then redeploy.
+4. In **System Monitor → Settings**, an administrator ticks **Also email reports**.
+
+Reports go to the selected report recipients and to administrators. The same "only when there are new issues" rule applies to email as to in-app notifications. Each run records the provider's answer. "Accepted by Microsoft 365" means Exchange took the message; it is not proof of delivery. The secret is used only on the server.

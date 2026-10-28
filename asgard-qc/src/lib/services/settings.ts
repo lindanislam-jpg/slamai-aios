@@ -45,6 +45,7 @@ export const SETTING_SCHEMAS = {
     recipientUserIds: z.array(z.string().min(1)).max(200),
     notifyOn: z.enum(["changes", "every"]),
     escalateCritical: z.boolean(),
+    emailReports: z.boolean().default(false),
   }),
   vocabulary: z.object({ photoCategories: lines.min(1), productionStages: lines.min(1) }),
   branding: z.object({ companyName: z.string().trim().min(1).max(120), departmentName: z.string().trim().min(1).max(120), reportFooter: z.string().trim().max(300) }),

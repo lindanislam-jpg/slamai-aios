@@ -4,6 +4,7 @@ import { SystemHealthPanel } from "@/components/system/SystemHealthPanel";
 import { Badge, Card, Empty, PageHeader } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { emailStatus } from "@/lib/email";
 import { monitorStatus } from "@/lib/monitor/run";
 import { fmtDublin, TIME_ZONE } from "@/lib/monitor/schedule";
 import { retryRunAction, runNowAction, saveMonitorSettingsAction } from "./actions";
@@ -20,6 +21,7 @@ export default async function SystemMonitor() {
   ]);
   const trend = runs.filter((r) => r.status === "COMPLETED" || r.status === "PARTIAL").slice(0, 14);
   const c = st.cfg;
+  const mailReady = emailStatus().configured;
 
   return (
     <div className="space-y-5">
@@ -45,6 +47,7 @@ export default async function SystemMonitor() {
             <div className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
               <label className="flex items-center gap-2"><input type="checkbox" name="enabled" defaultChecked={c.enabled} /> Scheduled checks enabled</label>
               <label className="flex items-center gap-2"><input type="checkbox" name="escalateCritical" defaultChecked={c.escalateCritical} /> Escalate critical failures / new critical alerts immediately</label>
+              <label className="flex items-center gap-2"><input type="checkbox" name="emailReports" defaultChecked={c.emailReports} disabled={!mailReady} /> Also email reports (Microsoft 365){mailReady ? "" : " — not configured"}</label>
               <label className="text-xs text-ink-300">Notify recipients
                 <select name="notifyOn" defaultValue={c.notifyOn} className="input mt-1"><option value="changes">Only when there are new issues, failures or escalations</option><option value="every">After every review</option></select>
               </label>

@@ -56,6 +56,8 @@ export interface SystemMonitorSettings {
   notifyOn: "changes" | "every";
   /** Notify immediately on a critical technical failure or new critical quality alert. */
   escalateCritical: boolean;
+  /** Also email the review to recipients through Microsoft 365. Needs the M365_* server variables; off until an administrator turns it on. */
+  emailReports: boolean;
 }
 
 export interface Vocabulary {
@@ -102,6 +104,7 @@ export const SETTING_DEFAULTS = {
     recipientUserIds: [],
     notifyOn: "changes",
     escalateCritical: true,
+    emailReports: false,
   } satisfies SystemMonitorSettings as SystemMonitorSettings,
   vocabulary: {
     photoCategories: [...DEFAULT_PHOTO_CATEGORIES],

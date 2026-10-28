@@ -1,5 +1,6 @@
 import { Prisma, type SystemCheckRun } from "@prisma/client";
 import { db } from "../db";
+import { emailStatus, sendMail } from "../email";
 import { recordEvent } from "../audit";
 import { ValidationError } from "../errors";
 import type { Actor } from "../permissions";
@@ -198,10 +199,11 @@ async function finishRun(run: SystemCheckRun, results: CheckResult[], ctx: Check
   return { ...finished, notifications: notifications as unknown as Prisma.JsonValue };
 }
 
-/** In-app notifications only — no email provider is configured. Unchanged
- *  warnings are not re-sent when "notify on changes" is selected. */
+/** In-app notifications, plus email through Microsoft 365 when configured and
+ *  turned on. Unchanged warnings are not re-sent when "notify on changes" is
+ *  selected. Email is logged as accepted by the provider, never as delivered. */
 async function notify(run: SystemCheckRun, summary: { health: string; qualityStatus: string; alerts: { newHighOrCritical: { severity: string }[] } }, changes: { newProblems: string[] }, cfg: Cfg) {
-  const users = await db.user.findMany({ where: { active: true }, select: { id: true, role: true } });
+  const users = await db.user.findMany({ where: { active: true }, select: { id: true, role: true, email: true } });
   const overrides = await getSetting("rolePermissions");
   const recipients = users.filter((u) => cfg.recipientUserIds.includes(u.id) || u.role === "ADMIN").filter((u) => permissionsFor(u.role, overrides).has("system.view"));
   const failed = run.status === "FAILED" || run.status === "PARTIAL";
@@ -235,8 +237,26 @@ async function notify(run: SystemCheckRun, summary: { health: string; qualitySta
     }
     log.push({ channel: "in-app escalation", recipients: admins.length, outcome: "stored" });
   }
-  log.push({ channel: "email", outcome: "not configured — nothing sent" });
+  log.push({ channel: "email", ...(await emailReport(run, summary, changes, cfg, recipients, cfg.notifyOn === "every" || changed)) });
   return log;
+}
+
+async function emailReport(run: SystemCheckRun, summary: { health: string; qualityStatus: string }, changes: { newProblems: string[] }, cfg: Cfg, recipients: { email: string }[], due: boolean) {
+  if (!emailStatus().configured) return { outcome: "not configured — nothing sent" };
+  if (!cfg.emailReports) return { outcome: "turned off in System Monitor settings — nothing sent" };
+  if (!due) return { outcome: "not sent — no new issues since the previous review" };
+  const base = process.env.APP_URL?.trim() || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
+  const when = run.slotTime ? `${run.slotTime} review` : `${run.kind.toLowerCase()} review`;
+  const text = [
+    `ASGARD Quality Command Centre — ${when} (${run.code})`,
+    `System health: ${summary.health}. Quality status: ${summary.qualityStatus}. Run: ${run.status}.`,
+    `${run.passed} passed · ${run.warnings} warnings · ${run.failed} failed · ${run.notRun} not run.`,
+    changes.newProblems.length ? `New since the previous review:\n- ${changes.newProblems.slice(0, 10).join("\n- ")}` : "No new issues since the previous review.",
+    base ? `Full report: ${base}/system/${run.id}` : null,
+    "Automatic summary. It does not approve, reject or release anything; decisions stay with the Quality Manager.",
+  ].filter(Boolean).join("\n\n");
+  const r = await sendMail(recipients.map((u) => u.email), `ASGARD QC ${when}: ${summary.health.toLowerCase()} / ${summary.qualityStatus.toLowerCase()}`, text);
+  return { recipients: r.accepted ? recipients.length : 0, outcome: r.outcome };
 }
 
 async function applyRetention(days: number, now: Date) {
@@ -324,6 +344,7 @@ export async function updateMonitorSettings(actor: Actor, raw: Record<string, un
     recipientUserIds: (Array.isArray(raw.recipientUserIds) ? raw.recipientUserIds : raw.recipientUserIds ? [raw.recipientUserIds] : []).map(String),
     notifyOn: raw.notifyOn === "every" ? ("every" as const) : ("changes" as const),
     escalateCritical: raw.escalateCritical === "on" || raw.escalateCritical === true,
+    emailReports: raw.emailReports === "on" || raw.emailReports === true,
     // Re-enabling starts a fresh "since" so the disabled period is not reported as missed.
     enabledSince: !cfg.enabled && (raw.enabled === "on" || raw.enabled === true) ? new Date().toISOString() : cfg.enabledSince,
   };
