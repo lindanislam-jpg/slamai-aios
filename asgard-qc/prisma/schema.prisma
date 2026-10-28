@@ -29,20 +29,23 @@ enum Role {
   MATERIAL_INSPECTOR
   PRODUCTION_VIEWER
   AUDITOR
+  PRODUCTION_SUPERVISOR
+  MAINTENANCE_TECHNICIAN
+  PROJECT_MANAGER
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String
-  passwordHash String
-  role         Role      @default(PRODUCTION_VIEWER)
-  active       Boolean   @default(true)
+  id                String    @id @default(cuid())
+  email             String    @unique
+  name              String
+  passwordHash      String
+  role              Role      @default(PRODUCTION_VIEWER)
+  active            Boolean   @default(true)
   /// Per-user notification preferences, e.g. { "muted": ["CALIBRATION_DUE"] }.
   notificationPrefs Json?
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   sessions      Session[]
   notifications Notification[]
@@ -115,26 +118,26 @@ enum ProjectStatus {
 }
 
 model Project {
-  id              String        @id @default(cuid())
-  code            String        @unique
-  name            String
-  customerRef     String?
-  description     String?
-  scope           String?
-  status          ProjectStatus @default(PLANNED)
-  startDate       DateTime?
-  targetDate      DateTime?
-  projectManager  String?
-  departments     String?
-  drawingRefs     String?
+  id             String        @id @default(cuid())
+  code           String        @unique
+  name           String
+  customerRef    String?
+  description    String?
+  scope          String?
+  status         ProjectStatus @default(PLANNED)
+  startDate      DateTime?
+  targetDate     DateTime?
+  projectManager String?
+  departments    String?
+  drawingRefs    String?
   /// Applicable inspection & test requirements (ITP reference, spec clauses).
-  requirements    String?
+  requirements   String?
   /// Ordered production stages for this project; null = organisation default.
-  stages          String[]
-  isDemo          Boolean       @default(false)
-  createdById     String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  stages         String[]
+  isDemo         Boolean       @default(false)
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   units       Unit[]
   itpPlans    ItpPlan[]
@@ -150,6 +153,8 @@ model Project {
   files       ProjectFile[]
   releases    ReleaseRecord[]
   reports     ReportJob[]
+  cmrs        Cmr[]
+  alerts      QualityAlert[]
 
   @@index([status])
 }
@@ -257,7 +262,7 @@ model Photo {
   /// Draft output from the AI vision service. Never copied into the record
   /// without a person accepting it.
   aiSuggestion Json?
-  isDemo       Boolean @default(false)
+  isDemo       Boolean   @default(false)
   deletedAt    DateTime?
 
   @@index([projectId, category])
@@ -297,36 +302,36 @@ enum RecordStatus {
 }
 
 model Inspection {
-  id              String           @id @default(cuid())
-  code            String           @unique
-  projectId       String
-  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  unitId          String?
-  unit            Unit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  type            InspectionType
+  id               String           @id @default(cuid())
+  code             String           @unique
+  projectId        String
+  project          Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId           String?
+  unit             Unit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  type             InspectionType
   /// Fabrication operation (cutting, drilling, bending …) for FABRICATION records.
-  operation       String?
-  stage           String?
-  componentRef    String?
-  drawingRef      String?
-  plannedDate     DateTime?
-  inspectedAt     DateTime?
-  inspectorId     String?
-  inspectorName   String?
-  criteriaRef     String?
-  result          InspectionResult @default(PENDING)
-  status          RecordStatus     @default(DRAFT)
-  comments        String?
+  operation        String?
+  stage            String?
+  componentRef     String?
+  drawingRef       String?
+  plannedDate      DateTime?
+  inspectedAt      DateTime?
+  inspectorId      String?
+  inspectorName    String?
+  criteriaRef      String?
+  result           InspectionResult @default(PENDING)
+  status           RecordStatus     @default(DRAFT)
+  comments         String?
   /// Set when this inspection re-checks an earlier failed/held one.
   reinspectionOfId String?
-  reinspectionOf   Inspection?     @relation("Reinspection", fields: [reinspectionOfId], references: [id], onDelete: SetNull)
-  reinspections    Inspection[]    @relation("Reinspection")
-  reviewerId      String?
-  reviewerName    String?
-  reviewedAt      DateTime?
-  isDemo          Boolean          @default(false)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  reinspectionOf   Inspection?      @relation("Reinspection", fields: [reinspectionOfId], references: [id], onDelete: SetNull)
+  reinspections    Inspection[]     @relation("Reinspection")
+  reviewerId       String?
+  reviewerName     String?
+  reviewedAt       DateTime?
+  isDemo           Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   items  ChecklistItem[]
   photos Photo[]
@@ -387,30 +392,30 @@ enum WeldStatus {
 }
 
 model Weld {
-  id             String           @id @default(cuid())
-  projectId      String
-  project        Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  unitId         String?
-  unit           Unit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  weldRef        String
-  componentRef   String?
-  drawingRef     String?
-  wpsRef         String?
-  welderId       String?
-  welderQualRef  String?
-  process        String?
+  id              String           @id @default(cuid())
+  projectId       String
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId          String?
+  unit            Unit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  weldRef         String
+  componentRef    String?
+  drawingRef      String?
+  wpsRef          String?
+  welderId        String?
+  welderQualRef   String?
+  process         String?
   materialDetails String?
-  stage          String?
-  inspectedAt    DateTime?
-  inspectorName  String?
-  visualResult   InspectionResult @default(PENDING)
-  criteriaRef    String?
-  ndtRequired    Boolean          @default(false)
-  status         WeldStatus       @default(AWAITING_INSPECTION)
-  notes          String?
-  isDemo         Boolean          @default(false)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  stage           String?
+  inspectedAt     DateTime?
+  inspectorName   String?
+  visualResult    InspectionResult @default(PENDING)
+  criteriaRef     String?
+  ndtRequired     Boolean          @default(false)
+  status          WeldStatus       @default(AWAITING_INSPECTION)
+  notes           String?
+  isDemo          Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   defects WeldDefect[]
   photos  Photo[]
@@ -427,19 +432,19 @@ enum DefectSource {
 }
 
 model WeldDefect {
-  id           String       @id @default(cuid())
-  weldId       String
-  weld         Weld         @relation(fields: [weldId], references: [id], onDelete: Cascade)
-  category     String
+  id            String       @id @default(cuid())
+  weldId        String
+  weld          Weld         @relation(fields: [weldId], references: [id], onDelete: Cascade)
+  category      String
   /// Only true once an authorised inspector confirms it.
-  confirmed    Boolean      @default(false)
+  confirmed     Boolean      @default(false)
   confirmedById String?
-  confirmedAt  DateTime?
-  source       DefectSource @default(INSPECTOR)
-  notes        String?
-  recordedById String?
-  recordedAt   DateTime     @default(now())
-  isDemo       Boolean      @default(false)
+  confirmedAt   DateTime?
+  source        DefectSource @default(INSPECTOR)
+  notes         String?
+  recordedById  String?
+  recordedAt    DateTime     @default(now())
+  isDemo        Boolean      @default(false)
 }
 
 // ───────────────────────────── Materials ─────────────────────────────
@@ -459,10 +464,10 @@ enum MaterialStatus {
 }
 
 model Material {
-  id                     String         @id @default(cuid())
-  code                   String         @unique
+  id                     String           @id @default(cuid())
+  code                   String           @unique
   projectId              String?
-  project                Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  project                Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   componentRef           String?
   description            String
   grade                  String?
@@ -472,21 +477,21 @@ model Material {
   heatNumber             String?
   certificateRef         String?
   certificateDocId       String?
-  certStatus             CertStatus     @default(MISSING)
+  certStatus             CertStatus       @default(MISSING)
   quantity               Decimal?
   unit                   String?
   receivingResult        InspectionResult @default(PENDING)
   location               String?
-  status                 MaterialStatus @default(AWAITING_INSPECTION)
-  identificationMismatch Boolean        @default(false)
+  status                 MaterialStatus   @default(AWAITING_INSPECTION)
+  identificationMismatch Boolean          @default(false)
   inspectorName          String?
   inspectedAt            DateTime?
   dispositionById        String?
   dispositionAt          DateTime?
   dispositionNotes       String?
-  isDemo                 Boolean        @default(false)
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  isDemo                 Boolean          @default(false)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
   photos Photo[]
   ncrs   Ncr[]
@@ -504,28 +509,28 @@ enum TestResult {
 }
 
 model NdtRecord {
-  id            String     @id @default(cuid())
-  code          String     @unique
-  projectId     String
-  project       Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  unitId        String?
-  unit          Unit?      @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  weldId        String?
-  weld          Weld?      @relation(fields: [weldId], references: [id], onDelete: SetNull)
-  method        String
-  procedureRef  String?
-  componentRef  String?
-  requestedAt   DateTime
-  reportNo      String?
-  reportDate    DateTime?
-  contractor    String?
-  personnelRef  String?
-  result        TestResult @default(PENDING)
-  reportDocId   String?
-  followUp      String?
-  isDemo        Boolean    @default(false)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id           String     @id @default(cuid())
+  code         String     @unique
+  projectId    String
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId       String?
+  unit         Unit?      @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  weldId       String?
+  weld         Weld?      @relation(fields: [weldId], references: [id], onDelete: SetNull)
+  method       String
+  procedureRef String?
+  componentRef String?
+  requestedAt  DateTime
+  reportNo     String?
+  reportDate   DateTime?
+  contractor   String?
+  personnelRef String?
+  result       TestResult @default(PENDING)
+  reportDocId  String?
+  followUp     String?
+  isDemo       Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 model CoatingRecord {
@@ -592,66 +597,66 @@ enum NcrStatus {
 }
 
 model Ncr {
-  id                 String     @id @default(cuid())
-  code               String     @unique
-  projectId          String
-  project            Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  unitId             String?
-  unit               Unit?      @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  componentRef       String?
-  raisedAt           DateTime   @default(now())
-  raisedById         String?
-  raisedByName       String?
-  description        String
-  defectCategory     String
-  requirementRef     String?
-  containment        String?
-  priority           Priority   @default(MEDIUM)
-  severity           NcrSeverity?
-  department         String?
-  stageOfDetection   String?
-  detectedBy         String?
-  drawingRef         String?
+  id                  String               @id @default(cuid())
+  code                String               @unique
+  projectId           String
+  project             Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId              String?
+  unit                Unit?                @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  componentRef        String?
+  raisedAt            DateTime             @default(now())
+  raisedById          String?
+  raisedByName        String?
+  description         String
+  defectCategory      String
+  requirementRef      String?
+  containment         String?
+  priority            Priority             @default(MEDIUM)
+  severity            NcrSeverity?
+  department          String?
+  stageOfDetection    String?
+  detectedBy          String?
+  drawingRef          String?
   contributingFactors String?
-  impactStructural   ImpactLevel?
-  impactSafety       ImpactLevel?
-  impactSchedule     ImpactLevel?
-  impactCustomer     ImpactLevel?
-  impactCost         ImpactLevel?
-  impactQms          ImpactLevel?
-  impactNotes        String?
+  impactStructural    ImpactLevel?
+  impactSafety        ImpactLevel?
+  impactSchedule      ImpactLevel?
+  impactCustomer      ImpactLevel?
+  impactCost          ImpactLevel?
+  impactQms           ImpactLevel?
+  impactNotes         String?
   /// Verification of effectiveness after closure (company form section 7).
-  effectivenessDueAt   DateTime?
-  effectivenessStatus  EffectivenessStatus?
-  effectivenessNotes   String?
-  effectivenessById    String?
-  effectivenessByName  String?
-  effectivenessAt      DateTime?
-  rootCauseCategory  String?
-  rootCauseMethod    String?
-  rootCause          String?
-  disposition        String?
-  repairMethod       String?
-  ownerName          String?
-  targetDate         DateTime?
-  status             NcrStatus  @default(OPEN)
-  verificationNotes  String?
-  reinspectionResult InspectionResult?
-  verifiedById       String?
-  verifiedAt         DateTime?
-  closedById         String?
-  closedByName       String?
-  closedAt           DateTime?
-  inspectionId       String?
-  inspection         Inspection? @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
-  weldId             String?
-  weld               Weld?      @relation(fields: [weldId], references: [id], onDelete: SetNull)
-  materialId         String?
-  material           Material?  @relation(fields: [materialId], references: [id], onDelete: SetNull)
-  relatedCodes       String[]
-  isDemo             Boolean    @default(false)
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  effectivenessDueAt  DateTime?
+  effectivenessStatus EffectivenessStatus?
+  effectivenessNotes  String?
+  effectivenessById   String?
+  effectivenessByName String?
+  effectivenessAt     DateTime?
+  rootCauseCategory   String?
+  rootCauseMethod     String?
+  rootCause           String?
+  disposition         String?
+  repairMethod        String?
+  ownerName           String?
+  targetDate          DateTime?
+  status              NcrStatus            @default(OPEN)
+  verificationNotes   String?
+  reinspectionResult  InspectionResult?
+  verifiedById        String?
+  verifiedAt          DateTime?
+  closedById          String?
+  closedByName        String?
+  closedAt            DateTime?
+  inspectionId        String?
+  inspection          Inspection?          @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  weldId              String?
+  weld                Weld?                @relation(fields: [weldId], references: [id], onDelete: SetNull)
+  materialId          String?
+  material            Material?            @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  relatedCodes        String[]
+  isDemo              Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   actions CorrectiveAction[]
   photos  Photo[]
@@ -676,24 +681,24 @@ enum ActionStatus {
 }
 
 model CorrectiveAction {
-  id             String       @id @default(cuid())
-  code           String       @unique
+  id             String        @id @default(cuid())
+  code           String        @unique
   ncrId          String?
-  ncr            Ncr?         @relation(fields: [ncrId], references: [id], onDelete: Cascade)
+  ncr            Ncr?          @relation(fields: [ncrId], references: [id], onDelete: Cascade)
   auditFindingId String?
   auditFinding   AuditFinding? @relation(fields: [auditFindingId], references: [id], onDelete: Cascade)
-  type           ActionType   @default(CORRECTIVE)
+  type           ActionType    @default(CORRECTIVE)
   description    String
   ownerName      String?
   dueDate        DateTime?
-  status         ActionStatus @default(OPEN)
+  status         ActionStatus  @default(OPEN)
   completedAt    DateTime?
   verifiedById   String?
   verifiedAt     DateTime?
   notes          String?
-  isDemo         Boolean      @default(false)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  isDemo         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 
 model Repair {
@@ -820,40 +825,207 @@ model Document {
 /// Revisions are append-only: an approved revision is never overwritten, a
 /// change is always a new revision.
 model DocumentRevision {
-  id           String    @id @default(cuid())
-  documentId   String
-  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  revision     String
-  storageKey   String?
-  fileName     String?
-  mimeType     String?
-  sizeBytes    Int?
-  sha256       String?
-  notes        String?
-  status       DocStatus @default(UNDER_REVIEW)
-  uploadedById String?
+  id             String    @id @default(cuid())
+  documentId     String
+  document       Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  revision       String
+  storageKey     String?
+  fileName       String?
+  mimeType       String?
+  sizeBytes      Int?
+  sha256         String?
+  notes          String?
+  status         DocStatus @default(UNDER_REVIEW)
+  uploadedById   String?
   uploadedByName String?
-  uploadedAt   DateTime  @default(now())
-  approvedById String?
+  uploadedAt     DateTime  @default(now())
+  approvedById   String?
   approvedByName String?
-  approvedAt   DateTime?
+  approvedAt     DateTime?
 
   @@unique([documentId, revision])
 }
 
+enum EquipmentStatus {
+  IN_SERVICE
+  RESTRICTED
+  OUT_OF_SERVICE
+  RETIRED
+}
+
 model Equipment {
-  id           String   @id @default(cuid())
-  assetNo      String   @unique
-  description  String
-  serialNo     String?
-  location     String?
-  intervalDays Int?
-  active       Boolean  @default(true)
-  isDemo       Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String          @id @default(cuid())
+  assetNo       String          @unique
+  description   String
+  equipmentType String?
+  ownerName     String?
+  serialNo      String?
+  location      String?
+  /// Calibration interval. Null when the asset does not need calibration.
+  intervalDays  Int?
+  status        EquipmentStatus @default(IN_SERVICE)
+  statusNote    String?
+  active        Boolean         @default(true)
+  isDemo        Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   calibrations CalibrationRecord[]
+  cmrs         Cmr[]
+}
+
+// ───────────────────── Corrective Maintenance Requests ─────────────────────
+
+enum CmrStatus {
+  SUBMITTED
+  ACKNOWLEDGED
+  ASSIGNED
+  IN_PROGRESS
+  AWAITING_PARTS
+  AWAITING_EXTERNAL
+  AWAITING_VERIFICATION
+  COMPLETED
+  CLOSED
+  CANCELLED
+}
+
+model Cmr {
+  id                   String     @id @default(cuid())
+  code                 String     @unique
+  equipmentId          String?
+  equipment            Equipment? @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  /// Free-text asset name when the equipment is not in the register.
+  assetLabel           String?
+  location             String?
+  projectId            String?
+  project              Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  productionArea       String?
+  problem              String
+  reportedAt           DateTime   @default(now())
+  reportedById         String?
+  reportedByName       String?
+  priority             Priority   @default(MEDIUM)
+  safetyImpact         Boolean    @default(false)
+  productionImpact     String?
+  equipmentUnavailable Boolean    @default(false)
+  requestedBy          DateTime?
+  status               CmrStatus  @default(SUBMITTED)
+  acknowledgedAt       DateTime?
+  acknowledgedByName   String?
+  assignedToName       String?
+  assignedAt           DateTime?
+  diagnosis            String?
+  workDone             String?
+  partsUsed            String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  downtimeHours        Decimal?
+  outstandingIssues    String?
+  /// Return-to-service verification by an authorised person (not the system).
+  verifiedById         String?
+  verifiedByName       String?
+  verifiedAt           DateTime?
+  verificationNote     String?
+  closedAt             DateTime?
+  cancelReason         String?
+  reopenCount          Int        @default(0)
+  /// Earlier closures kept when a CMR is reopened (append-only).
+  closureHistory       Json?
+  isDemo               Boolean    @default(false)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  attachments CmrAttachment[]
+
+  @@index([status])
+  @@index([equipmentId, reportedAt])
+}
+
+model CmrAttachment {
+  id             String   @id @default(cuid())
+  cmrId          String
+  cmr            Cmr      @relation(fields: [cmrId], references: [id], onDelete: Restrict)
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  sha256         String
+  storageKey     String   @unique
+  caption        String?
+  uploadedById   String?
+  uploadedByName String?
+  uploadedAt     DateTime @default(now())
+}
+
+// ───────────────────────────── Smart Quality Alerts ─────────────────────────────
+
+enum AlertSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum AlertStatus {
+  NEW
+  ACKNOWLEDGED
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
+}
+
+/// Configurable rule. Evaluation logic is deterministic code keyed by `key`;
+/// this row holds what an administrator may change. Every change bumps
+/// `version` and is written to the audit trail.
+model AlertRule {
+  id            String        @id @default(cuid())
+  key           String        @unique
+  name          String
+  description   String
+  category      String
+  severity      AlertSeverity
+  enabled       Boolean       @default(true)
+  params        Json?
+  version       Int           @default(1)
+  updatedByName String?
+  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime      @default(now())
+}
+
+model QualityAlert {
+  id                 String        @id @default(cuid())
+  code               String        @unique
+  ruleKey            String
+  ruleVersion        Int
+  /// One alert per rule per affected record.
+  dedupeKey          String        @unique
+  category           String
+  severity           AlertSeverity
+  title              String
+  detail             String?
+  /// The records that triggered the alert, as evaluated.
+  evidence           Json?
+  href               String?
+  projectId          String?
+  project            Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  status             AlertStatus   @default(NEW)
+  assignedToName     String?
+  acknowledgedByName String?
+  acknowledgedAt     DateTime?
+  resolvedByName     String?
+  resolvedAt         DateTime?
+  resolutionNote     String?
+  dismissedReason    String?
+  firstRaisedAt      DateTime      @default(now())
+  lastSeenAt         DateTime      @default(now())
+  /// Set while the triggering condition is no longer present.
+  conditionClearedAt DateTime?
+  reopenCount        Int           @default(0)
+  updatedAt          DateTime      @updatedAt
+
+  @@index([status, severity])
+  @@index([projectId])
 }
 
 model CalibrationRecord {
@@ -879,25 +1051,25 @@ enum ReleaseStatus {
 }
 
 model ReleaseRecord {
-  id             String        @id @default(cuid())
-  code           String        @unique
-  projectId      String
-  project        Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  unitId         String?
-  unit           Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  status         ReleaseStatus
+  id               String        @id @default(cuid())
+  code             String        @unique
+  projectId        String
+  project          Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  unitId           String?
+  unit             Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  status           ReleaseStatus
   /// The evaluated checklist at the moment of release.
-  checks         Json
-  concessionRef  String?
+  checks           Json
+  concessionRef    String?
   concessionReason String?
-  releasedById   String
-  releasedByName String
-  releasedAt     DateTime      @default(now())
-  notes          String?
-  revokedById    String?
-  revokedAt      DateTime?
-  revokeReason   String?
-  isDemo         Boolean       @default(false)
+  releasedById     String
+  releasedByName   String
+  releasedAt       DateTime      @default(now())
+  notes            String?
+  revokedById      String?
+  revokedAt        DateTime?
+  revokeReason     String?
+  isDemo           Boolean       @default(false)
 }
 
 // ───────────────────────────── Notifications & reports ─────────────────────────────
@@ -922,21 +1094,21 @@ model Notification {
 }
 
 model ReportJob {
-  id          String    @id @default(cuid())
-  code        String    @unique
-  reportType  String
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  params      Json
-  revision    Int       @default(1)
-  status      String    @default("PENDING")
-  storageKey  String?
-  sizeBytes   Int?
-  error       String?
-  createdById String?
+  id            String    @id @default(cuid())
+  code          String    @unique
+  reportType    String
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  params        Json
+  revision      Int       @default(1)
+  status        String    @default("PENDING")
+  storageKey    String?
+  sizeBytes     Int?
+  error         String?
+  createdById   String?
   createdByName String?
-  createdAt   DateTime  @default(now())
-  completedAt DateTime?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
 }
 
 // ───────────────────────────── Inspection & Test Plan ─────────────────────────────

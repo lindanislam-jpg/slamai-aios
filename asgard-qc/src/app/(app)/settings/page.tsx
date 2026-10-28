@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Role } from "@prisma/client";
 import { ActionForm } from "@/components/ActionForm";
 import { Fields } from "@/components/fields";
+import { AlertRulesTab } from "@/components/settings/AlertRulesTab";
 import { storage } from "@/lib/storage";
 import { Badge, Card, Empty, fmtDateTime, KV, PageHeader, Tabs } from "@/components/ui";
 import { aiStatus } from "@/lib/ai/vision";
@@ -46,6 +47,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           { key: "release", label: "Release rules" },
           { key: "vocabulary", label: "Categories & stages" },
           { key: "limits", label: "Limits & reminders" },
+          { key: "alerts", label: "Alert rules" },
           { key: "permissions", label: "Permissions" },
           { key: "templates", label: "Checklist templates" },
           { key: "integrations", label: "Integrations" },
@@ -55,6 +57,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {tab === "release" && <ReleaseTab />}
       {tab === "vocabulary" && <VocabTab />}
       {tab === "limits" && <LimitsTab />}
+      {tab === "alerts" && <AlertRulesTab />}
       {tab === "permissions" && <PermissionsTab />}
       {tab === "templates" && <TemplatesTab edit={str(sp, "edit")} />}
       {tab === "integrations" && <IntegrationsTab />}

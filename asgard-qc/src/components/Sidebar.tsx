@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import {
   Activity, BadgeCheck, BarChart3, Boxes, Camera, ClipboardCheck, FileText, Flame, FolderKanban, Gauge, Layers, Paintbrush,
-  Radar, Ruler, Settings, ShieldCheck, TriangleAlert, Users, Wrench, Menu, X,
+  Hammer, Radar, Ruler, Settings, ShieldCheck, Siren, TriangleAlert, Users, Wrench, Menu, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -23,6 +23,8 @@ export const NAV = [
   { href: "/coating", label: "Painting & Coating QC", icon: Paintbrush },
   { href: "/ncr", label: "NCR & CAPA Management", icon: TriangleAlert },
   { href: "/rework", label: "Rework & Repair Tracking", icon: Wrench },
+  { href: "/cmr", label: "Corrective Maintenance (CMR)", icon: Hammer },
+  { href: "/alerts", label: "Smart Quality Alerts", icon: Siren },
   { href: "/release", label: "Final Inspection & Release", icon: BadgeCheck },
   { href: "/audits", label: "Audit & Compliance Centre", icon: ShieldCheck },
   { href: "/documents", label: "Documents & Calibration", icon: FileText },

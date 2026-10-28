@@ -11,6 +11,8 @@ import { enumParam, PERIODS, periodRange, str, type SP } from "@/lib/params";
 import { materialFlags } from "@/lib/services/materials";
 import { listProjects } from "@/lib/services/projects";
 import { qmsStatus } from "@/lib/integrations/qms";
+import { alertCounts } from "@/lib/services/alerts";
+import { cmrCounts } from "@/lib/services/cmrs";
 
 export const metadata = { title: "Executive Quality Overview" };
 
@@ -33,13 +35,15 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   const projectId = str(sp, "projectId");
   const data = enumParam<DataScope>(sp, "data", ["all", "real", "demo"]) ?? "all";
   const span = range.to.getTime() - range.from.getTime();
-  const [k, prev, projects, materials, activeAll, demoProjects] = await Promise.all([
+  const [k, prev, projects, materials, activeAll, demoProjects, cmr, alerts] = await Promise.all([
     computeKpis({ from: range.from, to: range.to, projectId, data }),
     computeKpis({ from: new Date(range.from.getTime() - span), to: range.from, projectId, data }),
     projectOptions(),
     db.material.findMany({ where: projectId ? { projectId } : {}, orderBy: { updatedAt: "desc" }, take: 5 }),
     listProjects(actor, { status: "ACTIVE" }),
     db.project.count({ where: { isDemo: true } }),
+    cmrCounts(),
+    alertCounts(),
   ]);
   // Only mention demo data while some exists (it is removed once a company goes live).
   const hasDemo = demoProjects > 0;
@@ -95,6 +99,12 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         <Stat label="Material exceptions" value={k.materials.exceptions} tone={k.materials.exceptions ? "warn" : undefined} sub={`${k.materials.quarantined} quarantined`} href="/materials?gaps=1" title={d("materialExceptions")} />
         <Stat label="Overdue inspections" value={k.inspections.overdue} tone={k.inspections.overdue ? "warn" : undefined} sub={`${k.ndt.outstanding} NDT reports outstanding`} href="/inspections?overdue=1" title={d("overdueInspections")} />
         <Stat label="Audit actions outstanding" value={k.audit.outstanding} sub={`${k.evidence.missing} evidence gaps`} href="/audits" title={d("outstandingAudit")} />
+        <Stat label="Open CMRs" value={cmr.open} tone={cmr.overdueRequested ? "warn" : undefined} sub={`${cmr.overdueRequested} past requested date`} href="/cmr" title="Corrective maintenance requests not yet completed. Current, not period-filtered." />
+        <Stat label="Equipment unavailable" value={cmr.unavailable} tone={cmr.unavailable ? "warn" : undefined} sub={`${cmr.critical} critical / safety CMRs`} href="/cmr" title="Open CMRs reported with the equipment unavailable for production." />
+        <Stat label="Critical alerts" value={alerts.bySeverity.CRITICAL} tone={alerts.bySeverity.CRITICAL ? "bad" : undefined} sub="open" href="/alerts?severity=CRITICAL" title="Open Smart Quality Alerts with Critical severity." />
+        <Stat label="High alerts" value={alerts.bySeverity.HIGH} tone={alerts.bySeverity.HIGH ? "bad" : undefined} sub="open" href="/alerts?severity=HIGH" title="Open Smart Quality Alerts with High severity." />
+        <Stat label="Medium / low alerts" value={alerts.bySeverity.MEDIUM + alerts.bySeverity.LOW} sub={`${alerts.bySeverity.INFO} informational`} href="/alerts" title="Open Smart Quality Alerts with Medium or Low severity." />
+        <Stat label="Alerts open > 30 days" value={alerts.ageing["> 30 days"]} tone={alerts.ageing["> 30 days"] ? "warn" : undefined} sub={`${alerts.total} open in total`} href="/alerts" title="Ageing of open alerts since first raised." />
       </div>
 
       <Card title={`Active projects (${active.length})`} actions={<Link href="/projects" className="btn-secondary btn-sm">Project register</Link>} pad={false}>

@@ -3,7 +3,7 @@
 import type { DocStatus } from "@prisma/client";
 import { run, type ActionState } from "@/lib/action";
 import { formToObject } from "@/lib/validation";
-import { addCalibration, approveRevision, createDocument, createEquipment, setDocumentStatus } from "@/lib/services/documents";
+import { addCalibration, approveRevision, createDocument, createEquipment, setDocumentStatus, updateEquipment } from "@/lib/services/documents";
 
 export async function createDocumentAction(_p: ActionState, fd: FormData) {
   return run(async (actor) => {
@@ -39,4 +39,11 @@ export async function addCalibrationAction(equipmentId: string, _p: ActionState,
     await addCalibration(actor, equipmentId, formToObject(fd) as Parameters<typeof addCalibration>[2]);
     return "Calibration recorded.";
   }, ["/documents"]);
+}
+
+export async function updateEquipmentAction(equipmentId: string, _p: ActionState, fd: FormData) {
+  return run(async (actor) => {
+    const e = await updateEquipment(actor, equipmentId, formToObject(fd) as Parameters<typeof updateEquipment>[2]);
+    return `${e.assetNo} updated.`;
+  }, ["/documents", "/cmr", "/alerts"]);
 }

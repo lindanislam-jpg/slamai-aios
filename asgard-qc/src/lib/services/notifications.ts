@@ -3,6 +3,8 @@ import type { Actor, Permission } from "../permissions";
 import { permissionsFor } from "../permissions";
 import { getSetting } from "../settings";
 import { OPEN_NCR } from "./ncrs";
+import { extraConditions, loadRules, type Condition, type LoadedRule } from "./alert-rules";
+import { syncAlerts } from "./alerts";
 
 export const NOTIFICATION_KINDS: Record<string, { label: string; audience: Permission }> = {
   INSPECTION_OVERDUE: { label: "Overdue inspections", audience: "inspection.write" },
@@ -18,21 +20,25 @@ export const NOTIFICATION_KINDS: Record<string, { label: string; audience: Permi
   AWAITING_RELEASE: { label: "Projects awaiting final release", audience: "release.approve" },
   NCR_EFFECTIVENESS_DUE: { label: "NCR effectiveness checks due", audience: "ncr.close" },
   HOLD_POINT_OPEN: { label: "ITP Hold Points open on projects awaiting release", audience: "release.approve" },
+  REPEAT_WELD_DEFECT: { label: "Repeated weld defect type", audience: "weld.confirm" },
+  FAILED_INSPECTION_NO_NCR: { label: "Failed inspection without NCR", audience: "ncr.manage" },
+  MATERIAL_HEAT_MISSING: { label: "Missing heat / batch numbers", audience: "material.disposition" },
+  MATERIAL_ID_MISMATCH: { label: "Material identifier mismatch", audience: "material.disposition" },
+  CMR_CRITICAL_FAULT: { label: "Critical equipment faults (CMR)", audience: "cmr.work" },
+  CMR_OVERDUE: { label: "Overdue CMRs", audience: "cmr.work" },
+  CMR_REPEAT_FAULT: { label: "Repeated faults on the same asset", audience: "cmr.work" },
+  CMR_VERIFICATION_PENDING: { label: "CMR return-to-service verification outstanding", audience: "cmr.verify" },
+  EQUIPMENT_UNAVAILABLE: { label: "Equipment out of service", audience: "cmr.work" },
+  REPEAT_NCR: { label: "Repeat non-conformances", audience: "ncr.manage" },
+  REWORK_AWAITING_INSPECTION: { label: "Rework awaiting inspection", audience: "inspection.review" },
 };
 
-interface Condition {
-  kind: keyof typeof NOTIFICATION_KINDS;
-  key: string;
-  severity: "info" | "warning" | "critical";
-  title: string;
-  body?: string;
-  href?: string;
-}
 
 const DAY = 86_400_000;
 
 /** Work out every condition that currently deserves a reminder. */
-export async function collectConditions(now = new Date()): Promise<Condition[]> {
+export async function collectConditions(now = new Date(), loaded?: Record<string, LoadedRule>): Promise<Condition[]> {
+  const ruleSet = loaded ?? (await loadRules());
   const t = await getSetting("notificationThresholds");
   const rules = await getSetting("releaseRules");
   const out: Condition[] = [];
@@ -75,20 +81,22 @@ export async function collectConditions(now = new Date()): Promise<Condition[]> 
     const plans = await db.itpPlan.findMany({ where: { id: { in: holds.map((h) => h.planId) } }, select: { id: true, projectId: true } });
     for (const p of awaiting) {
       const n = holds.filter((h) => plans.find((pl) => pl.id === h.planId)?.projectId === p.id).reduce((s, h) => s + h._count, 0);
-      if (n) out.push({ kind: "HOLD_POINT_OPEN", key: p.id, severity: "warning", title: `${p.code}: ${n} ITP Hold Point(s) open`, body: "Release is blocked until signed", href: `/projects/${p.id}?tab=itp` });
+      if (n) out.push({ kind: "HOLD_POINT_OPEN", key: p.id, severity: "warning", title: `${p.code}: ${n} ITP Hold Point(s) open`, body: "Release is blocked until signed", href: `/projects/${p.id}?tab=itp`, projectId: p.id });
     }
   }
-  for (const p of awaiting) out.push({ kind: "AWAITING_RELEASE", key: p.id, severity: "info", title: `${p.code} awaiting final release`, body: p.name, href: `/release?projectId=${p.id}` });
+  for (const p of awaiting) out.push({ kind: "AWAITING_RELEASE", key: p.id, severity: "info", title: `${p.code} awaiting final release`, body: p.name, href: `/release?projectId=${p.id}`, projectId: p.id });
 
   if (rules.requiredPhotoCategories.length && activeProjects.length) {
     const have = await db.photo.groupBy({ by: ["projectId", "category"], where: { projectId: { in: activeProjects.map((p) => p.id) }, deletedAt: null } });
     for (const p of activeProjects) {
       const cats = new Set(have.filter((h) => h.projectId === p.id).map((h) => h.category));
       const missing = rules.requiredPhotoCategories.filter((c) => !cats.has(c));
-      if (missing.length) out.push({ kind: "EVIDENCE_MISSING", key: p.id, severity: "info", title: `${p.code} missing evidence`, body: missing.join(", "), href: `/projects/${p.id}?tab=photos` });
+      if (missing.length) out.push({ kind: "EVIDENCE_MISSING", key: p.id, severity: "info", title: `${p.code} missing evidence`, body: missing.join(", "), href: `/projects/${p.id}?tab=photos`, projectId: p.id });
     }
   }
-  return out;
+  out.push(...(await extraConditions(now, ruleSet)));
+  // A rule switched off in Settings → Alert rules raises neither alerts nor reminders.
+  return out.filter((c) => ruleSet[c.kind]?.enabled !== false);
 }
 
 /**
@@ -97,7 +105,9 @@ export async function collectConditions(now = new Date()): Promise<Condition[]> 
  * resolved. Sends nothing outside the app.
  */
 export async function runNotificationScan(now = new Date()) {
-  const [conditions, users, overrides] = await Promise.all([collectConditions(now), db.user.findMany({ where: { active: true } }), getSetting("rolePermissions")]);
+  const rules = await loadRules();
+  const [conditions, users, overrides] = await Promise.all([collectConditions(now, rules), db.user.findMany({ where: { active: true } }), getSetting("rolePermissions")]);
+  const alerts = await syncAlerts(conditions, rules, now);
   let created = 0;
   const liveKeys = new Set(conditions.map((c) => `${c.kind}:${c.key}`));
   for (const u of users) {
@@ -119,7 +129,7 @@ export async function runNotificationScan(now = new Date()) {
   const toResolve = stale.filter((n) => !liveKeys.has(n.dedupeKey)).map((n) => n.id);
   if (toResolve.length) await db.notification.updateMany({ where: { id: { in: toResolve } }, data: { resolvedAt: now } });
   await db.setting.upsert({ where: { key: "lastNotificationScan" }, create: { key: "lastNotificationScan", value: now.toISOString() }, update: { value: now.toISOString() } });
-  return { conditions: conditions.length, created, resolved: toResolve.length };
+  return { conditions: conditions.length, created, resolved: toResolve.length, alerts };
 }
 
 /** Run a scan if the last one is older than `minutes`. Cheap to call on page load. */

@@ -112,3 +112,26 @@ npm run import:forms -- "path/to/…xlsx" --apply --register-document --stages  
 - Front page, weld map and sign-off sheets are skipped. Rows whose text can't be read, or numbers used twice, are listed as warnings for you to fix in the form.
 - `--register-document` adds the workbook to the document register as a new revision (under review). `--stages` sets the production stages to the form's sections.
 - Imported templates are **not approved**. A Quality Manager reviews and approves each one in Settings → Checklist templates before use. Re-running skips templates that already exist.
+
+## Corrective Maintenance Requests (CMR)
+
+**Anyone with "Raise CMR" permission** (inspectors, supervisors, technicians, project managers): CMR → *Report an equipment problem*. Choose the asset from the register (or type its name), describe the fault, set priority, and tick *Equipment unavailable* if it cannot be used — a registered asset is then shown **out of service**. Attach photos or documents on the CMR page (up to 4 MB each).
+
+**Maintenance technicians**: acknowledge → assign → start work → record diagnosis, work done, parts and downtime in the work log → *Work done — request verification*. Use *Waiting for parts / external support* while blocked.
+
+**Quality Manager / authorised verifier**: *Verify repair* records the checks carried out and, if ticked, approves the asset's **return to service**. The technician who did the work cannot verify it. Then *Close*. If the fault comes back, *Reopen* — the earlier closure is kept under *Earlier closures*.
+
+The system never declares equipment safe or calibrated; it records who verified it.
+
+## Smart Quality Alerts
+
+Alerts are raised automatically from the records by rules (Settings → *Alert rules*): repeated weld defects, failed inspections with no NCR, missing heat numbers, overdue / critical / repeated CMRs, equipment out of service, overdue NCRs and actions, rework awaiting inspection, open Hold Points at release, and more. Each alert lists the records that triggered it.
+
+- One alert per rule per record — no duplicates. Rules are re-evaluated every few minutes, after CMR changes, and on *Re-evaluate now*.
+- If the condition disappears (e.g. heat number added) the alert resolves itself. If it comes back later, the alert reopens.
+- People with *Manage alerts* can acknowledge, assign, resolve (with how) or dismiss (with a reason).
+- Administrators change rules, severities and thresholds in Settings → Alert rules; each change creates a new rule version in the audit trail. Default thresholds are starting points — confirm them with the Quality Manager.
+
+## Roles added
+
+Production Supervisor, Maintenance Technician and Project Manager. Default permissions are in Settings → Permissions and can be changed by an administrator.

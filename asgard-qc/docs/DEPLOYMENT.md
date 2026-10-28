@@ -55,3 +55,11 @@ The app has no imports from the parent repo. Copy the `asgard-qc` folder (plus t
 - Security headers: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`.
 - No secrets in client code; all configuration is server-side environment variables.
 - Not yet implemented: SSO (Entra ID/Azure AD), MFA, a content-security-policy header — recommended before internet exposure. Keep the app on the internal network/VPN until then.
+
+## Scheduled alert evaluation
+
+`npm run notifications:run` evaluates every Smart Quality Alert rule and refreshes in-app reminders. The app also runs it when someone opens a page and the last scan is over 10 minutes old, and after CMR changes. On a server, schedule it (e.g. every 15 minutes) with cron. On Vercel no cron is configured yet; evaluation happens on page use.
+
+## One-off historical inspection import (hosted builds)
+
+`INSPECTION_IMPORT_GZ` (base64 of gzip of the JSON records) + `INSPECTION_IMPORT_SHA256` make the build import transcribed historical inspection records through the audited inspection service. Records keep the original inspector and date, name their SharePoint source, are submitted for Quality Manager review only when complete, and are skipped if already imported. Blank both variables after the deploy.

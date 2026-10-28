@@ -31,7 +31,11 @@ export const PERMISSIONS = {
   "file.remove": "Withdraw files attached to projects",
   "document.write": "Register documents and upload revisions",
   "document.approve": "Approve document revisions",
-  "calibration.write": "Manage equipment calibration",
+  "calibration.write": "Manage equipment register and calibration",
+  "cmr.raise": "Raise corrective maintenance requests (CMR)",
+  "cmr.work": "Acknowledge, assign and record maintenance work on CMRs",
+  "cmr.verify": "Verify repairs and approve equipment return to service",
+  "alert.manage": "Acknowledge, assign, resolve and dismiss quality alerts",
   "report.generate": "Generate PDF quality reports",
   "export.excel": "Export to Excel",
   "users.manage": "Manage users and roles",
@@ -44,7 +48,7 @@ const ALL = Object.keys(PERMISSIONS) as Permission[];
 
 const INSPECTOR_BASE: Permission[] = [
   "records.view", "photo.upload", "photo.edit", "photo.download", "file.upload",
-  "inspection.write", "ncr.raise", "rework.write", "report.generate", "export.excel",
+  "inspection.write", "ncr.raise", "rework.write", "report.generate", "export.excel", "cmr.raise",
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -55,6 +59,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   MATERIAL_INSPECTOR: [...INSPECTOR_BASE, "material.write", "material.disposition"],
   PRODUCTION_VIEWER: ["records.view"],
   AUDITOR: ["records.view", "photo.download", "report.generate", "export.excel"],
+  PRODUCTION_SUPERVISOR: ["records.view", "photo.upload", "photo.download", "file.upload", "ncr.raise", "rework.write", "cmr.raise", "alert.manage", "report.generate", "export.excel"],
+  MAINTENANCE_TECHNICIAN: ["records.view", "photo.upload", "cmr.raise", "cmr.work", "export.excel"],
+  PROJECT_MANAGER: ["records.view", "project.write", "photo.upload", "photo.download", "file.upload", "ncr.raise", "cmr.raise", "alert.manage", "report.generate", "export.excel"],
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -65,6 +72,9 @@ export const ROLE_LABELS: Record<Role, string> = {
   MATERIAL_INSPECTOR: "Material Inspector",
   PRODUCTION_VIEWER: "Production Viewer",
   AUDITOR: "Auditor / Read-only",
+  PRODUCTION_SUPERVISOR: "Production Supervisor",
+  MAINTENANCE_TECHNICIAN: "Maintenance Technician",
+  PROJECT_MANAGER: "Project Manager",
 };
 
 export type RolePermissionMap = Partial<Record<Role, Permission[]>>;

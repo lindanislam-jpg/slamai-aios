@@ -1,13 +1,13 @@
-import { DocStatus } from "@prisma/client";
+import { DocStatus, EquipmentStatus } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { db } from "../db";
-import { recordEvent } from "../audit";
+import { diff, recordEvent } from "../audit";
 import { ValidationError } from "../errors";
 import type { Actor } from "../permissions";
 import { getSetting } from "../settings";
 import { storage } from "../storage";
-import { optId, optNum, optStr, reqDate, reqStr } from "../validation";
+import { bool, optId, optNum, optStr, reqDate, reqStr } from "../validation";
 import { assertCan, found, transaction } from "./base";
 
 export const documentInput = z.object({
@@ -112,10 +112,37 @@ export async function listDocuments(actor: Actor, f: { q?: string | null; docTyp
 export const equipmentInput = z.object({
   assetNo: reqStr(80),
   description: reqStr(300),
+  equipmentType: optStr(120),
+  ownerName: optStr(200),
   serialNo: optStr(120),
   location: optStr(200),
   intervalDays: optNum,
 });
+
+export const equipmentUpdateInput = equipmentInput.omit({ assetNo: true }).partial().extend({
+  status: z.nativeEnum(EquipmentStatus).optional(),
+  statusNote: optStr(500),
+  active: bool.optional(),
+});
+
+/** Status changes are recorded facts (e.g. out of service). Returning an asset
+ *  to service after a fault goes through CMR verification, not this form. */
+export async function updateEquipment(actor: Actor, id: string, raw: z.input<typeof equipmentUpdateInput>) {
+  assertCan(actor, "calibration.write");
+  const input = equipmentUpdateInput.parse(raw);
+  return transaction(async (tx) => {
+    const before = found(await tx.equipment.findUnique({ where: { id } }), "Equipment");
+    if (input.status === "IN_SERVICE" && before.status === "OUT_OF_SERVICE") {
+      const open = await tx.cmr.count({ where: { equipmentId: id, status: { notIn: ["COMPLETED", "CLOSED", "CANCELLED"] } } });
+      if (open) throw new ValidationError(`${before.assetNo} has ${open} open CMR(s). Return it to service through CMR verification.`);
+    }
+    const data = Object.fromEntries(Object.entries(input).filter(([k]) => k in raw));
+    const row = await tx.equipment.update({ where: { id }, data });
+    const d = diff(before as unknown as Record<string, unknown>, data);
+    await recordEvent(tx, actor, "equipment.update", "Equipment", id, { summary: before.assetNo, before: d.before, after: d.after });
+    return row;
+  });
+}
 
 export async function createEquipment(actor: Actor, raw: z.input<typeof equipmentInput>) {
   assertCan(actor, "calibration.write");

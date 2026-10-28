@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Download } from "lucide-react";
 import type { DocStatus } from "@prisma/client";
 import { ActionForm } from "@/components/ActionForm";
@@ -9,7 +10,7 @@ import { DOCUMENT_TYPES, humanize } from "@/lib/domain/constants";
 import { projectOptions } from "@/lib/options";
 import { enumParam, str, type SP } from "@/lib/params";
 import { listDocuments, listEquipment } from "@/lib/services/documents";
-import { addCalibrationAction, approveRevisionAction, createDocumentAction, createEquipmentAction, documentStatusAction } from "./actions";
+import { addCalibrationAction, approveRevisionAction, createDocumentAction, createEquipmentAction, documentStatusAction, updateEquipmentAction } from "./actions";
 
 export const metadata = { title: "Documents & Calibration" };
 
@@ -150,6 +151,8 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                   fields={[
                     { name: "assetNo", label: "Asset number", required: true },
                     { name: "description", label: "Description", required: true },
+                    { name: "equipmentType", label: "Type", placeholder: "e.g. Welding set, saw, gauge" },
+                    { name: "ownerName", label: "Responsible owner" },
                     { name: "serialNo", label: "Serial number" },
                     { name: "location", label: "Location" },
                     { name: "intervalDays", label: "Calibration interval (days)", type: "number" },
@@ -163,13 +166,14 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           ) : (
             <div className="table-wrap">
               <table className="tbl">
-                <thead><tr><th>Asset</th><th>Description</th><th>Location</th><th>Last calibrated</th><th>Due</th><th>Certificate</th><th>Status</th>{can("calibration.write") && <th>Record calibration</th>}</tr></thead>
+                <thead><tr><th>Asset</th><th>Description</th><th>Location / owner</th><th>Availability</th><th>Last calibrated</th><th>Due</th><th>Certificate</th><th>Calibration</th>{can("calibration.write") && <th>Update</th>}</tr></thead>
                 <tbody>
                   {equipment.map((e) => (
                     <tr key={e.id}>
                       <td className="whitespace-nowrap font-medium">{e.assetNo} <DemoTag show={e.isDemo} /></td>
-                      <td>{e.description}{e.serialNo && <div className="text-xs text-ink-300">S/N {e.serialNo}</div>}</td>
-                      <td>{e.location ?? "—"}</td>
+                      <td>{e.description}{(e.equipmentType || e.serialNo) && <div className="text-xs text-ink-300">{[e.equipmentType, e.serialNo && `S/N ${e.serialNo}`].filter(Boolean).join(" · ")}</div>}</td>
+                      <td>{e.location ?? "—"}{e.ownerName && <div className="text-xs text-ink-300">{e.ownerName}</div>}</td>
+                      <td><Badge value={e.status} />{e.statusNote && <div className="text-xs text-ink-300">{e.statusNote}</div>}<div><Link className="link text-xs" href={`/cmr?equipmentId=${e.id}&status=all`}>CMR history</Link></div></td>
                       <td className="whitespace-nowrap">{fmtDate(e.latest?.calibratedAt)}</td>
                       <td className="whitespace-nowrap">{fmtDate(e.latest?.dueAt)}</td>
                       <td>{e.latest?.certificateRef ?? "—"}{e.latest?.provider && <div className="text-xs text-ink-300">{e.latest.provider}</div>}</td>
@@ -187,6 +191,22 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                                 <input name="certificateRef" placeholder="Certificate ref" className="input text-xs" />
                                 <input name="provider" placeholder="Provider" className="input text-xs" />
                                 <input name="result" placeholder="Result" className="input text-xs" />
+                              </ActionForm>
+                            </div>
+                          </details>
+                          <details className="mt-1">
+                            <summary className="cursor-pointer text-xs text-gold-300">Availability / details</summary>
+                            <div className="mt-2 w-64">
+                              <ActionForm action={updateEquipmentAction.bind(null, e.id)} submit="Save" submitClass="btn-secondary btn-sm">
+                                <label className="label">Availability</label>
+                                <select name="status" defaultValue={e.status} className="input text-xs">
+                                  {["IN_SERVICE", "RESTRICTED", "OUT_OF_SERVICE", "RETIRED"].map((s) => <option key={s} value={s}>{s.replace(/_/g, " ").toLowerCase()}</option>)}
+                                </select>
+                                <input name="statusNote" placeholder="Reason / restriction" defaultValue={e.statusNote ?? ""} className="input text-xs" />
+                                <input name="ownerName" placeholder="Responsible owner" defaultValue={e.ownerName ?? ""} className="input text-xs" />
+                                <input name="equipmentType" placeholder="Type" defaultValue={e.equipmentType ?? ""} className="input text-xs" />
+                                <input name="location" placeholder="Location" defaultValue={e.location ?? ""} className="input text-xs" />
+                                <p className="text-xs text-ink-300">After a fault, return to service through CMR verification.</p>
                               </ActionForm>
                             </div>
                           </details>
