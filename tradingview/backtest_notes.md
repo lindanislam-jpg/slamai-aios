@@ -59,3 +59,32 @@ Conclusion: ICT is a NAS100 tool (15m or 30m). Beast is weaker but consistent ac
 | SPX500 | +1.61%, PF 2.26, DD 1.1%, 5/10 | +2.44%, PF 1.15, DD 5.8%, 31/74 |
 
 Verdict: both engines are index tools. Trade NAS100 (primary) and optionally SPX500/US30 with Beast only. Do not trade EURUSD or GBPUSD with either engine; forex would need its own session window, thresholds and a fresh backtest.
+
+## Gold tuning (OANDA:XAUUSD 15m, Aug-Nov 2026), ICT engine
+| Variant | PnL | Max DD | Profitable | PF |
+|---|---|---|---|---|
+| NAS100 defaults (HTF 60, Balanced, stop 3, session on) | +0.42% | 12.96% | 23/63 | 1.03 |
+| stop 2 | -1.57% | 12.52% | 24/72 | 0.91 |
+| stop 5 | +0.19% | 5.45% | 20/51 | 1.02 |
+| stop 5 + Strict | -1.00% | 1.00% | 0/3 | 0 |
+| stop 5 + Early | -1.45% | 5.46% | 21/59 | 0.88 |
+| stop 5 + Balanced + session OFF | -3.09% | 13.05% | 46/117 | 0.89 |
+| stop 5 + Balanced + session + HTF 240 | +11.36% | 2.78% | 30/53 | 2.38 |
+| HTF 240 + stop 3 | +5.91% | 4.51% | 26/57 | 1.53 |
+| HTF 240 + stop 4 | +12.17% | 2.78% | 31/54 | 2.51 |
+| HTF 240 + stop 5, 30m chart | -5.18% | 17.29% | 38/76 | 0.81 |
+| HTF 240 + stop 6 | +9.48% | 2.76% | 29/53 | 2.13 |
+
+Stop cap 4-6 with HTF 240 is a plateau (+9.5% to +12.2%), so the result is not a single-point fluke. Chosen gold settings: HTF 240, stop cap 4, Balanced, session on, 15m only.
+
+## Gold tuning, Beast engine
+| Variant | PnL | Max DD | Profitable | PF |
+|---|---|---|---|---|
+| NAS100 defaults | +0.25% | 1.63% | 5/9 | 1.16 |
+| score 80 | +0.31% | 3.36% | 10/18 | 1.08 |
+| score 85, HTF 240 / 1D | +0.25% | 1.63% | 5/9 | 1.16 |
+
+Beast adds nothing on gold. Gold is an ICT-only market.
+
+## Market Preset (added to the ICT engine)
+Input "Market Preset": Auto (default) / NAS100 / Gold / Custom. Auto applies the Gold settings on any XAU or GOLD symbol and the NAS100 settings elsewhere. Verified: Auto on XAUUSD reproduces +12.17% / PF 2.51; Auto on NAS100 reproduces the NAS100 result.

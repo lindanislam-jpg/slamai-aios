@@ -47,6 +47,11 @@ The Basic plan allows two indicators per chart, so remove an old copy before add
 - Daily guard in both engines: max 3 signals per day, stop after 2 losing trades in a day, shown as a DAY GUARD row (GO / STOP FOR TODAY).
 - Robustness sweep (see `backtest_notes.md`): Beast is positive on NAS100 15m/30m/1h, US30 and gold but trades rarely; ICT is strong on NAS100 15m and 30m only, and should not be used on gold or US30 with these settings.
 
+## Round 4 (same day): gold
+
+- ICT engine gains a Market Preset input (Auto / NAS100 / Gold / Custom). Auto picks the gold settings (HTF bias 240, stop cap 4 ATR) on any XAU or GOLD symbol and the NAS100 settings (HTF 60, stop cap 3) elsewhere. Dashboard HTF row shows which preset is live.
+- Gold 15m backtest with the preset: +12.2%, PF 2.5, 2.8% max drawdown; stop caps 4 to 6 form a plateau, 30m fails, Beast adds nothing. Full matrix in `backtest_notes.md`.
+
 ## Alerts and the Basic plan
 
 TradingView Basic allows **0 technical alerts**, so no indicator alert can be saved on this account.

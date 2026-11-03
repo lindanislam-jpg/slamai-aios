@@ -93,7 +93,7 @@ acctSize = input.float(10000, "Account Size", minval=0, group="Risk Management",
 riskPct  = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10, step=0.1, group="Risk Management", tooltip="If the SL is hit, you lose this % of the account — the dashboard shows how many units to trade so that is true.")
 
 // ── Multi-Timeframe
-htfBiasTF = input.timeframe("60", "HTF Bias Timeframe", group="Multi-Timeframe")
+htfBiasIn = input.timeframe("60", "HTF Bias Timeframe", group="Multi-Timeframe", tooltip="Used when Market Preset is Custom. Auto/NAS100 use 60, Gold uses 240.")
 
 // ── Dashboard
 dashOn = input.bool(true, "ICT Dashboard (top right)", group="Dashboard")
@@ -119,7 +119,13 @@ dashPosIn = input.string("Middle Left", "ICT Dashboard Position", options=["Top 
 useSession  = input.bool(true, "Only Trade Inside Session", group="Execution", tooltip="Blocks new setups outside the session window below. Open trades are still managed.")
 sessionStr  = input.session("0930-1600", "Session Window", group="Execution")
 sessionTz   = input.string("America/New_York", "Session Timezone", group="Execution", options=["America/New_York", "Europe/London", "UTC", "Africa/Johannesburg", "Asia/Tokyo", "Australia/Sydney"])
-maxStopAtrI = input.float(3.0, "Max Stop Distance (ATR x)", minval=0.5, step=0.1, group="Execution", tooltip="Caps the swing-based stop. A swing low far below price would otherwise give a huge stop and a tiny position.")
+maxStopIn   = input.float(3.0, "Max Stop Distance (ATR x)", minval=0.5, step=0.1, group="Execution", tooltip="Used when Market Preset is Custom. Auto/NAS100 use 3, Gold uses 4.")
+preset      = input.string("Auto", "Market Preset", options=["Auto", "NAS100", "Gold", "Custom"], group="Execution", tooltip="Auto picks Gold settings on any XAU/GOLD symbol and NAS100 settings elsewhere. Backtested 2026-11-03: NAS100 = HTF 60, stop cap 3; Gold = HTF 240, stop cap 4. Custom uses the two inputs above.")
+isGoldSym   = str.contains(str.upper(syminfo.ticker), "XAU") or str.contains(str.upper(syminfo.ticker), "GOLD")
+useGold     = preset == "Gold" or (preset == "Auto" and isGoldSym)
+useNas      = preset == "NAS100" or (preset == "Auto" and not isGoldSym)
+htfBiasTF   = useGold ? "240" : useNas ? "60" : htfBiasIn
+maxStopAtrI = useGold ? 4.0 : useNas ? 3.0 : maxStopIn
 beAfterTP1  = input.bool(false, "Move Stop To Breakeven After TP1", group="Execution", tooltip="Once TP1 is hit the stop for the open remainder moves to the entry price. The ledger scores that exit as 0R on the remainder.")
 useBeast    = input.bool(false, "Require Beast Bias Agreement", group="Execution", tooltip="ON = a long needs the Beast Signal Engine bias plot above 0 and a short needs it below 0. Set the source below to the Beast engine's \"Beast Bias\" plot.")
 beastSrc    = input.source(close, "Beast Bias Plot", group="Execution")
@@ -1160,7 +1166,7 @@ if barstate.islast and dashOn
 
     table.cell(dashT, 0, 0, "TRADEPULSE PRO 3", text_color=color.white, text_size=size.small, bgcolor=color.new(color.navy, 10), text_halign=text.align_center)
     table.cell(dashT, 1, 0, "ICT", text_color=color.yellow, text_size=size.small, bgcolor=color.new(color.navy, 10), text_halign=text.align_center)
-    table.cell(dashT, 0, 1, "HTF BIAS " + htfBiasTF, text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 0, 1, "HTF BIAS " + htfBiasTF + (useGold ? " · GOLD" : useNas ? " · NAS" : " · CUSTOM"), text_color=color.gray, text_size=size.tiny)
     table.cell(dashT, 1, 1, hbTxt, text_color=hbCol, text_size=size.tiny, text_halign=text.align_right)
     table.cell(dashT, 0, 2, "STRUCTURE", text_color=color.gray, text_size=size.tiny)
     table.cell(dashT, 1, 2, stTxt, text_color=stCol, text_size=size.tiny, text_halign=text.align_right)

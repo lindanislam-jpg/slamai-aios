@@ -12,7 +12,7 @@ Written 2026-11-03 from the backtests in `pine/backtest_notes.md`. This is a rul
 - Tiers from the backtests:
   - Tier 1, demo now: NAS100, both engines.
   - Tier 2, after the NAS100 demo passes, each with its own demo: SPX500 (both engines positive), US30 (Beast only; ICT was flat).
-  - Tier 3, needs its own tuning before any demo: gold (Beast +0.2%, ICT +0.4% with a 13% drawdown with the current settings). It stays in the scanner as a watch market, not a trade market.
+  - Tier 2 as well, after NAS100 passes and with its own demo: gold with the ICT engine only, 15m only. The engine's Market Preset (default Auto) switches to the gold settings on any XAU symbol: 4-hour bias, stop cap 4 ATR. Backtest +12.2%, profit factor 2.5, 2.8% max drawdown over 3 months. Beast adds nothing on gold and should be ignored there.
 - The scanner watches NAS100, SPX500, US30, DAX, FTSE and gold. DAX and FTSE are untested; a READY on them is information, not a signal.
 - New York session only, 09:30-16:00 ET (the scripts block signals outside it). Skip the first 5 minutes after the open and the last 15 minutes before the close.
 - No trades in the 30 minutes around FOMC, CPI, NFP or Nvidia/Apple/Microsoft earnings. The scripts cannot see news; you must.
