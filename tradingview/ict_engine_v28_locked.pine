@@ -78,7 +78,7 @@ dispMult = input.float(1.5, "Displacement (body > ATR x)", step=0.1, minval=0.5,
 
 // ── Execution
 execOn    = input.bool(true, "ICT Setup Engine", group="Execution")
-setupMode = input.string("Early", "Setup Mode", options=["Strict", "Balanced", "Early"], group="Execution")
+setupMode = input.string("Balanced", "Setup Mode", options=["Strict", "Balanced", "Early"], group="Execution")
 slModel   = input.string("Swing", "Stop Loss Model", options=["Swing", "ATR"], group="Execution")
 slBuffer  = input.float(0.25, "SL Buffer (ATR x)", step=0.05, group="Execution")
 tpModeIn  = input.string("R-Multiple", "Take Profit Mode", options=["R-Multiple", "Liquidity"], group="Execution")
@@ -93,7 +93,7 @@ acctSize = input.float(10000, "Account Size", minval=0, group="Risk Management",
 riskPct  = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10, step=0.1, group="Risk Management", tooltip="If the SL is hit, you lose this % of the account — the dashboard shows how many units to trade so that is true.")
 
 // ── Multi-Timeframe
-htfBiasTF = input.timeframe("240", "HTF Bias Timeframe", group="Multi-Timeframe")
+htfBiasTF = input.timeframe("60", "HTF Bias Timeframe", group="Multi-Timeframe")
 
 // ── Dashboard
 dashOn = input.bool(true, "ICT Dashboard (top right)", group="Dashboard")
@@ -116,6 +116,13 @@ tlBreak = input.bool(true, "Mark Trendline Breaks", group="Trendlines")
 
 // ── v3.1 additions (appended last so saved input positions never shift)
 dashPosIn = input.string("Middle Left", "ICT Dashboard Position", options=["Top Right", "Top Left", "Middle Right", "Middle Left", "Bottom Right", "Bottom Left"], group="Dashboard", tooltip="Default Middle Left so it never sits under the Beast Signal Engine panel (top right) or the scanner (bottom left).")
+useSession  = input.bool(true, "Only Trade Inside Session", group="Execution", tooltip="Blocks new setups outside the session window below. Open trades are still managed.")
+sessionStr  = input.session("0930-1600", "Session Window", group="Execution")
+sessionTz   = input.string("America/New_York", "Session Timezone", group="Execution", options=["America/New_York", "Europe/London", "UTC", "Africa/Johannesburg", "Asia/Tokyo", "Australia/Sydney"])
+maxStopAtrI = input.float(3.0, "Max Stop Distance (ATR x)", minval=0.5, step=0.1, group="Execution", tooltip="Caps the swing-based stop. A swing low far below price would otherwise give a huge stop and a tiny position.")
+beAfterTP1  = input.bool(false, "Move Stop To Breakeven After TP1", group="Execution", tooltip="Once TP1 is hit the stop for the open remainder moves to the entry price. The ledger scores that exit as 0R on the remainder.")
+useBeast    = input.bool(false, "Require Beast Bias Agreement", group="Execution", tooltip="ON = a long needs the Beast Signal Engine bias plot above 0 and a short needs it below 0. Set the source below to the Beast engine's \"Beast Bias\" plot.")
+beastSrc    = input.source(close, "Beast Bias Plot", group="Execution")
 rearmOn   = input.bool(true, "Re-arm After Cooldown", group="Execution", tooltip="ON = once a trade has closed and the cooldown has passed, a setup may print immediately if the confirmation chain is still complete. OFF = the chain must drop out and re-confirm first (the old behaviour, which could skip valid setups after a close).")
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -825,8 +832,9 @@ sweepOkS  = sinceSSL > confWin or sinceBSL < sinceSSL   // no fresh sell-side sw
 confirmL  = structOkL and sinceDispUp <= confWin and htfBull and sweepOkL
 confirmS  = structOkS and sinceDispDn <= confWin and htfBear and sweepOkS
 
-longOK  = execOn and bullScore >= thresh and structDir == 1  and isLong     and (not confirmOn or confirmL) and not knifeDown
-shortOK = execOn and bearScore >= thresh and structDir == -1 and not isLong and (not confirmOn or confirmS) and not knifeUp
+inSession = not useSession or not na(time(timeframe.period, sessionStr, sessionTz))
+longOK  = execOn and inSession and (not useBeast or beastSrc > 0) and bullScore >= thresh and structDir == 1  and isLong     and (not confirmOn or confirmL) and not knifeDown
+shortOK = execOn and inSession and (not useBeast or beastSrc < 0) and bearScore >= thresh and structDir == -1 and not isLong and (not confirmOn or confirmS) and not knifeUp
 
 f_grade(sc) => sc >= 85 ? "A+" : sc >= 70 ? "A" : "B"
 
@@ -862,7 +870,9 @@ var string lastSide    = "—"
 var string lastGrade   = ""
 f_rTxt(_r) => na(_r) ? "" : (_r >= 0 ? "+" : "") + str.tostring(_r, "#.#") + "R"
 
-tradeHitSL  = tradeActive and barstate.isconfirmed and not na(setupSL)  and (tradeIsLong ? low  <= setupSL  : high >= setupSL)
+beLive      = beAfterTP1 and tp1Hit
+effStopI    = beLive ? setupEntry : setupSL
+tradeHitSL  = tradeActive and barstate.isconfirmed and not na(setupSL)  and (tradeIsLong ? low  <= effStopI : high >= effStopI)
 tradeHitTP3 = tradeActive and barstate.isconfirmed and not na(setupTP3) and (tradeIsLong ? high >= setupTP3 : low  <= setupTP3)
 // ── Reversal exit: if the OPPOSITE side fully qualifies while a trade is
 //    locked, the market has flipped — close the trade ("REV ⇄") and let the
@@ -891,10 +901,10 @@ if tradeHitTP3 or tradeHitSL or tradeRev
     bool t2 = tp2Hit or tradeHitTP3
     float banked = (t1 ? r1 : 0.0) / 3.0 + (t2 ? r2 : 0.0) / 3.0 + (tradeHitTP3 ? r3 : 0.0) / 3.0
     float openFr = 1.0 - ((t1 ? 1.0 : 0.0) + (t2 ? 1.0 : 0.0) + (tradeHitTP3 ? 1.0 : 0.0)) / 3.0
-    float exitR  = tradeHitSL ? -1.0 : tradeHitTP3 ? 0.0 : (close - setupEntry) * dirMul / riskR
+    float exitR  = tradeHitSL ? (beLive ? 0.0 : -1.0) : tradeHitTP3 ? 0.0 : (close - setupEntry) * dirMul / riskR
     float rres   = banked + openFr * exitR
     ictLastR   := rres
-    ictLastRes := tradeHitTP3 ? "TP3 ✓" : tradeHitSL ? (tp2Hit ? "SL after TP2" : tp1Hit ? "SL after TP1" : "SL ✗") : "REV ⇄"
+    ictLastRes := tradeHitTP3 ? "TP3 ✓" : tradeHitSL ? (beLive ? (tp2Hit ? "BE after TP2" : "BE after TP1") : tp2Hit ? "SL after TP2" : tp1Hit ? "SL after TP1" : "SL ✗") : "REV ⇄"
     if rres > 0.1
         ictWins += 1
     else if rres < -0.1
@@ -958,6 +968,9 @@ if longSetup or shortSetup
         sl := isL ? entry - atr * slMult : entry + atr * slMult
     risk = math.abs(entry - sl)
     risk := risk > 0 ? risk : atr * slMult
+    if risk > atr * maxStopAtrI
+        sl   := isL ? entry - atr * maxStopAtrI : entry + atr * maxStopAtrI
+        risk := atr * maxStopAtrI
     // Take profits
     float tp1 = na
     float tp2 = na
@@ -1374,3 +1387,14 @@ if tlBreakDn
 
 alertcondition(tlBreakUp, "Downtrend Line Broken (bullish)", "TradePulse ICT: downtrend line broken upward")
 alertcondition(tlBreakDn, "Uptrend Line Broken (bearish)",   "TradePulse ICT: uptrend line broken downward")
+
+// ── JSON ledger events (webhook-ready). Every trade event carries the locked
+//    levels so a sheet or server can rebuild the full record.
+f_ictJson(_ev, _extra) =>
+    '{"source":"TradePulse ICT","event":"' + _ev + '","symbol":"' + syminfo.ticker + '","exchange":"' + syminfo.prefix + '","timeframe":"' + timeframe.period + '","side":"' + (tradeIsLong ? "LONG" : "SHORT") + '","entry":' + str.tostring(setupEntry, format.mintick) + ',"stop":' + str.tostring(setupSL, format.mintick) + ',"tp1":' + str.tostring(setupTP1, format.mintick) + ',"tp2":' + str.tostring(setupTP2, format.mintick) + ',"tp3":' + str.tostring(setupTP3, format.mintick) + _extra + ',"time":' + str.tostring(time_close) + '}'
+if tp1HitEv
+    alert(f_ictJson("TP1_HIT", ""), alert.freq_once_per_bar_close)
+if tp2HitEv
+    alert(f_ictJson("TP2_HIT", ""), alert.freq_once_per_bar_close)
+if tradeHitTP3 or tradeHitSL or tradeRev
+    alert(f_ictJson(tradeHitTP3 ? "TP3_HIT" : tradeHitSL ? (beLive ? "BREAKEVEN_HIT" : "STOP_HIT") : "REVERSAL", ',"r":' + str.tostring(nz(ictLastR, 0.0), "#.##") + ',"net_r":' + str.tostring(ictNetR, "#.##") + ',"wins":' + str.tostring(ictWins) + ',"losses":' + str.tostring(ictLosses)), alert.freq_once_per_bar_close)
