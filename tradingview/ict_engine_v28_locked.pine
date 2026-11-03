@@ -1398,3 +1398,13 @@ if tp2HitEv
     alert(f_ictJson("TP2_HIT", ""), alert.freq_once_per_bar_close)
 if tradeHitTP3 or tradeHitSL or tradeRev
     alert(f_ictJson(tradeHitTP3 ? "TP3_HIT" : tradeHitSL ? (beLive ? "BREAKEVEN_HIT" : "STOP_HIT") : "REVERSAL", ',"r":' + str.tostring(nz(ictLastR, 0.0), "#.##") + ',"net_r":' + str.tostring(ictNetR, "#.##") + ',"wins":' + str.tostring(ictWins) + ',"losses":' + str.tostring(ictLosses)), alert.freq_once_per_bar_close)
+
+// ── Alert plots (see Beast engine note): "Alert Signal" = +1 long / -1 short
+//    on the setup bar; "Alert Event" = 1 TP1, 2 TP2, 3 TP3, -1 stop, -4 reversal.
+plot(longSetup ? 1 : shortSetup ? -1 : 0, "Alert Signal", color=color.new(color.white, 100), display=display.data_window)
+plot(tp1HitEv ? 1 : tp2HitEv ? 2 : tradeHitTP3 ? 3 : tradeHitSL ? -1 : tradeRev ? -4 : 0, "Alert Event", color=color.new(color.white, 100), display=display.data_window)
+plot(setupEntry, "Entry", color=color.new(color.white, 100), display=display.data_window)
+plot(setupSL, "SL", color=color.new(color.white, 100), display=display.data_window)
+plot(setupTP1, "TP1", color=color.new(color.white, 100), display=display.data_window)
+plot(setupTP2, "TP2", color=color.new(color.white, 100), display=display.data_window)
+plot(setupTP3, "TP3", color=color.new(color.white, 100), display=display.data_window)

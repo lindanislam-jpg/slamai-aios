@@ -1137,6 +1137,15 @@ plot(sigTP3,    "TP3",   color = color.new(color.white, 100), display = display.
 biasOut = sigState == "ACTIVE" ? sigDir : (longScore >= strongTh and not longBlocked ? 1 : shortScore >= strongTh and not shortBlocked ? -1 : 0)
 plot(biasOut, "Beast Bias", color = color.new(color.white, 100), display = display.data_window)
 
+// ── Alert plots. TradingView only lists plots (not alertcondition events) for
+//    scripts that cannot be saved on the Basic plan, so alerts are built on
+//    these: "Alert Signal" = +1 long / -1 short on the signal bar, else 0.
+//    "Alert Event" = 1 TP1, 2 TP2, 3 TP3, -1 stop, -2 expired, -3 invalidated.
+//    Alert rule: plot "Alert Signal", condition "Outside Channel" -0.5 .. 0.5,
+//    trigger "Once per bar close".
+plot(newSignal ? sigDir : 0, "Alert Signal", color = color.new(color.white, 100), display = display.data_window)
+plot(evT1 ? 1 : evT2 ? 2 : evT3 ? 3 : evSL ? -1 : evExp ? -2 : evInv ? -3 : 0, "Alert Event", color = color.new(color.white, 100), display = display.data_window)
+
 beastLong   = longFire  and longScore  >= beastTh
 eliteLong   = longFire  and longScore  >= eliteTh and longScore  < beastTh
 strongLong  = longFire  and longScore  >= strongTh and longScore < eliteTh

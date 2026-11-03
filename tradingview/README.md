@@ -40,3 +40,12 @@ The Basic plan cannot save Pine scripts, so load each file by hand:
 4. The ICT engine's **HTF Bias Timeframe** should be set to 60 to match the live setup; the default is 240.
 
 The Basic plan allows two indicators per chart, so remove an old copy before adding a new one.
+
+## Alerts and the Basic plan
+
+TradingView Basic allows **0 technical alerts**, so no indicator alert can be saved on this account.
+Both scripts are ready for alerts the moment the plan is upgraded (Essential gives 20 alerts and webhooks):
+
+1. Alerts panel > Create alert > Condition = the indicator > **Any alert() function call**. One alert per engine covers every event (signal, TP1/TP2/TP3, stop, breakeven, expiry, invalidation, reversal) as JSON.
+2. Put the `ledger_webhook.py` URL in the Webhook field to persist the record to `ledger.csv`.
+3. The scripts also export plots `Alert Signal` (+1 long / -1 short on the signal bar) and `Alert Event` for plot-based alerts if ever needed.
