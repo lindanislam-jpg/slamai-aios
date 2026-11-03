@@ -102,12 +102,12 @@ sdLabels = input.bool(false, "Show Zone Labels (FRESH / TESTED ×n)", group="Sup
 
 // ── Market Scanner (appended last so saved input positions never shift)
 scanOn = input.bool(true, "Show Market Scanner", group="Market Scanner", tooltip="Checks each market on this chart's timeframe for the core confirmation chain: structure break, 9/21 EMA direction, recent displacement, and higher-timeframe bias. READY means all four agree — open that chart for the full engine's confirmed signal.")
-scan1  = input.symbol("CAPITALCOM:US30",   "Market 1", group="Market Scanner")
-scan2  = input.symbol("FOREXCOM:NAS100",   "Market 2", group="Market Scanner")
-scan3  = input.symbol("OANDA:XAUUSD",      "Market 3", group="Market Scanner")
-scan4  = input.symbol("OANDA:EURUSD",      "Market 4", group="Market Scanner")
-scan5  = input.symbol("OANDA:GBPUSD",      "Market 5", group="Market Scanner")
-scan6  = input.symbol("OANDA:SPX500USD",   "Market 6", group="Market Scanner")
+scan1  = input.symbol("CAPITALCOM:NAS100",  "Market 1", group="Market Scanner")
+scan2  = input.symbol("OANDA:SPX500USD",    "Market 2", group="Market Scanner")
+scan3  = input.symbol("CAPITALCOM:US30",    "Market 3", group="Market Scanner")
+scan4  = input.symbol("OANDA:DE30EUR",      "Market 4", group="Market Scanner")
+scan5  = input.symbol("OANDA:UK100GBP",     "Market 5", group="Market Scanner")
+scan6  = input.symbol("OANDA:XAUUSD",       "Market 6", group="Market Scanner")
 
 // ── Auto Trendlines (appended last so saved input positions never shift)
 tlOn    = input.bool(true, "Auto Trendlines", group="Trendlines", tooltip="Uptrend line through the last two higher swing lows, downtrend line through the last two lower swing highs. Built from confirmed pivots only.")
