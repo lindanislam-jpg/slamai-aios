@@ -26,7 +26,7 @@ Pine Script v6 indicators for TradingView, used on NAS100 15m (Capital.com).
 ## Round 2 (same day)
 
 - Session filter (default on, 09:30-16:00 New York) in both engines. Backtests: trades outside the session were the losers.
-- Breakeven-after-TP1 option in both (on for Beast where it was neutral, off for ICT where it hurt).
+- Breakeven-after-TP1 option in both, off by default in both so no level ever moves after a signal (neutral for Beast, hurt ICT).
 - ICT: stop capped at 3 ATR, HTF bias default 60, Setup Mode default Balanced, optional "Require Beast Bias Agreement" using the Beast engine's exported "Beast Bias" plot, JSON alert events for a webhook ledger.
 - Beast: default score 85 and tick-volume scoring forced off (Capital.com CFDs report tick volume, which was dragging every score down).
 - Backtest (3 months, 1% risk, spread modelled): Beast went from -1.0% / PF 0.80 to +1.69% / PF 1.99 (about 5 trades); ICT from +0.03% / PF 1.00 to +3.29% / PF 1.40 with 3.6% max drawdown (about 19 trades). Small samples; forward-test on demo first.

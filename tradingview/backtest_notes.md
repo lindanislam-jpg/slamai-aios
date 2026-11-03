@@ -27,7 +27,7 @@
 | Balanced, re-arm OFF | +3.22% | 3.63% | 27/58 (47%) | 1.39 |
 
 ## Chosen defaults (baked into the files on 2026-11-03)
-- Beast: score 85, Force Volume Scoring OFF = on, session 09:30-16:00 New York = on, BE after TP1 = on (neutral in test, kept for live protection).
+- Beast: score 85, Force Volume Scoring OFF = on, session 09:30-16:00 New York = on, BE after TP1 = off (neutral in test; off so no level ever moves after a signal).
 - ICT: HTF bias 60, Setup Mode Balanced, session on, stop cap 3 ATR, BE off, re-arm on.
 - Caveat: 3 months of 15m data, ~5 Beast trades and ~19 ICT trades. Treat as a first pass, not proof. Forward-test on a demo account before risking money.
 

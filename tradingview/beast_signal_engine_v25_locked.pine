@@ -78,7 +78,7 @@ maxTradesDay = input.int(3, "Max Signals Per Day", minval = 0, group = gGuard, t
 maxLossesDay = input.int(2, "Stop After N Losing Trades In A Day", minval = 0, group = gGuard, tooltip = "0 = no limit. Once this many trades have closed at a loss today, no new signal prints until tomorrow.")
 var int tradesToday = 0
 var int lossesToday = 0
-beAfterTP1   = input.bool(true, "Move Stop To Breakeven After TP1", group = gRisk, tooltip = "Once TP1 is hit the stop for the open remainder moves to the entry price. The original stop stays drawn as a reference; the ledger scores a breakeven exit as 0R on the remainder.")
+beAfterTP1   = input.bool(false, "Move Stop To Breakeven After TP1", group = gRisk, tooltip = "Once TP1 is hit the stop for the open remainder moves to the entry price. The original stop stays drawn as a reference; the ledger scores a breakeven exit as 0R on the remainder.")
 
 gVis = "VISUALS"
 showEntry   = input.bool(true, "Show Entry",     group = gVis)
