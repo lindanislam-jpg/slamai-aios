@@ -50,3 +50,12 @@
 | XAUUSD 15m | +0.42% | 12.96% | 23/63 | 1.03 |
 
 Conclusion: ICT is a NAS100 tool (15m or 30m). Beast is weaker but consistent across markets. Do not run ICT on gold or US30 with these settings.
+
+## Scanner markets sweep (15m, final defaults, NY session 09:30-16:00)
+| Market | Beast | ICT |
+|---|---|---|
+| EURUSD | -0.51%, PF 0.73, 3/6 | -6.32%, PF 0.40, DD 8.9%, 7/36 |
+| GBPUSD | -0.94%, PF 0.61, 4/9 | -5.14%, PF 0.65, DD 10.3%, 18/59 |
+| SPX500 | +1.61%, PF 2.26, DD 1.1%, 5/10 | +2.44%, PF 1.15, DD 5.8%, 31/74 |
+
+Verdict: both engines are index tools. Trade NAS100 (primary) and optionally SPX500/US30 with Beast only. Do not trade EURUSD or GBPUSD with either engine; forex would need its own session window, thresholds and a fresh backtest.

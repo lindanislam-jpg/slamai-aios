@@ -8,7 +8,7 @@ Written 2026-11-03 from the backtests in `pine/backtest_notes.md`. This is a rul
 - Go live only if, after 30 trades: net R > 0, profit factor >= 1.2, max drawdown < 8%, and you followed every rule below without exception.
 
 ## Market and time
-- NAS100 only. Backtests say the ICT engine is flat on US30 and gold with a 13% drawdown on gold.
+- NAS100 only. Backtests say the ICT engine is flat on US30, flat on gold with a 13% drawdown, and loses 5-6% on EURUSD and GBPUSD. SPX500 is the only other market where both engines were positive; it can be added after the NAS100 demo passes, with its own demo period.
 - New York session only, 09:30-16:00 ET (the scripts block signals outside it). Skip the first 5 minutes after the open and the last 15 minutes before the close.
 - No trades in the 30 minutes around FOMC, CPI, NFP or Nvidia/Apple/Microsoft earnings. The scripts cannot see news; you must.
 
