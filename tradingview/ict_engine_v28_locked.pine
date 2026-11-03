@@ -1,0 +1,1376 @@
+// ============================================================================
+// TradePulse Pro 3 — ICT / Smart Money Execution Engine
+// ----------------------------------------------------------------------------
+// Preserves the full TradePulse Pro 2 (v17) core engine:
+//   • EMA 9/21 crossover signals (arrows ONLY on trend flip)
+//   • ATR-locked Entry / SL / T1 / T2 + breakeven
+//   • Pivot Support/Resistance boxes
+//   • 5-point Direction Calculator table (bottom-left)
+// Adds a modular ICT / SMC layer (each module has its own toggle):
+//   • Market Structure  — confirmed-pivot BOS / CHoCH (no repainting)
+//   • Liquidity         — PDH / PDL / PWH / PWL + BSL / SSL sweep detection
+//   • Fair Value Gaps   — LTF + one HTF stream, mitigation tracking
+//   • Order Blocks      — displacement + structure-break confirmed
+//   • Premium/Discount  — auto dealing range with fib levels
+//   • Displacement      — ATR-normalized (multi-market safe)
+//   • Confluence Score  — transparent 0–100 weights, Strict/Balanced/Early
+//   • Execution         — A+/A/B setups, Entry/SL/TP1-3 boxes, R:R
+//   • Dashboard         — ICT panel top-right
+//   • Alerts            — BOS, CHoCH, sweeps, FVG, Long/Short setups
+// NON-REPAINTING: all detections use confirmed pivots / confirmed closes;
+// HTF data uses [1]-offset confirmed bars.
+// ============================================================================
+//@version=6
+indicator("TradePulse Pro 3.1 - ICT Engine (Locked)", shorttitle="TradePulse ICT 3.1", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+
+// ════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Core (TradePulse Pro 2)
+// Default OFF: the live "TradePulse Pro v2.0 - Beast Signal Engine" already
+// draws core signals/levels — enable this only when running Pro 3 standalone.
+showCore = input.bool(false, "Show Core EMA Signals + Levels", group="Core Engine")
+slMult   = input.float(2.0, "Stop Loss ATR x",  step=0.1, group="Core Engine")
+t1Mult   = input.float(3.0, "Target 1 ATR x",   step=0.1, group="Core Engine")
+t2Mult   = input.float(5.0, "Target 2 ATR x",   step=0.1, group="Core Engine")
+srLB     = input.int(20,    "S/R Lookback",      minval=5, maxval=50, group="Core Engine")
+
+// ── Market Structure
+msOn       = input.bool(true, "Market Structure (BOS / CHoCH)", group="Market Structure")
+swingLen   = input.int(5,     "Swing Length",  minval=2, maxval=25, group="Market Structure")
+showStruct = input.bool(true, "Show BOS / CHoCH Labels", group="Market Structure")
+
+// ── Liquidity
+showPDH   = input.bool(true, "Previous Day High (PDH)",  group="Liquidity")
+showPDL   = input.bool(true, "Previous Day Low (PDL)",   group="Liquidity")
+showPWH   = input.bool(false, "Previous Week High (PWH)", group="Liquidity")
+showPWL   = input.bool(false, "Previous Week Low (PWL)",  group="Liquidity")
+sweepOn   = input.bool(true, "Liquidity Sweep Detection", group="Liquidity")
+
+// ── Fair Value Gaps
+fvgOn      = input.bool(true, "Fair Value Gaps", group="Fair Value Gaps")
+fvgMinSize = input.float(0.25, "Min FVG Size (ATR x)", step=0.05, minval=0.0, group="Fair Value Gaps")
+maxFVG     = input.int(3,     "Max Active FVGs per side", minval=1, maxval=20, group="Fair Value Gaps")
+fvgMitMode = input.string("Remove", "Mitigated FVG", options=["Remove", "Fade"], group="Fair Value Gaps")
+htfFvgOn   = input.bool(true, "HTF Fair Value Gaps", group="Fair Value Gaps")
+htfFvgTF   = input.timeframe("60", "HTF FVG Timeframe", group="Fair Value Gaps")
+
+// ── Order Blocks
+obOn       = input.bool(true, "Order Blocks", group="Order Blocks")
+obLookback = input.int(10, "OB Search Lookback", minval=3, maxval=30, group="Order Blocks")
+maxOB      = input.int(2,  "Max Active OBs per side", minval=1, maxval=10, group="Order Blocks")
+
+// ── Supply & Demand (rule-based zone model — NOT proof of institutional orders)
+sdOn       = input.bool(true, "Supply & Demand Zones", group="Supply & Demand")
+sdModel    = input.string("Body + Wick", "Zone Boundary Model", options=["Body", "Wick", "Body + Wick"], group="Supply & Demand")
+sdMaxZones = input.int(3, "Max Active Zones per side", minval=1, maxval=10, group="Supply & Demand")
+sdTouchPct = input.float(25, "Meaningful Touch (% into zone)", minval=5, maxval=100, group="Supply & Demand")
+sdInvMode  = input.string("Close", "Zone Invalidation", options=["Close", "Wick"], group="Supply & Demand")
+sdKnife    = input.bool(true, "Falling-Knife Filter", group="Supply & Demand", tooltip="Blocks NEW entries while price approaches with EXTREME momentum. Wait for confirmation instead of catching a falling knife.")
+
+// ── Premium / Discount
+fibOn   = input.bool(true,  "Premium/Discount Dealing Range", group="Premium & Discount")
+fibFull = input.bool(false, "Show All Fib Levels (off = EQ line only)", group="Premium & Discount")
+
+// ── Displacement
+dispMult = input.float(1.5, "Displacement (body > ATR x)", step=0.1, minval=0.5, group="Displacement")
+
+// ── Execution
+execOn    = input.bool(true, "ICT Setup Engine", group="Execution")
+setupMode = input.string("Early", "Setup Mode", options=["Strict", "Balanced", "Early"], group="Execution")
+slModel   = input.string("Swing", "Stop Loss Model", options=["Swing", "ATR"], group="Execution")
+slBuffer  = input.float(0.25, "SL Buffer (ATR x)", step=0.05, group="Execution")
+tpModeIn  = input.string("R-Multiple", "Take Profit Mode", options=["R-Multiple", "Liquidity"], group="Execution")
+showTrade = input.bool(true, "Show Entry/SL/TP Boxes", group="Execution")
+confWin   = input.int(30, "Confluence Window (bars)", minval=5, maxval=200, group="Execution")
+cooldown  = input.int(10, "Cooldown After SL/TP3 Hit (bars)", minval=0, maxval=500, group="Execution", tooltip="A printed setup stays LOCKED until price hits its SL or TP3. After the trade closes, wait this many bars before the next setup may print.")
+confirmOn = input.bool(true, "Confirmed Entries Only", group="Execution", tooltip="A signal can only print when the full ICT confirmation chain is complete: BOS/CHoCH in the trade direction + displacement + HTF bias agreement + no fresh liquidity sweep AGAINST the trade. Blocks score-only entries.")
+previewOn = input.bool(false, "Show Preview Levels When Flat", group="Execution", tooltip="OFF by default (locked-signal rule: no Entry/SL/TP box before confirmation). When ON, draws dimmed zone-anchored plan levels while flat. Real signals always print as solid LOCKED blocks.")
+
+// ── Risk / Position Sizing
+acctSize = input.float(10000, "Account Size", minval=0, group="Risk Management", tooltip="Used only for the POSITION SIZE row in the dashboard.")
+riskPct  = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=10, step=0.1, group="Risk Management", tooltip="If the SL is hit, you lose this % of the account — the dashboard shows how many units to trade so that is true.")
+
+// ── Multi-Timeframe
+htfBiasTF = input.timeframe("240", "HTF Bias Timeframe", group="Multi-Timeframe")
+
+// ── Dashboard
+dashOn = input.bool(true, "ICT Dashboard (top right)", group="Dashboard")
+// appended last so existing saved input values keep their positions
+sdLabels = input.bool(false, "Show Zone Labels (FRESH / TESTED ×n)", group="Supply & Demand", tooltip="Off by default so zone text never sits inside a trade box. Zone boxes still draw; the S/D ZONE row in the dashboard reports the zone.")
+
+// ── Market Scanner (appended last so saved input positions never shift)
+scanOn = input.bool(true, "Show Market Scanner", group="Market Scanner", tooltip="Checks each market on this chart's timeframe for the core confirmation chain: structure break, 9/21 EMA direction, recent displacement, and higher-timeframe bias. READY means all four agree — open that chart for the full engine's confirmed signal.")
+scan1  = input.symbol("CAPITALCOM:US30",   "Market 1", group="Market Scanner")
+scan2  = input.symbol("FOREXCOM:NAS100",   "Market 2", group="Market Scanner")
+scan3  = input.symbol("OANDA:XAUUSD",      "Market 3", group="Market Scanner")
+scan4  = input.symbol("OANDA:EURUSD",      "Market 4", group="Market Scanner")
+scan5  = input.symbol("OANDA:GBPUSD",      "Market 5", group="Market Scanner")
+scan6  = input.symbol("OANDA:SPX500USD",   "Market 6", group="Market Scanner")
+
+// ── Auto Trendlines (appended last so saved input positions never shift)
+tlOn    = input.bool(true, "Auto Trendlines", group="Trendlines", tooltip="Uptrend line through the last two higher swing lows, downtrend line through the last two lower swing highs. Built from confirmed pivots only.")
+tlLen   = input.int(10, "Trendline Swing Length", minval=3, maxval=50, group="Trendlines", tooltip="Bigger = fewer, more important swings. It also delays each line by this many bars, because a swing is only confirmed once that many bars close after it.")
+tlBreak = input.bool(true, "Mark Trendline Breaks", group="Trendlines")
+
+// ── v3.1 additions (appended last so saved input positions never shift)
+dashPosIn = input.string("Middle Left", "ICT Dashboard Position", options=["Top Right", "Top Left", "Middle Right", "Middle Left", "Bottom Right", "Bottom Left"], group="Dashboard", tooltip="Default Middle Left so it never sits under the Beast Signal Engine panel (top right) or the scanner (bottom left).")
+rearmOn   = input.bool(true, "Re-arm After Cooldown", group="Execution", tooltip="ON = once a trade has closed and the cooldown has passed, a setup may print immediately if the confirmation chain is still complete. OFF = the chain must drop out and re-confirm first (the old behaviour, which could skip valid setups after a close).")
+
+// ════════════════════════════════════════════════════════════════════════════
+// CORE INDICATORS (TradePulse Pro 2)
+// ════════════════════════════════════════════════════════════════════════════
+atr   = nz(ta.atr(14), close * 0.01)
+fast  = ta.ema(close, 9)
+slow  = ta.ema(close, 21)
+trend = ta.ema(close, 200)
+rsi   = ta.rsi(close, 14)
+[_, __, adx] = ta.dmi(14, 14)
+isLong = fast > slow
+f(p)  => str.tostring(p, format.mintick)
+
+// ── Core locked levels
+var float E   = na
+var float SL  = na
+var float iSL = na
+var float T1  = na
+var float T2  = na
+var bool  BUY = true
+var bool  BE  = false
+
+// ── Core signal tracking
+var bool newSignal = false
+var bool sigBuy    = false
+newSignal := false
+sigBuy    := false
+
+// Initialize on first bar
+if na(E)
+    BUY       := isLong
+    newSignal := true
+    sigBuy    := isLong
+    E   := close
+    SL  := BUY ? close - atr * slMult : close + atr * slMult
+    iSL := SL
+    T1  := BUY ? close + atr * t1Mult : close - atr * t1Mult
+    T2  := BUY ? close + atr * t2Mult : close - atr * t2Mult
+
+// ── T1 hit via high/low → move SL to breakeven
+if not BE and not na(T1)
+    if (BUY and high >= T1) or (not BUY and low <= T1)
+        SL := E
+        BE := true
+
+// ── EMA crossover → immediate signal on trend flip
+if not na(E) and (isLong != isLong[1])
+    BUY       := isLong
+    newSignal := true
+    sigBuy    := isLong
+    E   := close
+    SL  := BUY ? close - atr * slMult : close + atr * slMult
+    iSL := SL
+    T1  := BUY ? close + atr * t1Mult : close - atr * t1Mult
+    T2  := BUY ? close + atr * t2Mult : close - atr * t2Mult
+    BE  := false
+
+// ── SL hit (close only) or T2 hit (high/low) → silent reset (v17 fix: no arrow)
+if not na(SL)
+    hitSL = BUY ? close <= SL : close >= SL
+    hitT2 = BUY ? high  >= T2 : low   <= T2
+    if hitSL or hitT2
+        BUY  := isLong
+        E    := close
+        SL   := BUY ? close - atr * slMult : close + atr * slMult
+        iSL  := SL
+        T1   := BUY ? close + atr * t1Mult : close - atr * t1Mult
+        T2   := BUY ? close + atr * t2Mult : close - atr * t2Mult
+        BE   := false
+
+eC = BUY ? color.lime : color.orange
+
+// ── Core lines and labels — only on last bar
+var line lnE   = na
+var line lnSL  = na
+var line lniSL = na
+var line lnT1  = na
+var line lnT2  = na
+var label lE   = na
+var label lS   = na
+var label liS  = na
+var label l1   = na
+var label l2   = na
+
+if barstate.islast and showCore
+    line.delete(lnE),   line.delete(lnSL),  line.delete(lniSL)
+    line.delete(lnT1),  line.delete(lnT2)
+    label.delete(lE),   label.delete(lS),   label.delete(liS)
+    label.delete(l1),   label.delete(l2)
+
+    lnE   := line.new(bar_index - 1, E,   bar_index, E,
+         extend=extend.both, color=eC, width=3)
+    lniSL := line.new(bar_index - 1, iSL, bar_index, iSL,
+         extend=extend.both, color=color.red, width=2, style=line.style_dashed)
+    if BE
+        lnSL := line.new(bar_index - 1, SL, bar_index, SL,
+             extend=extend.both, color=color.yellow, width=2, style=line.style_dashed)
+    lnT1  := line.new(bar_index - 1, T1, bar_index, T1,
+         extend=extend.both, color=color.aqua, width=2, style=line.style_dotted)
+    lnT2  := line.new(bar_index - 1, T2, bar_index, T2,
+         extend=extend.both, color=eC, width=2, style=line.style_dotted)
+
+    lE  := label.new(bar_index + 2, E,
+         (BUY ? "▲ ENTRY " : "▼ ENTRY ") + f(E),
+         color=BUY ? color.new(color.lime, 15) : color.new(color.orange, 15),
+         textcolor=color.black, size=size.small, style=label.style_label_left)
+    liS := label.new(bar_index + 2, iSL,
+         "✕ STOP " + f(iSL),
+         color=color.new(color.red, 15), textcolor=color.black,
+         size=size.small, style=label.style_label_left)
+    if BE
+        lS := label.new(bar_index + 2, SL,
+             "⚡ BE " + f(SL),
+             color=color.new(color.yellow, 15), textcolor=color.black,
+             size=size.small, style=label.style_label_left)
+    l1 := label.new(bar_index + 2, T1, "◎ T1 " + f(T1),
+         color=color.new(color.teal, 15), textcolor=color.white,
+         size=size.small, style=label.style_label_left)
+    l2 := label.new(bar_index + 2, T2, "★ T2 " + f(T2),
+         color=color.new(color.navy, 15), textcolor=color.yellow,
+         size=size.normal, style=label.style_label_left)
+
+// ── Core Support & Resistance
+var box rBox = na
+var box sBox = na
+zh = atr * 0.4
+pH = ta.pivothigh(high, srLB, srLB)
+pL = ta.pivotlow(low,  srLB, srLB)
+
+if not na(pH) and showCore
+    box.delete(rBox)
+    rBox := box.new(bar_index - srLB, pH + zh, bar_index + srLB, pH - zh,
+         border_color=color.red, border_width=2,
+         bgcolor=color.new(color.red, 85),
+         text="RESISTANCE", text_color=color.red, text_size=size.small)
+
+if not na(pL) and showCore
+    box.delete(sBox)
+    sBox := box.new(bar_index - srLB, pL + zh, bar_index + srLB, pL - zh,
+         border_color=color.lime, border_width=2,
+         bgcolor=color.new(color.lime, 85),
+         text="SUPPORT", text_color=color.lime, text_size=size.small)
+
+// ── Core Direction Calculator
+s1 = close > trend      ? 1 : -1
+s2 = fast  > slow       ? 1 : -1
+s3 = fast - fast[2] > 0 ? 1 : fast - fast[2] < 0 ? -1 : 0
+s4 = rsi > 55 ? 1 : rsi < 45 ? -1 : 0
+s5 = adx >= 20 ? (close > trend ? 1 : -1) : 0
+ds = s1 + s2 + s3 + s4 + s5
+
+dl = ds >= 3 ? "BULLISH" : ds <= -3 ? "BEARISH" : "NEUTRAL"
+dc = ds >= 3 ? color.lime : ds <= -3 ? color.red : color.gray
+db = ds >= 3 ? color.new(color.lime, 75) : ds <= -3 ? color.new(color.red, 75) : color.new(color.gray, 75)
+
+var table tb = table.new(position.bottom_left, 2, 6,
+     border_color=color.new(color.gray, 50), border_width=1,
+     bgcolor=color.new(color.black, 60))
+
+if barstate.islast and showCore
+    table.cell(tb, 0, 0, "DIRECTION", text_color=color.white,  text_size=size.small,  bgcolor=color.new(color.navy, 20), text_halign=text.align_center)
+    table.cell(tb, 1, 0, "SCORE",     text_color=color.gray,   text_size=size.small,  bgcolor=color.new(color.navy, 20), text_halign=text.align_center)
+    table.cell(tb, 0, 1, dl,          text_color=dc,           text_size=size.normal, bgcolor=db, text_halign=text.align_center)
+    table.cell(tb, 1, 1, str.tostring(ds) + " / 5", text_color=dc, text_size=size.normal, bgcolor=db, text_halign=text.align_center)
+    table.cell(tb, 0, 2, "RSI",       text_color=color.gray,   text_size=size.small)
+    table.cell(tb, 1, 2, str.tostring(math.round(rsi)),
+         text_color=rsi > 55 ? color.lime : rsi < 45 ? color.red : color.gray,
+         text_size=size.small, text_halign=text.align_right)
+    table.cell(tb, 0, 3, "ADX",       text_color=color.gray,   text_size=size.small)
+    table.cell(tb, 1, 3, str.tostring(math.round(adx)),
+         text_color=adx >= 20 ? color.lime : color.orange,
+         text_size=size.small, text_halign=text.align_right)
+    table.cell(tb, 0, 4, "Entry",     text_color=color.gray,   text_size=size.small)
+    table.cell(tb, 1, 4, f(E),        text_color=eC,            text_size=size.small, text_halign=text.align_right)
+    table.cell(tb, 0, 5, BUY ? "▲ LONG" : "▼ SHORT",
+         text_color=eC, text_size=size.small, text_halign=text.align_center)
+    table.cell(tb, 1, 5, "ATR " + str.tostring(math.round(atr, 4)),
+         text_color=color.yellow, text_size=size.small, text_halign=text.align_right)
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 1 — MARKET STRUCTURE (confirmed pivots, no repainting)
+// ════════════════════════════════════════════════════════════════════════════
+msPH = ta.pivothigh(high, swingLen, swingLen)
+msPL = ta.pivotlow(low,  swingLen, swingLen)
+
+var float swHi     = na      // most recent confirmed swing high level
+var float swLo     = na      // most recent confirmed swing low level
+var int   swHiBar  = na      // bar where that swing high formed
+var int   swLoBar  = na
+var bool  swHiUsed = true    // already broken?
+var bool  swLoUsed = true
+var int   structDir = 0      // 1 = bullish structure, -1 = bearish
+
+// dealing range anchors (for premium/discount)
+var float rangeHi    = na
+var float rangeLo    = na
+var int   rangeHiBar = na
+var int   rangeLoBar = na
+
+if not na(msPH)
+    swHi      := msPH
+    swHiBar   := bar_index - swingLen
+    swHiUsed  := false
+    rangeHi    := msPH
+    rangeHiBar := bar_index - swingLen
+if not na(msPL)
+    swLo      := msPL
+    swLoBar   := bar_index - swingLen
+    swLoUsed  := false
+    rangeLo    := msPL
+    rangeLoBar := bar_index - swingLen
+
+bullBreak = msOn and not swHiUsed and not na(swHi) and close > swHi and barstate.isconfirmed
+bearBreak = msOn and not swLoUsed and not na(swLo) and close < swLo and barstate.isconfirmed
+
+bullCHoCH = bullBreak and structDir == -1
+bullBOS   = bullBreak and structDir >= 0
+bearCHoCH = bearBreak and structDir == 1
+bearBOS   = bearBreak and structDir <= 0
+
+if bullBreak
+    swHiUsed := true
+    if showStruct
+        // dashed structure line from the broken swing high to the break bar
+        int sb = nz(swHiBar, bar_index - swingLen)
+        line.new(sb, swHi, bar_index, swHi, color=color.new(color.teal, 25), width=1, style=line.style_dashed)
+        label.new(int(math.avg(sb, bar_index)), swHi, bullCHoCH ? "CHoCH" : "BOS",
+             style=label.style_none, textcolor=color.new(color.teal, bullCHoCH ? 0 : 20), size=size.tiny)
+    structDir := 1
+if bearBreak
+    swLoUsed := true
+    if showStruct
+        int sb = nz(swLoBar, bar_index - swingLen)
+        line.new(sb, swLo, bar_index, swLo, color=color.new(color.red, 25), width=1, style=line.style_dashed)
+        label.new(int(math.avg(sb, bar_index)), swLo, bearCHoCH ? "CHoCH" : "BOS",
+             style=label.style_none, textcolor=color.new(color.red, bearCHoCH ? 0 : 20), size=size.tiny)
+    structDir := -1
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 2 — LIQUIDITY (PDH/PDL/PWH/PWL) + SWEEPS
+// ════════════════════════════════════════════════════════════════════════════
+pdhV = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
+pdlV = request.security(syminfo.tickerid, "D", low[1],  lookahead=barmerge.lookahead_on)
+pwhV = request.security(syminfo.tickerid, "W", high[1], lookahead=barmerge.lookahead_on)
+pwlV = request.security(syminfo.tickerid, "W", low[1],  lookahead=barmerge.lookahead_on)
+
+var line  lnPDH = na
+var line  lnPDL = na
+var line  lnPWH = na
+var line  lnPWL = na
+var label lbPDH = na
+var label lbPDL = na
+var label lbPWH = na
+var label lbPWL = na
+
+if barstate.islast
+    line.delete(lnPDH),  line.delete(lnPDL),  line.delete(lnPWH),  line.delete(lnPWL)
+    label.delete(lbPDH), label.delete(lbPDL), label.delete(lbPWH), label.delete(lbPWL)
+    if showPDH and not na(pdhV)
+        lnPDH := line.new(bar_index - 60, pdhV, bar_index + 8, pdhV, color=color.new(color.blue, 30), width=1)
+        lbPDH := label.new(bar_index + 8, pdhV, "PDH", style=label.style_label_left, color=color.new(color.blue, 80), textcolor=color.new(color.blue, 0), size=size.tiny)
+    if showPDL and not na(pdlV)
+        lnPDL := line.new(bar_index - 60, pdlV, bar_index + 8, pdlV, color=color.new(color.blue, 30), width=1)
+        lbPDL := label.new(bar_index + 8, pdlV, "PDL", style=label.style_label_left, color=color.new(color.blue, 80), textcolor=color.new(color.blue, 0), size=size.tiny)
+    if showPWH and not na(pwhV)
+        lnPWH := line.new(bar_index - 60, pwhV, bar_index + 8, pwhV, color=color.new(color.purple, 30), width=1, style=line.style_dashed)
+        lbPWH := label.new(bar_index + 8, pwhV, "PWH", style=label.style_label_left, color=color.new(color.purple, 80), textcolor=color.new(color.purple, 0), size=size.tiny)
+    if showPWL and not na(pwlV)
+        lnPWL := line.new(bar_index - 60, pwlV, bar_index + 8, pwlV, color=color.new(color.purple, 30), width=1, style=line.style_dashed)
+        lbPWL := label.new(bar_index + 8, pwlV, "PWL", style=label.style_label_left, color=color.new(color.purple, 80), textcolor=color.new(color.purple, 0), size=size.tiny)
+
+// ── Sweep detection (wick beyond level, close back inside — once per period)
+var bool sweptPDH = false
+var bool sweptPDL = false
+var bool sweptPWH = false
+var bool sweptPWL = false
+if timeframe.change("D")
+    sweptPDH := false
+    sweptPDL := false
+if timeframe.change("W")
+    sweptPWH := false
+    sweptPWL := false
+
+bslPDH = sweepOn and barstate.isconfirmed and not sweptPDH and not na(pdhV) and high > pdhV and close < pdhV
+sslPDL = sweepOn and barstate.isconfirmed and not sweptPDL and not na(pdlV) and low  < pdlV and close > pdlV
+bslPWH = sweepOn and barstate.isconfirmed and not sweptPWH and not na(pwhV) and high > pwhV and close < pwhV
+sslPWL = sweepOn and barstate.isconfirmed and not sweptPWL and not na(pwlV) and low  < pwlV and close > pwlV
+
+if bslPDH
+    sweptPDH := true
+if sslPDL
+    sweptPDL := true
+if bslPWH
+    sweptPWH := true
+if sslPWL
+    sweptPWL := true
+
+bslSweep = bslPDH or bslPWH   // buy-side liquidity swept  → bearish clue
+sslSweep = sslPDL or sslPWL   // sell-side liquidity swept → bullish clue
+
+if bslSweep
+    label.new(bar_index, high, "BSL ✕", style=label.style_label_down, size=size.tiny,
+         color=color.new(color.maroon, 20), textcolor=color.white)
+if sslSweep
+    label.new(bar_index, low, "SSL ✕", style=label.style_label_up, size=size.tiny,
+         color=color.new(color.green, 20), textcolor=color.white)
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 3 — FAIR VALUE GAPS (LTF + HTF)
+// ════════════════════════════════════════════════════════════════════════════
+minGap = atr * fvgMinSize
+newBullFVG = fvgOn and barstate.isconfirmed and low > high[2]  and (low - high[2])  >= minGap
+newBearFVG = fvgOn and barstate.isconfirmed and high < low[2]  and (low[2] - high)  >= minGap
+
+var array<box> fvgBull = array.new<box>()
+var array<box> fvgBear = array.new<box>()
+
+if newBullFVG
+    bx = box.new(bar_index - 2, low, bar_index + 12, high[2],
+         border_color=color.new(color.teal, 55), bgcolor=color.new(color.teal, 85),
+         text="FVG", text_color=color.new(color.teal, 30), text_size=size.tiny)
+    array.push(fvgBull, bx)
+    if array.size(fvgBull) > maxFVG
+        box.delete(array.shift(fvgBull))
+if newBearFVG
+    bx = box.new(bar_index - 2, low[2], bar_index + 12, high,
+         border_color=color.new(color.red, 55), bgcolor=color.new(color.red, 88),
+         text="FVG", text_color=color.new(color.red, 30), text_size=size.tiny)
+    array.push(fvgBear, bx)
+    if array.size(fvgBear) > maxFVG
+        box.delete(array.shift(fvgBear))
+
+// ── HTF FVG (confirmed HTF bars only — [1]-offset, no repainting)
+f_htfFvg() =>
+    bull = low[1] > high[3]
+    bear = high[1] < low[3]
+    [bull, bear, high[3], low[1], low[3], high[1], time[1]]
+
+[hBullF, hBearF, hbBot, hbTop, hsTop, hsBot, hTimeF] = request.security(syminfo.tickerid, htfFvgTF, f_htfFvg(), lookahead=barmerge.lookahead_off)
+
+newHtfBar   = hTimeF != hTimeF[1]
+newHtfBullF = htfFvgOn and newHtfBar and hBullF
+newHtfBearF = htfFvgOn and newHtfBar and hBearF
+
+if newHtfBullF
+    bx = box.new(bar_index, hbTop, bar_index + 30, hbBot,
+         border_color=color.new(color.aqua, 40), bgcolor=color.new(color.aqua, 90),
+         text=htfFvgTF + " FVG", text_color=color.new(color.aqua, 20), text_size=size.tiny)
+    array.push(fvgBull, bx)
+    if array.size(fvgBull) > maxFVG
+        box.delete(array.shift(fvgBull))
+if newHtfBearF
+    bx = box.new(bar_index, hsTop, bar_index + 30, hsBot,
+         border_color=color.new(color.orange, 40), bgcolor=color.new(color.orange, 90),
+         text=htfFvgTF + " FVG", text_color=color.new(color.orange, 20), text_size=size.tiny)
+    array.push(fvgBear, bx)
+    if array.size(fvgBear) > maxFVG
+        box.delete(array.shift(fvgBear))
+
+// ── Mitigation: full fill → remove or fade; keep right edge extended
+if array.size(fvgBull) > 0
+    for i = array.size(fvgBull) - 1 to 0
+        bx = array.get(fvgBull, i)
+        if low <= box.get_bottom(bx)
+            if fvgMitMode == "Remove"
+                box.delete(bx)
+            else
+                box.set_bgcolor(bx, color.new(color.gray, 94))
+                box.set_border_color(bx, color.new(color.gray, 80))
+            array.remove(fvgBull, i)
+        else
+            box.set_right(bx, bar_index + 12)
+if array.size(fvgBear) > 0
+    for i = array.size(fvgBear) - 1 to 0
+        bx = array.get(fvgBear, i)
+        if high >= box.get_top(bx)
+            if fvgMitMode == "Remove"
+                box.delete(bx)
+            else
+                box.set_bgcolor(bx, color.new(color.gray, 94))
+                box.set_border_color(bx, color.new(color.gray, 80))
+            array.remove(fvgBear, i)
+        else
+            box.set_right(bx, bar_index + 12)
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 4 — DISPLACEMENT (ATR-normalized, multi-market safe)
+// ════════════════════════════════════════════════════════════════════════════
+bodySize = math.abs(close - open)
+dispUp = bodySize > atr * dispMult and close > open
+dispDn = bodySize > atr * dispMult and close < open
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 5 — ORDER BLOCKS (structure break + displacement confirmed)
+// ════════════════════════════════════════════════════════════════════════════
+var array<box> obBull = array.new<box>()
+var array<box> obBear = array.new<box>()
+
+dispUpRecent = dispUp or dispUp[1] or dispUp[2]
+dispDnRecent = dispDn or dispDn[1] or dispDn[2]
+
+if obOn and bullBreak and dispUpRecent
+    int found = -1
+    for j = 1 to obLookback
+        if close[j] < open[j]
+            found := j
+            break
+    if found > 0
+        bx = box.new(bar_index - found, high[found], bar_index + 20, low[found],
+             border_color=color.new(color.green, 45), bgcolor=color.new(color.green, 88),
+             text="OB", text_color=color.new(color.green, 25), text_size=size.tiny)
+        array.push(obBull, bx)
+        if array.size(obBull) > maxOB
+            box.delete(array.shift(obBull))
+
+if obOn and bearBreak and dispDnRecent
+    int found = -1
+    for j = 1 to obLookback
+        if close[j] > open[j]
+            found := j
+            break
+    if found > 0
+        bx = box.new(bar_index - found, high[found], bar_index + 20, low[found],
+             border_color=color.new(color.maroon, 45), bgcolor=color.new(color.maroon, 88),
+             text="OB", text_color=color.new(color.red, 25), text_size=size.tiny)
+        array.push(obBear, bx)
+        if array.size(obBear) > maxOB
+            box.delete(array.shift(obBear))
+
+// ── OB invalidation: close through the far side → remove
+if array.size(obBull) > 0
+    for i = array.size(obBull) - 1 to 0
+        bx = array.get(obBull, i)
+        if close < box.get_bottom(bx)
+            box.delete(bx)
+            array.remove(obBull, i)
+        else
+            box.set_right(bx, bar_index + 20)
+if array.size(obBear) > 0
+    for i = array.size(obBear) - 1 to 0
+        bx = array.get(obBear, i)
+        if close > box.get_top(bx)
+            box.delete(bx)
+            array.remove(obBear, i)
+        else
+            box.set_right(bx, bar_index + 20)
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 6 — PREMIUM / DISCOUNT DEALING RANGE (auto fib)
+// ════════════════════════════════════════════════════════════════════════════
+haveRange  = not na(rangeHi) and not na(rangeLo) and rangeHi > rangeLo
+eqLevel    = haveRange ? (rangeHi + rangeLo) / 2 : na
+inDiscount = haveRange and close < eqLevel
+inPremium  = haveRange and close > eqLevel
+
+var array<line>  fibLines  = array.new<line>()
+var array<label> fibLabels = array.new<label>()
+
+if barstate.islast and fibOn and haveRange
+    if array.size(fibLines) > 0
+        for i = 0 to array.size(fibLines) - 1
+            line.delete(array.get(fibLines, i))
+        array.clear(fibLines)
+    if array.size(fibLabels) > 0
+        for i = 0 to array.size(fibLabels) - 1
+            label.delete(array.get(fibLabels, i))
+        array.clear(fibLabels)
+
+    startBar = math.min(nz(rangeHiBar, bar_index - 50), nz(rangeLoBar, bar_index - 50))
+    fibVals  = fibFull ? array.from(0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0) : array.from(0.5)
+    for i = 0 to array.size(fibVals) - 1
+        fv  = array.get(fibVals, i)
+        prc = rangeHi - (rangeHi - rangeLo) * fv
+        col = fv == 0.5 ? color.new(color.yellow, 20) : color.new(color.gray, 55)
+        ln  = line.new(startBar, prc, bar_index + 6, prc, color=col,
+             width=fv == 0.5 ? 2 : 1, style=fv == 0.5 ? line.style_solid : line.style_dotted)
+        lb  = label.new(bar_index + 6, prc, str.tostring(fv) + (fv == 0.5 ? " EQ" : ""),
+             style=label.style_label_left, color=color.new(color.black, 100),
+             textcolor=fv == 0.5 ? color.yellow : color.gray, size=size.tiny)
+        array.push(fibLines, ln)
+        array.push(fibLabels, lb)
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 7 — HTF BIAS
+// ════════════════════════════════════════════════════════════════════════════
+f_htfBias() =>
+    [ta.ema(close, 9)[1], ta.ema(close, 21)[1]]
+[hbFast, hbSlow] = request.security(syminfo.tickerid, htfBiasTF, f_htfBias(), lookahead=barmerge.lookahead_off)
+htfBull = hbFast > hbSlow
+htfBear = hbFast < hbSlow
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 8 — CONFLUENCE SCORE (transparent weights, max 100)
+//   Sweep +20 | CHoCH +15 | BOS +10 | HTF +15 | FVG +10 | OB +10 | P/D +10 | Displacement +10
+// ════════════════════════════════════════════════════════════════════════════
+sinceSSL    = nz(ta.barssince(sslSweep),  99999)
+sinceBSL    = nz(ta.barssince(bslSweep),  99999)
+sinceBullCH = nz(ta.barssince(bullCHoCH), 99999)
+sinceBearCH = nz(ta.barssince(bearCHoCH), 99999)
+sinceBullBS = nz(ta.barssince(bullBOS),   99999)
+sinceBearBS = nz(ta.barssince(bearBOS),   99999)
+sinceDispUp = nz(ta.barssince(dispUp),    99999)
+sinceDispDn = nz(ta.barssince(dispDn),    99999)
+
+bullScore = 0
+bullScore += sinceSSL    <= confWin ? 20 : 0
+bullScore += sinceBullCH <= confWin ? 15 : 0
+bullScore += sinceBullBS <= confWin ? 10 : 0
+bullScore += htfBull                ? 15 : 0
+bullScore += array.size(fvgBull) > 0 ? 10 : 0
+bullScore += array.size(obBull)  > 0 ? 10 : 0
+bullScore += inDiscount             ? 10 : 0
+bullScore += sinceDispUp <= confWin ? 10 : 0
+
+bearScore = 0
+bearScore += sinceBSL    <= confWin ? 20 : 0
+bearScore += sinceBearCH <= confWin ? 15 : 0
+bearScore += sinceBearBS <= confWin ? 10 : 0
+bearScore += htfBear                ? 15 : 0
+bearScore += array.size(fvgBear) > 0 ? 10 : 0
+bearScore += array.size(obBear)  > 0 ? 10 : 0
+bearScore += inPremium              ? 10 : 0
+bearScore += sinceDispDn <= confWin ? 10 : 0
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 8b — SUPPLY & DEMAND ZONES
+// Rule-based zone model (demand proxy / supply proxy) — consumes the existing
+// displacement, FVG, structure, OB, premium/discount and HTF engines.
+// Zone lifecycle: FRESH → TESTED ×n → INVALIDATED. No repainting: zones are
+// created and updated on confirmed bars only.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Approach velocity (ATR-normalized) + falling-knife filter
+appMove  = (close - close[5]) / atr
+appAbs   = math.abs(appMove)
+appClass = appAbs < 1 ? "SLOW" : appAbs < 2.5 ? "NORMAL" : appAbs < 4 ? "FAST" : "EXTREME"
+knifeDown = sdKnife and appClass == "EXTREME" and appMove < 0
+knifeUp   = sdKnife and appClass == "EXTREME" and appMove > 0
+
+var array<box>   dzBox   = array.new<box>()
+var array<float> dzQ     = array.new<float>()
+var array<int>   dzTouch = array.new<int>()
+var array<bool>  dzIn    = array.new<bool>()
+var array<box>   szBox   = array.new<box>()
+var array<float> szQ     = array.new<float>()
+var array<int>   szTouch = array.new<int>()
+var array<bool>  szIn    = array.new<bool>()
+
+// base quality from the departure itself (freshness/context added live later)
+f_sdBaseQ(_fvg, _bosRecent) =>
+    q = 15.0
+    q += bodySize / atr >= dispMult * 1.5 ? 15 : 10
+    q += _fvg ? 10 : 0
+    q += _bosRecent ? 15 : 0
+    q
+
+// ── Zone creation: base/origin candle before a strong displacement departure
+newDemandZ = false
+newSupplyZ = false
+if sdOn and barstate.isconfirmed and dispUp
+    int b = -1
+    for j = 1 to 3
+        if close[j] <= open[j]
+            b := j
+            break
+    if b > 0
+        zTop = sdModel == "Wick" ? math.min(open[b], close[b]) : math.max(open[b], close[b])
+        zBot = sdModel == "Body" ? math.min(open[b], close[b]) : low[b]
+        if zTop > zBot
+            newDemandZ := true
+            dq = f_sdBaseQ(newBullFVG, sinceBullBS <= 5 or sinceBullCH <= 5)
+            zbx = box.new(bar_index - b, zTop, bar_index + 20, zBot,
+                 border_color=color.new(#26A69A, 40), bgcolor=color.new(#26A69A, 85),
+                 text=sdLabels ? "DEMAND · FRESH" : "", text_color=color.new(#26A69A, 10), text_size=size.tiny)
+            array.push(dzBox, zbx), array.push(dzQ, dq), array.push(dzTouch, 0), array.push(dzIn, false)
+            if array.size(dzBox) > sdMaxZones
+                box.delete(array.shift(dzBox))
+                array.shift(dzQ), array.shift(dzTouch), array.shift(dzIn)
+if sdOn and barstate.isconfirmed and dispDn
+    int b = -1
+    for j = 1 to 3
+        if close[j] >= open[j]
+            b := j
+            break
+    if b > 0
+        zTop = sdModel == "Body" ? math.max(open[b], close[b]) : high[b]
+        zBot = sdModel == "Wick" ? math.max(open[b], close[b]) : math.min(open[b], close[b])
+        if zTop > zBot
+            newSupplyZ := true
+            sq = f_sdBaseQ(newBearFVG, sinceBearBS <= 5 or sinceBearCH <= 5)
+            zbx = box.new(bar_index - b, zTop, bar_index + 20, zBot,
+                 border_color=color.new(#EF5350, 40), bgcolor=color.new(#EF5350, 87),
+                 text=sdLabels ? "SUPPLY · FRESH" : "", text_color=color.new(#EF5350, 10), text_size=size.tiny)
+            array.push(szBox, zbx), array.push(szQ, sq), array.push(szTouch, 0), array.push(szIn, false)
+            if array.size(szBox) > sdMaxZones
+                box.delete(array.shift(szBox))
+                array.shift(szQ), array.shift(szTouch), array.shift(szIn)
+
+// ── Zone lifecycle: touches (meaningful penetration) + hard invalidation
+demandEnteredEv = false
+supplyEnteredEv = false
+zoneInvalidEv   = false
+if array.size(dzBox) > 0
+    for i = array.size(dzBox) - 1 to 0
+        zbx = array.get(dzBox, i)
+        zT = box.get_top(zbx)
+        zB = box.get_bottom(zbx)
+        brk = sdInvMode == "Close" ? close < zB : low < zB
+        if brk and barstate.isconfirmed
+            zoneInvalidEv := true
+            box.set_bgcolor(zbx, color.new(color.gray, 94)), box.set_border_color(zbx, color.new(color.gray, 85))
+            box.set_text(zbx, sdLabels ? "DEMAND ✗" : "")
+            array.remove(dzBox, i), array.remove(dzQ, i), array.remove(dzTouch, i), array.remove(dzIn, i)
+        else
+            box.set_right(zbx, bar_index + 20)
+            pen = (zT - low) / math.max(zT - zB, syminfo.mintick)
+            inside = low <= zT and pen >= sdTouchPct / 100
+            if inside and not array.get(dzIn, i) and barstate.isconfirmed
+                demandEnteredEv := true
+                array.set(dzTouch, i, array.get(dzTouch, i) + 1)
+                box.set_text(zbx, sdLabels ? "DEMAND · TESTED ×" + str.tostring(array.get(dzTouch, i)) : "")
+            array.set(dzIn, i, inside)
+if array.size(szBox) > 0
+    for i = array.size(szBox) - 1 to 0
+        zbx = array.get(szBox, i)
+        zT = box.get_top(zbx)
+        zB = box.get_bottom(zbx)
+        brk = sdInvMode == "Close" ? close > zT : high > zT
+        if brk and barstate.isconfirmed
+            zoneInvalidEv := true
+            box.set_bgcolor(zbx, color.new(color.gray, 94)), box.set_border_color(zbx, color.new(color.gray, 85))
+            box.set_text(zbx, sdLabels ? "SUPPLY ✗" : "")
+            array.remove(szBox, i), array.remove(szQ, i), array.remove(szTouch, i), array.remove(szIn, i)
+        else
+            box.set_right(zbx, bar_index + 20)
+            pen = (high - zB) / math.max(zT - zB, syminfo.mintick)
+            inside = high >= zB and pen >= sdTouchPct / 100
+            if inside and not array.get(szIn, i) and barstate.isconfirmed
+                supplyEnteredEv := true
+                array.set(szTouch, i, array.get(szTouch, i) + 1)
+                box.set_text(zbx, sdLabels ? "SUPPLY · TESTED ×" + str.tostring(array.get(szTouch, i)) : "")
+            array.set(szIn, i, inside)
+
+// ── Live SUPPLY/DEMAND QUALITY SCORE for the zone price is in right now.
+//    Freshness / displacement / FVG / BOS from creation, plus live context:
+//    trend + HTF alignment, premium/discount, approach quality, stacking.
+string sdZoneNow = "—"
+float  sdQNow    = na
+if array.size(dzBox) > 0
+    for i = 0 to array.size(dzBox) - 1
+        zbx = array.get(dzBox, i)
+        if close <= box.get_top(zbx) and close >= box.get_bottom(zbx)
+            t = array.get(dzTouch, i)
+            q = array.get(dzQ, i) - (t <= 0 ? 0 : t == 1 ? 3 : t == 2 ? 7 : 11)
+            q += structDir == 1 ? 10 : 0
+            q += htfBull ? 10 : 0
+            q += inDiscount ? 5 : 0
+            q += appClass == "SLOW" or appClass == "NORMAL" ? 5 : 0
+            stackQ = 0
+            if array.size(obBull) > 0
+                for k = 0 to array.size(obBull) - 1
+                    if box.get_top(array.get(obBull, k)) >= box.get_bottom(zbx) and box.get_bottom(array.get(obBull, k)) <= box.get_top(zbx)
+                        stackQ := 10
+            if array.size(fvgBull) > 0
+                for k = 0 to array.size(fvgBull) - 1
+                    if box.get_top(array.get(fvgBull, k)) >= box.get_bottom(zbx) and box.get_bottom(array.get(fvgBull, k)) <= box.get_top(zbx)
+                        stackQ := 10
+            q += stackQ
+            sdZoneNow := "DEMAND"
+            sdQNow := math.min(100, q)
+if sdZoneNow == "—" and array.size(szBox) > 0
+    for i = 0 to array.size(szBox) - 1
+        zbx = array.get(szBox, i)
+        if close <= box.get_top(zbx) and close >= box.get_bottom(zbx)
+            t = array.get(szTouch, i)
+            q = array.get(szQ, i) - (t <= 0 ? 0 : t == 1 ? 3 : t == 2 ? 7 : 11)
+            q += structDir == -1 ? 10 : 0
+            q += htfBear ? 10 : 0
+            q += inPremium ? 5 : 0
+            q += appClass == "SLOW" or appClass == "NORMAL" ? 5 : 0
+            stackQ = 0
+            if array.size(obBear) > 0
+                for k = 0 to array.size(obBear) - 1
+                    if box.get_top(array.get(obBear, k)) >= box.get_bottom(zbx) and box.get_bottom(array.get(obBear, k)) <= box.get_top(zbx)
+                        stackQ := 10
+            if array.size(fvgBear) > 0
+                for k = 0 to array.size(fvgBear) - 1
+                    if box.get_top(array.get(fvgBear, k)) >= box.get_bottom(zbx) and box.get_bottom(array.get(fvgBear, k)) <= box.get_top(zbx)
+                        stackQ := 10
+            q += stackQ
+            sdZoneNow := "SUPPLY"
+            sdQNow := math.min(100, q)
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT MODULE 9 — SETUP ENGINE + TRADE VISUALIZATION
+// ════════════════════════════════════════════════════════════════════════════
+thresh = setupMode == "Strict" ? 80 : setupMode == "Balanced" ? 60 : 45
+
+// ── Confirmation chain (no guessing): a trade direction is CONFIRMED only
+//    when structure broke that way + displacement fired + HTF agrees + the
+//    latest liquidity sweep is not pointing against the trade.
+structOkL = sinceBullCH <= confWin or sinceBullBS <= confWin
+structOkS = sinceBearCH <= confWin or sinceBearBS <= confWin
+sweepOkL  = sinceBSL > confWin or sinceSSL < sinceBSL   // no fresh buy-side sweep against a long
+sweepOkS  = sinceSSL > confWin or sinceBSL < sinceSSL   // no fresh sell-side sweep against a short
+confirmL  = structOkL and sinceDispUp <= confWin and htfBull and sweepOkL
+confirmS  = structOkS and sinceDispDn <= confWin and htfBear and sweepOkS
+
+longOK  = execOn and bullScore >= thresh and structDir == 1  and isLong     and (not confirmOn or confirmL) and not knifeDown
+shortOK = execOn and bearScore >= thresh and structDir == -1 and not isLong and (not confirmOn or confirmS) and not knifeUp
+
+f_grade(sc) => sc >= 85 ? "A+" : sc >= 70 ? "A" : "B"
+
+// active setup state (for dashboard)
+var string setupSide = "—"
+var string setupGrade = ""
+var float  setupEntry = na
+var float  setupSL    = na
+var float  setupTP1   = na
+var float  setupTP2   = na
+var float  setupTP3   = na
+var float  setupRR    = na
+
+// ── Trade lifecycle: a printed setup stays LOCKED until its SL or TP3 is
+//    hit. Only then (plus optional cooldown) may the next setup print.
+var bool tradeActive    = false
+var bool tradeIsLong    = false
+var int  tradeClosedBar = na
+var bool tp1Hit         = false
+var bool tp2Hit         = false
+
+// ── Result ledger: each closed trade scored once, in R, never recalculated.
+//    Scale-out model: one third closed at TP1, TP2 and TP3. The open
+//    remainder closes at the original stop (-1R) or, on a reversal exit,
+//    at market on the closing bar.
+var int    ictWins     = 0
+var int    ictLosses   = 0
+var int    ictScratch  = 0
+var float  ictNetR     = 0.0
+var string ictLastRes  = ""
+var float  ictLastR    = na
+var string lastSide    = "—"
+var string lastGrade   = ""
+f_rTxt(_r) => na(_r) ? "" : (_r >= 0 ? "+" : "") + str.tostring(_r, "#.#") + "R"
+
+tradeHitSL  = tradeActive and barstate.isconfirmed and not na(setupSL)  and (tradeIsLong ? low  <= setupSL  : high >= setupSL)
+tradeHitTP3 = tradeActive and barstate.isconfirmed and not na(setupTP3) and (tradeIsLong ? high >= setupTP3 : low  <= setupTP3)
+// ── Reversal exit: if the OPPOSITE side fully qualifies while a trade is
+//    locked, the market has flipped — close the trade ("REV ⇄") and let the
+//    new signal print on this same bar. A wrong trade never blocks the chart.
+tradeRev = tradeActive and barstate.isconfirmed and not tradeHitSL and not tradeHitTP3 and (tradeIsLong ? shortOK : longOK)
+
+// partial target hits — status-only events, levels never move
+tp1HitEv = tradeActive and not tp1Hit and barstate.isconfirmed and not na(setupTP1) and (tradeIsLong ? high >= setupTP1 : low <= setupTP1)
+tp2HitEv = tradeActive and not tp2Hit and barstate.isconfirmed and not na(setupTP2) and (tradeIsLong ? high >= setupTP2 : low <= setupTP2)
+if tp1HitEv
+    tp1Hit := true
+if tp2HitEv
+    tp2Hit := true
+
+if tradeHitTP3 or tradeHitSL or tradeRev
+    tradeActive    := false
+    tradeClosedBar := bar_index
+    // score the trade ONCE, in R, from its locked levels
+    riskR = math.abs(setupEntry - setupSL)
+    riskR := riskR > 0 ? riskR : atr
+    dirMul = tradeIsLong ? 1.0 : -1.0
+    r1 = math.abs(setupTP1 - setupEntry) / riskR
+    r2 = math.abs(setupTP2 - setupEntry) / riskR
+    r3 = math.abs(setupTP3 - setupEntry) / riskR
+    bool t1 = tp1Hit or tradeHitTP3
+    bool t2 = tp2Hit or tradeHitTP3
+    float banked = (t1 ? r1 : 0.0) / 3.0 + (t2 ? r2 : 0.0) / 3.0 + (tradeHitTP3 ? r3 : 0.0) / 3.0
+    float openFr = 1.0 - ((t1 ? 1.0 : 0.0) + (t2 ? 1.0 : 0.0) + (tradeHitTP3 ? 1.0 : 0.0)) / 3.0
+    float exitR  = tradeHitSL ? -1.0 : tradeHitTP3 ? 0.0 : (close - setupEntry) * dirMul / riskR
+    float rres   = banked + openFr * exitR
+    ictLastR   := rres
+    ictLastRes := tradeHitTP3 ? "TP3 ✓" : tradeHitSL ? (tp2Hit ? "SL after TP2" : tp1Hit ? "SL after TP1" : "SL ✗") : "REV ⇄"
+    if rres > 0.1
+        ictWins += 1
+    else if rres < -0.1
+        ictLosses += 1
+    else
+        ictScratch += 1
+    ictNetR += rres
+    // the levels stay in the dashboard as the LAST trade (locked) until the
+    // next setup prints; only the live flags reset
+    lastSide   := setupSide
+    lastGrade  := setupGrade
+    setupSide  := "—"
+    setupGrade := ""
+    label.new(bar_index, tradeHitTP3 ? (tradeIsLong ? high : low) : (tradeIsLong ? low : high),
+         ictLastRes + "  " + f_rTxt(rres),
+         style=label.style_label_left, size=size.small,
+         color=rres > 0 ? color.new(color.teal, 10) : rres < 0 ? color.new(color.red, 10) : color.new(color.gray, 10),
+         textcolor=color.white)
+
+canSetup = not tradeActive and (tradeRev or na(tradeClosedBar) or (bar_index - tradeClosedBar) >= cooldown)
+
+rearmNow   = rearmOn and canSetup and not canSetup[1]
+longSetup  = longOK  and (not longOK[1]  or tradeRev or rearmNow) and barstate.isconfirmed and canSetup
+shortSetup = shortOK and (not shortOK[1] or tradeRev or rearmNow) and barstate.isconfirmed and canSetup and not longSetup
+
+var array<box>   tradeBoxes  = array.new<box>()
+var array<line>  tradeLines  = array.new<line>()
+var array<label> tradeLabels = array.new<label>()
+var label        setupMark   = na
+
+// LOCKED-SIGNAL RULE: history is never deleted or moved. Closing a trade
+// fades its objects to grey AT THEIR ORIGINAL PRICES and releases tracking.
+f_clearTrade() =>
+    if array.size(tradeBoxes) > 0
+        for i = 0 to array.size(tradeBoxes) - 1
+            box.set_bgcolor(array.get(tradeBoxes, i), color.new(color.gray, 92))
+            box.set_border_color(array.get(tradeBoxes, i), color.new(color.gray, 80))
+        array.clear(tradeBoxes)
+    if array.size(tradeLines) > 0
+        for i = 0 to array.size(tradeLines) - 1
+            line.set_color(array.get(tradeLines, i), color.new(color.gray, 70))
+        array.clear(tradeLines)
+    // closed trades keep their grey box + result stamp; the price tags are
+    // removed so they never overlap the tags of the next live trade
+    if array.size(tradeLabels) > 0
+        for i = 0 to array.size(tradeLabels) - 1
+            label.delete(array.get(tradeLabels, i))
+        array.clear(tradeLabels)
+
+if longSetup or shortSetup
+    isL   = longSetup
+    entry = close
+    // Stop loss model
+    float sl = na
+    if slModel == "Swing"
+        if isL
+            sl := (not na(swLo) and swLo < entry ? swLo : entry - atr * slMult) - atr * slBuffer
+        else
+            sl := (not na(swHi) and swHi > entry ? swHi : entry + atr * slMult) + atr * slBuffer
+    else
+        sl := isL ? entry - atr * slMult : entry + atr * slMult
+    risk = math.abs(entry - sl)
+    risk := risk > 0 ? risk : atr * slMult
+    // Take profits
+    float tp1 = na
+    float tp2 = na
+    float tp3 = na
+    if tpModeIn == "Liquidity"
+        tp1 := isL ? (not na(pdhV) and pdhV > entry ? pdhV : entry + risk) : (not na(pdlV) and pdlV < entry ? pdlV : entry - risk)
+        tp2 := isL ? entry + risk * 2 : entry - risk * 2
+        tp3 := isL ? (not na(pwhV) and pwhV > entry + risk * 2 ? pwhV : entry + risk * 3) : (not na(pwlV) and pwlV < entry - risk * 2 ? pwlV : entry - risk * 3)
+    else
+        tp1 := isL ? entry + risk : entry - risk
+        tp2 := isL ? entry + risk * 2 : entry - risk * 2
+        tp3 := isL ? entry + risk * 3 : entry - risk * 3
+    rr = math.abs(tp3 - entry) / risk
+
+    tradeActive := true
+    tradeIsLong := isL
+    setupSide  := isL ? "LONG" : "SHORT"
+    setupGrade := f_grade(isL ? bullScore : bearScore)
+    setupEntry := entry
+    setupSL    := sl
+    setupTP1   := tp1
+    setupTP2   := tp2
+    setupTP3   := tp3
+    setupRR    := rr
+
+    tp1Hit := false
+    tp2Hit := false
+    if showTrade
+        f_clearTrade()
+        rEdge = bar_index + 18
+        // stop zone — soft pink, like the TradingView position tool
+        array.push(tradeBoxes, box.new(bar_index, math.max(entry, sl), rEdge, math.min(entry, sl),
+             border_color=color.new(#F44336, 50), bgcolor=color.new(#F44336, 70)))
+        // target zone — cyan: deeper shade to TP2, lighter shade on to TP3
+        array.push(tradeBoxes, box.new(bar_index, math.max(entry, tp2), rEdge, math.min(entry, tp2),
+             border_color=color.new(#00BCD4, 40), bgcolor=color.new(#00BCD4, 55)))
+        array.push(tradeBoxes, box.new(bar_index, math.max(tp2, tp3), rEdge, math.min(tp2, tp3),
+             border_color=color.new(#00BCD4, 60), bgcolor=color.new(#00BCD4, 74)))
+        // entry band
+        array.push(tradeBoxes, box.new(bar_index, entry + atr * 0.08, rEdge, entry - atr * 0.08,
+             border_color=color.new(color.white, 35), bgcolor=color.new(color.white, 70)))
+        // TP1 / TP2 level lines inside the target zone
+        array.push(tradeLines, line.new(bar_index, tp1, rEdge, tp1, color=color.new(color.white, 30), width=1, style=line.style_dotted))
+        array.push(tradeLines, line.new(bar_index, tp2, rEdge, tp2, color=color.new(color.white, 30), width=1, style=line.style_dotted))
+        // level rays — extend forward in TIME while the trade runs; the
+        // PRICES are locked at the signal values forever
+        array.push(tradeLines, line.new(bar_index, entry, rEdge, entry, color=color.new(#455A64, 15), width=2))
+        array.push(tradeLines, line.new(bar_index, sl,    rEdge, sl,    color=color.new(#F44336, 30), width=1))
+        array.push(tradeLines, line.new(bar_index, tp3,   rEdge, tp3,   color=color.new(#00BCD4, 30), width=1))
+        array.push(tradeLabels, label.new(rEdge, entry, "ENTRY " + f(entry) + " 🔒",
+             style=label.style_label_left, color=color.new(#455A64, 0), textcolor=color.white, size=size.small))
+        array.push(tradeLabels, label.new(rEdge, sl, "SL " + f(sl),
+             style=label.style_label_left, color=color.new(#F44336, 0), textcolor=color.white, size=size.small))
+        array.push(tradeLabels, label.new(rEdge, tp1, "TP1 " + f(tp1),
+             style=label.style_label_left, color=color.new(#00897B, 0), textcolor=color.white, size=size.small))
+        array.push(tradeLabels, label.new(rEdge, tp2, "TP2 " + f(tp2),
+             style=label.style_label_left, color=color.new(#00897B, 0), textcolor=color.white, size=size.small))
+        array.push(tradeLabels, label.new(rEdge, tp3, "TP3 " + f(tp3) + "  R:R 1:" + str.tostring(rr, "#.#"),
+             style=label.style_label_left, color=color.new(color.navy, 0), textcolor=color.yellow, size=size.normal))
+        setupMark := label.new(bar_index, isL ? low : high,
+             (isL ? "LONG " : "SHORT ") + setupGrade + " " + str.tostring(isL ? bullScore : bearScore) + "/100",
+             style=isL ? label.style_label_up : label.style_label_down,
+             color=isL ? color.new(color.lime, 10) : color.new(color.red, 10),
+             textcolor=color.black, size=size.small)
+
+// ── Keep the most recent locked trade pinned to the right edge of the chart
+//    (it never moves in price — it only follows the latest bar in time) until
+//    the next setup replaces it.
+// ── ACTIVE trade: the shaded block floats at the CURRENT price (position-
+//    tool style), the thin lines connect it back to the signal bar, and the
+//    tags sit at the right edge. PRICES never change — only screen position
+//    in time. On close everything freezes where it is and fades.
+if showTrade and tradeActive
+    if array.size(tradeBoxes) > 0
+        for i = 0 to array.size(tradeBoxes) - 1
+            box.set_left(array.get(tradeBoxes, i), bar_index + 1)
+            box.set_right(array.get(tradeBoxes, i), bar_index + 18)
+    if array.size(tradeLines) > 0
+        for i = 0 to array.size(tradeLines) - 1
+            line.set_x2(array.get(tradeLines, i), bar_index + 18)
+    if array.size(tradeLabels) > 0
+        for i = 0 to array.size(tradeLabels) - 1
+            label.set_x(array.get(tradeLabels, i), bar_index + 18)
+
+// ── LOCKED: on close everything fades grey at the original prices — never
+//    deleted, never moved, never recalculated (outcome stamp marks result).
+if (tradeHitTP3 or tradeHitSL or tradeRev) and not (longSetup or shortSetup)
+    f_clearTrade()
+
+// ── PREVIEW while flat: dotted, dimmed levels showing where the NEXT trade
+//    would sit if it confirmed on this bar. Tagged "preview" — not a signal.
+var array<box>   pvBoxes  = array.new<box>()
+var array<line>  pvLines  = array.new<line>()
+var array<label> pvLabels = array.new<label>()
+var float pvEntry = na
+var float pvStop  = na
+
+f_pv(_x1, _x2, _price, _col, _txt) =>
+    array.push(pvLines, line.new(_x1, _price, _x2, _price, color=_col, width=1, style=line.style_dotted))
+    array.push(pvLabels, label.new(_x2, _price, _txt, style=label.style_label_left, color=color.new(_col, 20), textcolor=color.white, size=size.small))
+
+if barstate.islast
+    if array.size(pvBoxes) > 0
+        for i = 0 to array.size(pvBoxes) - 1
+            box.delete(array.get(pvBoxes, i))
+        array.clear(pvBoxes)
+    if array.size(pvLines) > 0
+        for i = 0 to array.size(pvLines) - 1
+            line.delete(array.get(pvLines, i))
+        array.clear(pvLines)
+    if array.size(pvLabels) > 0
+        for i = 0 to array.size(pvLabels) - 1
+            label.delete(array.get(pvLabels, i))
+        array.clear(pvLabels)
+    pvEntry := na
+    pvStop  := na
+    if previewOn and showTrade and not tradeActive
+        // ── ZONE-ANCHORED plan: entry at the latest supply/demand zone edge,
+        //    SL beyond the zone. These prices are STATIC — they only change
+        //    when a new zone forms or the current one is invalidated.
+        pIsL = bullScore >= bearScore
+        float pE  = na
+        float pSL = na
+        if pIsL and array.size(dzBox) > 0
+            zpv = array.get(dzBox, array.size(dzBox) - 1)
+            pE  := box.get_top(zpv)
+            pSL := box.get_bottom(zpv) - atr * slBuffer
+        if not pIsL and array.size(szBox) > 0
+            zpv = array.get(szBox, array.size(szBox) - 1)
+            pE  := box.get_bottom(zpv)
+            pSL := box.get_top(zpv) + atr * slBuffer
+        if not na(pE)
+            pRisk = math.abs(pE - pSL)
+            pRisk := pRisk > 0 ? pRisk : atr * slMult
+            pvEntry := pE
+            pvStop  := pSL
+            pT1 = pIsL ? pE + pRisk     : pE - pRisk
+            pT2 = pIsL ? pE + pRisk * 2 : pE - pRisk * 2
+            pT3 = pIsL ? pE + pRisk * 3 : pE - pRisk * 3
+            pX1 = bar_index + 1
+            pX2 = bar_index + 14
+            array.push(pvBoxes, box.new(pX1, math.max(pE, pSL), pX2, math.min(pE, pSL),
+                 border_color=color.new(#F44336, 55), bgcolor=color.new(#F44336, 76)))
+            array.push(pvBoxes, box.new(pX1, math.max(pE, pT2), pX2, math.min(pE, pT2),
+                 border_color=color.new(#00BCD4, 50), bgcolor=color.new(#00BCD4, 66)))
+            array.push(pvBoxes, box.new(pX1, math.max(pT2, pT3), pX2, math.min(pT2, pT3),
+                 border_color=color.new(#00BCD4, 65), bgcolor=color.new(#00BCD4, 78)))
+            f_pv(pX1, pX2, pE,  color.new(color.gray, 25), (pIsL ? "▲" : "▼") + " ENTRY " + f(pE) + " @ " + (pIsL ? "demand" : "supply") + " zone")
+            f_pv(pX1, pX2, pSL, color.new(color.red,  50), "SL "  + f(pSL))
+            f_pv(pX1, pX2, pT1, color.new(color.teal, 50), "TP1 " + f(pT1))
+            f_pv(pX1, pX2, pT2, color.new(color.teal, 50), "TP2 " + f(pT2))
+            f_pv(pX1, pX2, pT3, color.new(color.teal, 40), "TP3 " + f(pT3))
+
+// ════════════════════════════════════════════════════════════════════════════
+// ICT DASHBOARD (top right)
+// ════════════════════════════════════════════════════════════════════════════
+dashPosT = dashPosIn == "Top Right" ? position.top_right : dashPosIn == "Top Left" ? position.top_left : dashPosIn == "Middle Right" ? position.middle_right : dashPosIn == "Middle Left" ? position.middle_left : dashPosIn == "Bottom Left" ? position.bottom_left : position.bottom_right
+var table dashT = table.new(dashPosT, 2, 19,
+     border_color=color.new(color.gray, 60), border_width=1,
+     bgcolor=color.new(color.black, 55))
+
+if barstate.islast and dashOn
+    liqTxt = sinceSSL <= confWin ? "SSL SWEPT" : sinceBSL <= confWin ? "BSL SWEPT" : "—"
+    liqCol = sinceSSL <= confWin ? color.lime : sinceBSL <= confWin ? color.red : color.gray
+    chTxt  = sinceBullCH <= confWin ? "BULL ✓" : sinceBearCH <= confWin ? "BEAR ✓" : "—"
+    chCol  = sinceBullCH <= confWin ? color.lime : sinceBearCH <= confWin ? color.red : color.gray
+    zoneTxt = inDiscount ? "DISCOUNT" : inPremium ? "PREMIUM" : "—"
+    zoneCol = inDiscount ? color.lime : inPremium ? color.red : color.gray
+    stTxt  = structDir == 1 ? "BULLISH" : structDir == -1 ? "BEARISH" : "—"
+    stCol  = structDir == 1 ? color.lime : structDir == -1 ? color.red : color.gray
+    hbTxt  = htfBull ? "BULLISH" : htfBear ? "BEARISH" : "—"
+    hbCol  = htfBull ? color.lime : htfBear ? color.red : color.gray
+    domScore = bullScore >= bearScore ? bullScore : bearScore
+    domSide  = bullScore >= bearScore ? "▲" : "▼"
+    domCol   = bullScore >= bearScore ? color.lime : color.red
+
+    table.cell(dashT, 0, 0, "TRADEPULSE PRO 3", text_color=color.white, text_size=size.small, bgcolor=color.new(color.navy, 10), text_halign=text.align_center)
+    table.cell(dashT, 1, 0, "ICT", text_color=color.yellow, text_size=size.small, bgcolor=color.new(color.navy, 10), text_halign=text.align_center)
+    table.cell(dashT, 0, 1, "HTF BIAS " + htfBiasTF, text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 1, hbTxt, text_color=hbCol, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 2, "STRUCTURE", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 2, stTxt, text_color=stCol, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 3, "LIQUIDITY", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 3, liqTxt, text_color=liqCol, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 4, "CHoCH", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 4, chTxt, text_color=chCol, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 5, "FVG (B/S)", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 5, str.tostring(array.size(fvgBull)) + " / " + str.tostring(array.size(fvgBear)), text_color=color.aqua, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 6, "ZONE", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 6, zoneTxt, text_color=zoneCol, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 7, "ICT SCORE", text_color=color.white, text_size=size.small)
+    table.cell(dashT, 1, 7, domSide + " " + str.tostring(domScore) + "/100", text_color=domCol, text_size=size.small, text_halign=text.align_right)
+    table.cell(dashT, 0, 8, "CORE SCORE", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 8, str.tostring(ds) + "/5 " + dl, text_color=dc, text_size=size.tiny, text_halign=text.align_right)
+    confTxt = bullScore >= bearScore ? (confirmL ? "▲ CONFIRMED" : "▲ waiting…") : (confirmS ? "▼ CONFIRMED" : "▼ waiting…")
+    confCol = bullScore >= bearScore ? (confirmL ? color.lime : color.gray) : (confirmS ? color.red : color.gray)
+    table.cell(dashT, 0, 9, "CONFIRM", text_color=color.white, text_size=size.small)
+    table.cell(dashT, 1, 9, confTxt, text_color=confCol, text_size=size.small, text_halign=text.align_right)
+    haveLastT = not tradeActive and not na(setupEntry)
+    stateTxt = tradeActive ? setupSide + " " + setupGrade + (tp2Hit ? " · TP2 HIT" : tp1Hit ? " · TP1 HIT" : " · 🔒 LOCKED") : sdZoneNow != "—" ? "ARMED · in " + sdZoneNow : "WATCHING"
+    stateCol = tradeActive ? (setupSide == "LONG" ? color.lime : color.red) : sdZoneNow != "—" ? color.orange : color.gray
+    table.cell(dashT, 0, 10, "SETUP", text_color=color.white, text_size=size.small)
+    table.cell(dashT, 1, 10, stateTxt, text_color=stateCol, text_size=size.small, text_halign=text.align_right)
+    table.cell(dashT, 0, 11, haveLastT ? "ENTRY / SL (last 🔒)" : "ENTRY / SL", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 11, (na(setupEntry) ? "—" : f(setupEntry)) + " / " + (na(setupSL) ? "—" : f(setupSL)), text_color=color.white, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 12, "TP1/2/3  R:R", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 12, (na(setupTP1) ? "—" : f(setupTP1)) + " / " + (na(setupTP2) ? "—" : f(setupTP2)) + " / " + (na(setupTP3) ? "—" : f(setupTP3)) + (na(setupRR) ? "" : "  1:" + str.tostring(setupRR, "#.#")), text_color=color.yellow, text_size=size.tiny, text_halign=text.align_right)
+    // position size so an SL hit costs exactly riskPct% of the account
+    riskCash = acctSize * riskPct / 100
+    riskDist = tradeActive ? math.abs(setupEntry - setupSL) : math.abs(pvEntry - pvStop)
+    posSize  = not na(riskDist) and riskDist > 0 ? riskCash / riskDist : na
+    table.cell(dashT, 0, 13, "POS SIZE @ " + str.tostring(riskPct, "#.#") + "% risk", text_color=color.white, text_size=size.small)
+    table.cell(dashT, 1, 13, na(posSize) ? "—" : str.tostring(posSize, "#.##") + " units  ($" + str.tostring(riskCash, "#") + " risk)", text_color=color.orange, text_size=size.small, text_halign=text.align_right)
+    table.cell(dashT, 0, 14, "S/D ZONE", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 14, sdZoneNow + (na(sdQNow) ? "" : "  " + str.tostring(math.round(sdQNow)) + "/100"), text_color=sdZoneNow == "DEMAND" ? color.lime : sdZoneNow == "SUPPLY" ? color.red : color.gray, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 15, "APPROACH", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 15, appClass + (knifeDown or knifeUp ? " ⚠ no knife-catch" : ""), text_color=appClass == "EXTREME" ? color.red : appClass == "FAST" ? color.orange : color.gray, text_size=size.tiny, text_halign=text.align_right)
+    resColT = nz(ictLastR, 0.0) > 0 ? color.lime : nz(ictLastR, 0.0) < 0 ? color.red : color.gray
+    table.cell(dashT, 0, 16, "LAST RESULT", text_color=color.white, text_size=size.small)
+    table.cell(dashT, 1, 16, ictLastRes == "" ? "—" : lastSide + " " + lastGrade + " · " + ictLastRes + "  " + f_rTxt(ictLastR), text_color=resColT, text_size=size.small, text_halign=text.align_right)
+    table.cell(dashT, 0, 17, "RECORD W-L-S", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashT, 1, 17, str.tostring(ictWins) + " - " + str.tostring(ictLosses) + " - " + str.tostring(ictScratch), text_color=color.white, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(dashT, 0, 18, "NET R", text_color=color.white, text_size=size.small)
+    table.cell(dashT, 1, 18, f_rTxt(ictNetR), text_color=ictNetR > 0 ? color.lime : ictNetR < 0 ? color.red : color.gray, text_size=size.small, text_halign=text.align_right)
+
+// ════════════════════════════════════════════════════════════════════════════
+// SIGNAL MARKERS
+// ════════════════════════════════════════════════════════════════════════════
+plotshape(showCore and newSignal and sigBuy,     "BUY Signal",  shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.normal, text="BUY",  textcolor=color.lime)
+plotshape(showCore and newSignal and not sigBuy, "SELL Signal", shape.triangledown, location.abovebar, color.new(color.red,  0), size=size.normal, text="SELL", textcolor=color.red)
+// ICT setup arrows — printed together with the locked entry block
+plotshape(longSetup,  "ICT LONG Signal",  shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.small, text="LONG",  textcolor=color.lime)
+plotshape(shortSetup, "ICT SHORT Signal", shape.triangledown, location.abovebar, color.new(color.red,  0), size=size.small, text="SHORT", textcolor=color.red)
+
+// ════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ════════════════════════════════════════════════════════════════════════════
+alertcondition(bullBOS,    "Bullish BOS",       "TradePulse Pro 3: Bullish BOS")
+alertcondition(bearBOS,    "Bearish BOS",       "TradePulse Pro 3: Bearish BOS")
+alertcondition(bullCHoCH,  "Bullish CHoCH",     "TradePulse Pro 3: Bullish CHoCH")
+alertcondition(bearCHoCH,  "Bearish CHoCH",     "TradePulse Pro 3: Bearish CHoCH")
+alertcondition(sslSweep,   "SSL Sweep",         "TradePulse Pro 3: Sell-side liquidity swept")
+alertcondition(bslSweep,   "BSL Sweep",         "TradePulse Pro 3: Buy-side liquidity swept")
+alertcondition(newBullFVG, "New Bullish FVG",   "TradePulse Pro 3: New bullish FVG")
+alertcondition(newBearFVG, "New Bearish FVG",   "TradePulse Pro 3: New bearish FVG")
+alertcondition(longSetup,  "ICT Long Setup",    "TradePulse Pro 3: LONG setup")
+alertcondition(shortSetup, "ICT Short Setup",   "TradePulse Pro 3: SHORT setup")
+alertcondition(tp1HitEv,    "ICT TP1 Hit",      "TradePulse Pro 3: TP1 hit")
+alertcondition(tp2HitEv,    "ICT TP2 Hit",      "TradePulse Pro 3: TP2 hit")
+alertcondition(tradeHitTP3, "ICT TP3 Hit",      "TradePulse Pro 3: TP3 hit - trade closed")
+alertcondition(tradeHitSL,  "ICT SL Hit",       "TradePulse Pro 3: SL hit - trade closed")
+alertcondition(tradeRev,    "ICT Reversal",     "TradePulse Pro 3: market flipped - trade reversed")
+alertcondition(newDemandZ,      "New Demand Zone",   "TradePulse Pro 3: new DEMAND zone created")
+alertcondition(newSupplyZ,      "New Supply Zone",   "TradePulse Pro 3: new SUPPLY zone created")
+alertcondition(demandEnteredEv, "Demand Entered",    "TradePulse Pro 3: price entered a DEMAND zone")
+alertcondition(supplyEnteredEv, "Supply Entered",    "TradePulse Pro 3: price entered a SUPPLY zone")
+alertcondition(zoneInvalidEv,   "Zone Invalidated",  "TradePulse Pro 3: a supply/demand zone was invalidated")
+
+if longSetup
+    alert("TRADEPULSE PRO 3 LONG\nSymbol: " + syminfo.ticker + "  TF: " + timeframe.period +
+         "\nICT Score: " + str.tostring(bullScore) + "/100 (" + f_grade(bullScore) + ")" +
+         "\nCore Score: " + str.tostring(ds) + "/5" +
+         "\nSweep: "  + (sinceSSL    <= confWin ? "YES" : "NO") +
+         "  CHoCH: " + (sinceBullCH <= confWin ? "YES" : "NO") +
+         "  FVG: "   + (array.size(fvgBull) > 0 ? "YES" : "NO") +
+         "\nHTF: "   + (htfBull ? "BULLISH" : "BEARISH") +
+         "  Zone: "  + (inDiscount ? "DISCOUNT" : inPremium ? "PREMIUM" : "-") +
+         "\nEntry: " + f(setupEntry) + "  SL: " + f(setupSL) +
+         "\nTP1: "   + f(setupTP1) + "  TP2: " + f(setupTP2) + "  TP3: " + f(setupTP3) +
+         "  R:R 1:"  + str.tostring(setupRR, "#.#"),
+         alert.freq_once_per_bar_close)
+if shortSetup
+    alert("TRADEPULSE PRO 3 SHORT\nSymbol: " + syminfo.ticker + "  TF: " + timeframe.period +
+         "\nICT Score: " + str.tostring(bearScore) + "/100 (" + f_grade(bearScore) + ")" +
+         "\nCore Score: " + str.tostring(ds) + "/5" +
+         "\nSweep: "  + (sinceBSL    <= confWin ? "YES" : "NO") +
+         "  CHoCH: " + (sinceBearCH <= confWin ? "YES" : "NO") +
+         "  FVG: "   + (array.size(fvgBear) > 0 ? "YES" : "NO") +
+         "\nHTF: "   + (htfBear ? "BEARISH" : "BULLISH") +
+         "  Zone: "  + (inPremium ? "PREMIUM" : inDiscount ? "DISCOUNT" : "-") +
+         "\nEntry: " + f(setupEntry) + "  SL: " + f(setupSL) +
+         "\nTP1: "   + f(setupTP1) + "  TP2: " + f(setupTP2) + "  TP3: " + f(setupTP3) +
+         "  R:R 1:"  + str.tostring(setupRR, "#.#"),
+         alert.freq_once_per_bar_close)
+
+// ════════════════════════════════════════════════════════════════════════════
+// MARKET SCANNER — the core confirmation chain, checked on several markets.
+// A quick checklist (structure / EMA / displacement / HTF), NOT the full
+// engine: sweeps, zones, score and the knife filter only run on the chart
+// that is open. Uses only confirmed pivots and closed HTF bars.
+// ════════════════════════════════════════════════════════════════════════════
+f_scanCore() =>
+    var float sh  = na
+    var float sl  = na
+    var int   dir = 0
+    ph = ta.pivothigh(high, swingLen, swingLen)
+    pl = ta.pivotlow(low,  swingLen, swingLen)
+    if not na(ph)
+        sh := ph
+    if not na(pl)
+        sl := pl
+    if not na(sh) and close > sh
+        dir := 1
+        sh  := na
+    if not na(sl) and close < sl
+        dir := -1
+        sl  := na
+    a     = ta.atr(14)
+    body  = math.abs(close - open)
+    sUp   = nz(ta.barssince(body > a * dispMult and close > open), 9999)
+    sDn   = nz(ta.barssince(body > a * dispMult and close < open), 9999)
+    [dir, ta.ema(close, 9) > ta.ema(close, 21), sUp, sDn]
+
+f_scanHtf() =>
+    [ta.ema(close, 9)[1], ta.ema(close, 21)[1]]
+
+f_scanRow(_tb, _row, _sym) =>
+    [d, emaUp, sUp, sDn] = request.security(_sym, timeframe.period, f_scanCore(), lookahead=barmerge.lookahead_off)
+    [hf, hs] = request.security(_sym, htfBiasTF, f_scanHtf(), lookahead=barmerge.lookahead_off)
+    htfUp  = hf > hs
+    bullN  = (d == 1 ? 1 : 0) + (emaUp ? 1 : 0) + (sUp <= confWin ? 1 : 0) + (htfUp ? 1 : 0)
+    bearN  = (d == -1 ? 1 : 0) + (not emaUp ? 1 : 0) + (sDn <= confWin ? 1 : 0) + (not htfUp ? 1 : 0)
+    isBull = bullN >= bearN
+    n      = isBull ? bullN : bearN
+    stTxt  = n == 4 ? (isBull ? "▲ LONG READY" : "▼ SHORT READY") : n == 3 ? (isBull ? "▲ close (3/4)" : "▼ close (3/4)") : "watching"
+    stCol  = n == 4 ? (isBull ? color.lime : color.red) : n == 3 ? color.orange : color.gray
+    if scanOn and barstate.islast
+        nm = str.substring(_sym, str.pos(_sym, ":") + 1)
+        table.cell(_tb, 0, _row, nm, text_color=color.white, text_size=size.small, text_halign=text.align_left)
+        table.cell(_tb, 1, _row, d == 1 ? "BULL" : d == -1 ? "BEAR" : "—", text_color=d == 1 ? color.lime : d == -1 ? color.red : color.gray, text_size=size.tiny)
+        table.cell(_tb, 2, _row, htfUp ? "BULL" : "BEAR", text_color=htfUp ? color.lime : color.red, text_size=size.tiny)
+        table.cell(_tb, 3, _row, stTxt, text_color=stCol, text_size=size.small, text_halign=text.align_left)
+
+var table scanT = table.new(position.bottom_left, 4, 7, border_color=color.new(color.gray, 60), border_width=1, bgcolor=color.new(color.black, 55))
+if scanOn and barstate.islast
+    table.cell(scanT, 0, 0, "SCANNER " + timeframe.period, text_color=color.yellow, text_size=size.small, bgcolor=color.new(color.navy, 10))
+    table.cell(scanT, 1, 0, "STRUCT", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.navy, 10))
+    table.cell(scanT, 2, 0, "HTF " + htfBiasTF, text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.navy, 10))
+    table.cell(scanT, 3, 0, "STATUS", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.navy, 10))
+f_scanRow(scanT, 1, scan1)
+f_scanRow(scanT, 2, scan2)
+f_scanRow(scanT, 3, scan3)
+f_scanRow(scanT, 4, scan4)
+f_scanRow(scanT, 5, scan5)
+f_scanRow(scanT, 6, scan6)
+
+// ════════════════════════════════════════════════════════════════════════════
+// AUTO TRENDLINES + BREAKS — from confirmed pivots only (no repainting).
+// Uptrend  = last two swing lows rising  (higher low)  → support line.
+// Downtrend = last two swing highs falling (lower high) → resistance line.
+// A close through the line marks a break; the broken line freezes in grey.
+// ════════════════════════════════════════════════════════════════════════════
+tlPH = ta.pivothigh(high, tlLen, tlLen)
+tlPL = ta.pivotlow(low,  tlLen, tlLen)
+
+var float tlH1  = na
+var float tlH2  = na
+var int   tlHb1 = na
+var int   tlHb2 = na
+var float tlL1  = na
+var float tlL2  = na
+var int   tlLb1 = na
+var int   tlLb2 = na
+var line  tlDn = na
+var line  tlUp = na
+var bool  tlDnLive = false
+var bool  tlUpLive = false
+
+if tlOn and not na(tlPH)
+    tlH1 := tlH2, tlHb1 := tlHb2
+    tlH2 := tlPH, tlHb2 := bar_index - tlLen
+    if tlDnLive
+        line.delete(tlDn)
+    tlDnLive := false
+    if not na(tlH1) and tlH2 < tlH1
+        tlDn := line.new(tlHb1, tlH1, tlHb2, tlH2, extend=extend.right, color=color.new(#EF5350, 10), width=2)
+        tlDnLive := true
+
+if tlOn and not na(tlPL)
+    tlL1 := tlL2, tlLb1 := tlLb2
+    tlL2 := tlPL, tlLb2 := bar_index - tlLen
+    if tlUpLive
+        line.delete(tlUp)
+    tlUpLive := false
+    if not na(tlL1) and tlL2 > tlL1
+        tlUp := line.new(tlLb1, tlL1, tlLb2, tlL2, extend=extend.right, color=color.new(#26A69A, 10), width=2)
+        tlUpLive := true
+
+// value of each live line at the current bar
+tlDnVal = tlDnLive ? tlH2 + (tlH2 - tlH1) / (tlHb2 - tlHb1) * (bar_index - tlHb2) : na
+tlUpVal = tlUpLive ? tlL2 + (tlL2 - tlL1) / (tlLb2 - tlLb1) * (bar_index - tlLb2) : na
+
+tlBreakUp = tlOn and tlDnLive and barstate.isconfirmed and close > tlDnVal and bar_index > tlHb2
+tlBreakDn = tlOn and tlUpLive and barstate.isconfirmed and close < tlUpVal and bar_index > tlLb2
+
+if tlBreakUp
+    line.set_extend(tlDn, extend.none)
+    line.set_xy2(tlDn, bar_index, tlDnVal)
+    line.set_color(tlDn, color.new(color.gray, 40))
+    line.set_style(tlDn, line.style_dashed)
+    tlDnLive := false
+    if tlBreak
+        label.new(bar_index, low, "TL BREAK ↑", style=label.style_label_up, size=size.tiny,
+             color=color.new(#26A69A, 15), textcolor=color.white)
+if tlBreakDn
+    line.set_extend(tlUp, extend.none)
+    line.set_xy2(tlUp, bar_index, tlUpVal)
+    line.set_color(tlUp, color.new(color.gray, 40))
+    line.set_style(tlUp, line.style_dashed)
+    tlUpLive := false
+    if tlBreak
+        label.new(bar_index, high, "TL BREAK ↓", style=label.style_label_down, size=size.tiny,
+             color=color.new(#EF5350, 15), textcolor=color.white)
+
+alertcondition(tlBreakUp, "Downtrend Line Broken (bullish)", "TradePulse ICT: downtrend line broken upward")
+alertcondition(tlBreakDn, "Uptrend Line Broken (bearish)",   "TradePulse ICT: uptrend line broken downward")
