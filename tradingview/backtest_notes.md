@@ -88,3 +88,16 @@ Beast adds nothing on gold. Gold is an ICT-only market.
 
 ## Market Preset (added to the ICT engine)
 Input "Market Preset": Auto (default) / NAS100 / Gold / Custom. Auto applies the Gold settings on any XAU or GOLD symbol and the NAS100 settings elsewhere. Verified: Auto on XAUUSD reproduces +12.17% / PF 2.51; Auto on NAS100 reproduces the NAS100 result.
+
+## US30 tuning (CAPITALCOM:US30 15m), ICT engine
+| Variant | PnL | Max DD | Profitable | PF |
+|---|---|---|---|---|
+| NAS100 settings (HTF 60, stop 3) | -0.03% | 4.59% | 31/73 | 1.00 |
+| HTF 240, stop 3 | +1.04% | 1.62% | 13/26 | 1.25 |
+| HTF 240, stop 4 | -3.04% | 3.98% | 8/25 | 0.32 |
+| HTF 240, stop 2.5 | +1.10% | 1.68% | 13/26 | 1.27 |
+| HTF 240, stop 2 | +2.02% | 1.51% | 13/23 | 1.64 |
+| HTF 240, stop 1.5 | +1.95% | 1.77% | 14/25 | 1.53 |
+| HTF 120, stop 2 | -0.79% | 3.89% | 20/46 | 0.90 |
+
+Chosen US30 preset: HTF 240, stop cap 2 (1.5 to 2.5 is the plateau; 4 breaks it). About 8 full trades in the window, so treat as provisional. Beast on US30 stays at its NAS100 settings (+2.04%, 5/5).

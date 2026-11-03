@@ -52,6 +52,10 @@ The Basic plan allows two indicators per chart, so remove an old copy before add
 - ICT engine gains a Market Preset input (Auto / NAS100 / Gold / Custom). Auto picks the gold settings (HTF bias 240, stop cap 4 ATR) on any XAU or GOLD symbol and the NAS100 settings (HTF 60, stop cap 3) elsewhere. Dashboard HTF row shows which preset is live.
 - Gold 15m backtest with the preset: +12.2%, PF 2.5, 2.8% max drawdown; stop caps 4 to 6 form a plateau, 30m fails, Beast adds nothing. Full matrix in `backtest_notes.md`.
 
+## Round 5 (same day): US30
+
+- Market Preset gains US30 (Auto detects US30/DJI/DOW/WS30): HTF bias 240, stop cap 2 ATR. Backtest +2.0%, PF 1.64, 1.5% max DD; stop caps 1.5 to 2.5 are the plateau, 4 breaks it, a 2-hour bias is negative. Small sample (about 8 trades).
+
 ## Alerts and the Basic plan
 
 TradingView Basic allows **0 technical alerts**, so no indicator alert can be saved on this account.
