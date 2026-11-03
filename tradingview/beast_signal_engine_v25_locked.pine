@@ -73,6 +73,11 @@ maxExtAtr    = input.float(2.5, "Max Extension From EMA Mid (ATR)", minval = 0.5
 useSession   = input.bool(true, "Only Trade Inside Session", group = gSig, tooltip = "Blocks new signals outside the session window below. Open trades are still managed.")
 sessionStr   = input.session("0930-1600", "Session Window", group = gSig)
 sessionTz    = input.string("America/New_York", "Session Timezone", group = gSig, options = ["America/New_York", "Europe/London", "UTC", "Africa/Johannesburg", "Asia/Tokyo", "Australia/Sydney"])
+gGuard = "DAILY GUARD"
+maxTradesDay = input.int(3, "Max Signals Per Day", minval = 0, group = gGuard, tooltip = "0 = no limit. Counts signals that fired today (chart timezone day).")
+maxLossesDay = input.int(2, "Stop After N Losing Trades In A Day", minval = 0, group = gGuard, tooltip = "0 = no limit. Once this many trades have closed at a loss today, no new signal prints until tomorrow.")
+var int tradesToday = 0
+var int lossesToday = 0
 beAfterTP1   = input.bool(true, "Move Stop To Breakeven After TP1", group = gRisk, tooltip = "Once TP1 is hit the stop for the open remainder moves to the entry price. The original stop stays drawn as a reference; the ledger scores a breakeven exit as 0R on the remainder.")
 
 gVis = "VISUALS"
@@ -702,9 +707,13 @@ if barOk and sigState == "ACTIVE"
 cooldownOk = na(lastSigBar) or (bar_index - lastSigBar) >= cooldownBars
 slotFree   = sigState != "ACTIVE"
 
+if newDay
+    tradesToday := 0
+    lossesToday := 0
+guardOk = (maxTradesDay == 0 or tradesToday < maxTradesDay) and (maxLossesDay == 0 or lossesToday < maxLossesDay)
 inSession = not useSession or not na(time(timeframe.period, sessionStr, sessionTz))
-longFire  = enableLong  and barOk and inSession and longTrigger  and not longBlocked  and longScore  >= minScore and cooldownOk and slotFree
-shortFire = enableShort and barOk and inSession and shortTrigger and not shortBlocked and shortScore >= minScore and cooldownOk and slotFree and not longFire
+longFire  = enableLong  and barOk and inSession and guardOk and longTrigger  and not longBlocked  and longScore  >= minScore and cooldownOk and slotFree
+shortFire = enableShort and barOk and inSession and guardOk and shortTrigger and not shortBlocked and shortScore >= minScore and cooldownOk and slotFree and not longFire
 
 if longFire
     sigDir    := 1
@@ -742,6 +751,8 @@ if shortFire
     lastSigBar := bar_index
 
 newSignal = longFire or shortFire
+if newSignal
+    tradesToday += 1
 
 // ----------------------------------------------------------------------------
 // 14a. RESULT LEDGER - every closed setup is scored once, in R, and the tally
@@ -773,6 +784,8 @@ if sigClosed
     else
         scratchCount += 1
     netR += rres
+    if rres < -0.1
+        lossesToday += 1
 f_rTxt(r) => na(r) ? "" : (r >= 0 ? "+" : "") + str.tostring(r, "#.#") + "R"
 
 // ----------------------------------------------------------------------------
@@ -1028,7 +1041,7 @@ statusCol = sigState == "ACTIVE" ? (sigDir == 1 ? cBull : cBear) : ntReason == "
 
 dpos = dashPos == "Top Right" ? position.top_right : dashPos == "Top Left" ? position.top_left : dashPos == "Bottom Right" ? position.bottom_right : dashPos == "Bottom Left" ? position.bottom_left : position.middle_right
 
-var table dash = table.new(dpos, 2, 26, border_width = 1, border_color = color.new(#2a2a35, 0), frame_width = 1, frame_color = color.new(#2a2a35, 0))
+var table dash = table.new(dpos, 2, 27, border_width = 1, border_color = color.new(#2a2a35, 0), frame_width = 1, frame_color = color.new(#2a2a35, 0))
 
 f_row(t, r, k, v, vc) =>
     table.cell(t, 0, r, k, text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left,  bgcolor = color.new(#12121a, 0))
@@ -1084,8 +1097,10 @@ if showDash and barstate.islast
     f_row(dash, 22, "RESULT", showStats ? (lastResult == "" ? "-" : lastResult + "  " + f_rTxt(lastResultR)) : "", resCol)
     f_row(dash, 23, "RECORD W-L-S", showStats ? str.tostring(winCount) + " - " + str.tostring(lossCount) + " - " + str.tostring(scratchCount) : "", color.white)
     f_row(dash, 24, "NET R", showStats ? f_rTxt(netR) : "", netR > 0 ? cBull : netR < 0 ? cBear : planGrey)
-    table.cell(dash, 0, 25, "STATUS", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
-    table.cell(dash, 1, 25, statusTxt + (ntReason == "" or sigState == "ACTIVE" ? "" : "\n" + ntReason), text_color = statusCol, text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
+    guardTxt = guardOk ? "GO · " + str.tostring(tradesToday) + "/" + str.tostring(maxTradesDay) + " signals · " + str.tostring(lossesToday) + "/" + str.tostring(maxLossesDay) + " losses" : "⛔ STOP FOR TODAY"
+    f_row(dash, 25, "DAY GUARD", guardTxt, guardOk ? cBull : cBear)
+    table.cell(dash, 0, 26, "STATUS", text_color = color.new(#9aa0b5, 0), text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#1c1c26, 0))
+    table.cell(dash, 1, 26, statusTxt + (ntReason == "" or sigState == "ACTIVE" ? "" : "\n" + ntReason), text_color = statusCol, text_size = size.tiny, text_halign = text.align_right, bgcolor = color.new(#1c1c26, 0))
 
 // ----------------------------------------------------------------------------
 // 16b. PLAN LEVELS

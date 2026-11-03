@@ -8,6 +8,7 @@ Pine Script v6 indicators for TradingView, used on NAS100 15m (Capital.com).
 | `ict_engine_v28_locked.pine` | TradePulse Pro 3.1 - ICT Engine (Locked). Current version. |
 | `beast_strategy_v25.pine` | Strategy wrapper of the Beast engine for the Strategy Tester (same logic, thirds at TP1/2/3). |
 | `ict_strategy_v28.pine` | Strategy wrapper of the ICT engine for the Strategy Tester. |
+| `TRADING_PLAN.md` | The rule set for demo and live trading: market, session, which signal, risk, daily/weekly guards, review. |
 | `backtest_notes.md` | Backtest matrix (Aug-Nov 2026, NAS100 15m) and the chosen defaults. |
 | `ledger_webhook.py` | FastAPI receiver for the JSON alerts; appends every trade event to `ledger.csv`. |
 | `beast_signal_engine_v24_original.pine` | Beast engine as it was before the 2026-11-03 patch. |
@@ -40,6 +41,11 @@ The Basic plan cannot save Pine scripts, so load each file by hand:
 4. The ICT engine's **HTF Bias Timeframe** should be set to 60 to match the live setup; the default is 240.
 
 The Basic plan allows two indicators per chart, so remove an old copy before adding a new one.
+
+## Round 3 (same day)
+
+- Daily guard in both engines: max 3 signals per day, stop after 2 losing trades in a day, shown as a DAY GUARD row (GO / STOP FOR TODAY).
+- Robustness sweep (see `backtest_notes.md`): Beast is positive on NAS100 15m/30m/1h, US30 and gold but trades rarely; ICT is strong on NAS100 15m and 30m only, and should not be used on gold or US30 with these settings.
 
 ## Alerts and the Basic plan
 

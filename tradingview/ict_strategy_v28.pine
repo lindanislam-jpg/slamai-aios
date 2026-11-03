@@ -123,6 +123,10 @@ maxStopAtrI = input.float(3.0, "Max Stop Distance (ATR x)", minval=0.5, step=0.1
 beAfterTP1  = input.bool(false, "Move Stop To Breakeven After TP1", group="Execution", tooltip="Once TP1 is hit the stop for the open remainder moves to the entry price. The ledger scores that exit as 0R on the remainder.")
 useBeast    = input.bool(false, "Require Beast Bias Agreement", group="Execution", tooltip="ON = a long needs the Beast Signal Engine bias plot above 0 and a short needs it below 0. Set the source below to the Beast engine's \"Beast Bias\" plot.")
 beastSrc    = input.source(close, "Beast Bias Plot", group="Execution")
+maxTradesDay = input.int(3, "Max Setups Per Day", minval=0, group="Daily Guard", tooltip="0 = no limit. Counts setups that printed today (chart timezone day).")
+maxLossesDay = input.int(2, "Stop After N Losing Trades In A Day", minval=0, group="Daily Guard", tooltip="0 = no limit. Once this many trades closed at a loss today, no new setup prints until tomorrow.")
+var int tradesToday = 0
+var int lossesToday = 0
 rearmOn   = input.bool(true, "Re-arm After Cooldown", group="Execution", tooltip="ON = once a trade has closed and the cooldown has passed, a setup may print immediately if the confirmation chain is still complete. OFF = the chain must drop out and re-confirm first (the old behaviour, which could skip valid setups after a close).")
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -403,6 +407,8 @@ var bool sweptPWL = false
 if timeframe.change("D")
     sweptPDH := false
     sweptPDL := false
+    tradesToday := 0
+    lossesToday := 0
 if timeframe.change("W")
     sweptPWH := false
     sweptPWL := false
@@ -912,6 +918,8 @@ if tradeHitTP3 or tradeHitSL or tradeRev
     else
         ictScratch += 1
     ictNetR += rres
+    if rres < -0.1
+        lossesToday += 1
     // the levels stay in the dashboard as the LAST trade (locked) until the
     // next setup prints; only the live flags reset
     lastSide   := setupSide
@@ -924,11 +932,14 @@ if tradeHitTP3 or tradeHitSL or tradeRev
          color=rres > 0 ? color.new(color.teal, 10) : rres < 0 ? color.new(color.red, 10) : color.new(color.gray, 10),
          textcolor=color.white)
 
-canSetup = not tradeActive and (tradeRev or na(tradeClosedBar) or (bar_index - tradeClosedBar) >= cooldown)
+guardOk  = (maxTradesDay == 0 or tradesToday < maxTradesDay) and (maxLossesDay == 0 or lossesToday < maxLossesDay)
+canSetup = not tradeActive and guardOk and (tradeRev or na(tradeClosedBar) or (bar_index - tradeClosedBar) >= cooldown)
 
 rearmNow   = rearmOn and canSetup and not canSetup[1]
 longSetup  = longOK  and (not longOK[1]  or tradeRev or rearmNow) and barstate.isconfirmed and canSetup
 shortSetup = shortOK and (not shortOK[1] or tradeRev or rearmNow) and barstate.isconfirmed and canSetup and not longSetup
+if longSetup or shortSetup
+    tradesToday += 1
 
 var array<box>   tradeBoxes  = array.new<box>()
 var array<line>  tradeLines  = array.new<line>()
@@ -1128,7 +1139,7 @@ if barstate.islast
 // ICT DASHBOARD (top right)
 // ════════════════════════════════════════════════════════════════════════════
 dashPosT = dashPosIn == "Top Right" ? position.top_right : dashPosIn == "Top Left" ? position.top_left : dashPosIn == "Middle Right" ? position.middle_right : dashPosIn == "Middle Left" ? position.middle_left : dashPosIn == "Bottom Left" ? position.bottom_left : position.bottom_right
-var table dashT = table.new(dashPosT, 2, 19,
+var table dashT = table.new(dashPosT, 2, 20,
      border_color=color.new(color.gray, 60), border_width=1,
      bgcolor=color.new(color.black, 55))
 
@@ -1195,6 +1206,9 @@ if barstate.islast and dashOn
     table.cell(dashT, 1, 17, str.tostring(ictWins) + " - " + str.tostring(ictLosses) + " - " + str.tostring(ictScratch), text_color=color.white, text_size=size.tiny, text_halign=text.align_right)
     table.cell(dashT, 0, 18, "NET R", text_color=color.white, text_size=size.small)
     table.cell(dashT, 1, 18, f_rTxt(ictNetR), text_color=ictNetR > 0 ? color.lime : ictNetR < 0 ? color.red : color.gray, text_size=size.small, text_halign=text.align_right)
+    guardTxt = guardOk ? "GO · " + str.tostring(tradesToday) + "/" + str.tostring(maxTradesDay) + " setups · " + str.tostring(lossesToday) + "/" + str.tostring(maxLossesDay) + " losses" : "⛔ STOP FOR TODAY"
+    table.cell(dashT, 0, 19, "DAY GUARD", text_color=color.white, text_size=size.small)
+    table.cell(dashT, 1, 19, guardTxt, text_color=guardOk ? color.lime : color.red, text_size=size.small, text_halign=text.align_right)
 
 // ════════════════════════════════════════════════════════════════════════════
 // SIGNAL MARKERS

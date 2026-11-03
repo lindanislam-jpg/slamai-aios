@@ -30,3 +30,23 @@
 - Beast: score 85, Force Volume Scoring OFF = on, session 09:30-16:00 New York = on, BE after TP1 = on (neutral in test, kept for live protection).
 - ICT: HTF bias 60, Setup Mode Balanced, session on, stop cap 3 ATR, BE off, re-arm on.
 - Caveat: 3 months of 15m data, ~5 Beast trades and ~19 ICT trades. Treat as a first pass, not proof. Forward-test on a demo account before risking money.
+
+## Robustness check (final defaults + daily guards: max 3 signals/day, stop after 2 losses/day)
+### Beast
+| Market / TF | PnL | Max DD | Profitable | PF |
+|---|---|---|---|---|
+| NAS100 15m (Aug-Nov 2026) | +1.69% | 1.76% | 9/15 | 1.99 |
+| NAS100 30m | +1.90% | 2.32% | 14/33 | 1.45 |
+| NAS100 1h (Jan-Nov 2026) | +1.07% | 1.00% | 5/12 | 1.75 |
+| US30 15m | +2.04% | 0.65% | 5/5 | n/a (no losers) |
+| XAUUSD 15m | +0.23% | 1.63% | 4/10 | 1.16 |
+### ICT
+| Market / TF | PnL | Max DD | Profitable | PF |
+|---|---|---|---|---|
+| NAS100 15m (Aug-Nov 2026) | +3.28% | 3.57% | 27/58 | 1.40 |
+| NAS100 30m | +9.32% | 3.50% | 59/119 | 1.59 |
+| NAS100 1h (HTF 60 = same TF, bias degenerate) | -1.22% | 3.20% | 18/58 | 0.84 |
+| US30 15m | -0.03% | 4.59% | 31/73 | 1.00 |
+| XAUUSD 15m | +0.42% | 12.96% | 23/63 | 1.03 |
+
+Conclusion: ICT is a NAS100 tool (15m or 30m). Beast is weaker but consistent across markets. Do not run ICT on gold or US30 with these settings.
