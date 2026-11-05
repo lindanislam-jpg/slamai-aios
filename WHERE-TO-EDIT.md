@@ -43,6 +43,8 @@ A map of this codebase: "I want to change X → go to this file."
 | Stripe checkout / portal behaviour | `src/app/api/stripe/checkout/route.ts`, `portal/route.ts` |
 | What happens when someone pays | `src/app/api/stripe/webhook/route.ts` |
 | Port the app runs on | `package.json` → `dev` / `start` scripts (3005) |
+| Which free TV playlists are offered | `src/lib/tv/sources.ts` → `CATALOG` (see `docs/SLAMAI-TV.md`) |
+| How live TV looks / plays | `src/app/tv/tv.css`, `src/components/tv/Player.tsx` |
 
 ---
 

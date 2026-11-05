@@ -1,0 +1,20 @@
+{
+  "name": "SlamAI TV",
+  "short_name": "SlamAI TV",
+  "description": "Live channels from around the world, plus any playlist you already pay for.",
+  "start_url": "/tv",
+  "scope": "/tv",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07080c",
+  "theme_color": "#07080c",
+  "categories": ["entertainment", "news", "video"],
+  "icons": [
+    { "src": "/tv-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/tv-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Favourites", "url": "/tv/favorites" },
+    { "name": "Add channels", "url": "/tv/sources" }
+  ]
+}
