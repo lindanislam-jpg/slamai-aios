@@ -24,6 +24,10 @@ function Card({ channel, onPlay }: { channel: Channel; onPlay: () => void }) {
   const { isFavorite, toggleFavorite, state } = useTv();
   const fav = isFavorite(channel.id);
   const dead = Boolean(state.dead[channel.id]);
+  /* Plenty of logo URLs in public playlists are dead. Falling back to initials
+     keeps the grid looking deliberate instead of showing empty grey boxes. */
+  const [logoFailed, setLogoFailed] = useState(false);
+  const showLogo = Boolean(channel.logo) && !logoFailed;
 
   return (
     <div className="tv-card">
@@ -42,16 +46,9 @@ function Card({ channel, onPlay }: { channel: Channel; onPlay: () => void }) {
 
       <button onClick={onPlay} className="tv-card-body" aria-label={`Watch ${channel.name}`}>
         <span className="tv-thumb">
-          {channel.logo ? (
+          {showLogo ? (
             // eslint-disable-next-line @next/next/no-img-element -- logos come from arbitrary broadcaster hosts
-            <img
-              src={channel.logo}
-              alt=""
-              loading="lazy"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-              }}
-            />
+            <img src={channel.logo} alt="" loading="lazy" onError={() => setLogoFailed(true)} />
           ) : (
             <span className="tv-thumb-fallback">{initials(channel.name)}</span>
           )}

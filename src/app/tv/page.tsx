@@ -29,12 +29,29 @@ export default function BrowsePage() {
   const [dimension, setDimension] = useState<Dimension>("group");
   const [value, setValue] = useState<string | null>(null);
 
-  const facets = useMemo(() => countBy(channels, dimension).slice(0, 40), [channels, dimension]);
+  /* Only offer a dimension the loaded playlists actually carry. Public
+     playlists have genres and (via tvg-id) countries but no language data,
+     while a provider's own playlist often has all three — so this is decided
+     from the data rather than assumed. */
+  const available = useMemo(
+    () => DIMENSIONS.filter((d) => channels.some((c) => c[d.id])),
+    [channels],
+  );
+
+  const activeDimension = useMemo(
+    () => (available.some((d) => d.id === dimension) ? dimension : (available[0]?.id ?? "group")),
+    [available, dimension],
+  );
+
+  const facets = useMemo(
+    () => countBy(channels, activeDimension).slice(0, 40),
+    [channels, activeDimension],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return channels.filter((c) => {
-      if (value && c[dimension] !== value) return false;
+      if (value && c[activeDimension] !== value) return false;
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -42,7 +59,7 @@ export default function BrowsePage() {
         (c.country?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [channels, query, dimension, value]);
+  }, [channels, query, activeDimension, value]);
 
   const recents = useMemo(() => {
     const found = state.recents
@@ -121,21 +138,23 @@ export default function BrowsePage() {
       {/* ---- filters ---- */}
       {channels.length ? (
         <section style={{ display: "grid", gap: 10 }}>
-          <div className="tv-chips">
-            {DIMENSIONS.map((d) => (
-              <button
-                key={d.id}
-                className="tv-chip"
-                data-active={dimension === d.id}
-                onClick={() => {
-                  setDimension(d.id);
-                  setValue(null);
-                }}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
+          {available.length > 1 ? (
+            <div className="tv-chips">
+              {available.map((d) => (
+                <button
+                  key={d.id}
+                  className="tv-chip"
+                  data-active={activeDimension === d.id}
+                  onClick={() => {
+                    setDimension(d.id);
+                    setValue(null);
+                  }}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <div className="tv-chips">
             <button className="tv-chip" data-active={value === null} onClick={() => setValue(null)}>
@@ -148,7 +167,7 @@ export default function BrowsePage() {
                 data-active={value === facet}
                 onClick={() => setValue(value === facet ? null : facet)}
               >
-                {dimension === "country" ? `${flag(facet)} ${facet.toUpperCase()}` : pretty(facet)} ({count})
+                {activeDimension === "country" ? `${flag(facet)} ${facet.toUpperCase()}` : pretty(facet)} ({count})
               </button>
             ))}
           </div>
@@ -160,7 +179,7 @@ export default function BrowsePage() {
         {query || value ? (
           <div className="tv-kicker" style={{ marginBottom: 10 }}>
             {filtered.length.toLocaleString()} {filtered.length === 1 ? "channel" : "channels"}
-            {value ? ` · ${dimension === "country" ? value.toUpperCase() : pretty(value)}` : ""}
+            {value ? ` · ${activeDimension === "country" ? value.toUpperCase() : pretty(value)}` : ""}
           </div>
         ) : null}
 

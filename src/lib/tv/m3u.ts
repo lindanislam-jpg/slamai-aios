@@ -38,6 +38,19 @@ function language(raw?: string): string | undefined {
 }
 
 /**
+ * Recover a country code from a tvg-id.
+ *
+ * Large public playlists have stopped emitting `tvg-country`, but they encode
+ * the country in the id instead: `5USA.uk@SD`, `AajTak.in@HD`, `00sReplay.us`.
+ * Without this the country filter and the flags are empty on real data.
+ */
+function countryFromTvgId(tvgId?: string): string | undefined {
+  if (!tvgId) return undefined;
+  const m = /\.([A-Za-z]{2})(?:@|$)/.exec(tvgId);
+  return m ? m[1].toLowerCase() : undefined;
+}
+
+/**
  * Parse an extended M3U playlist into channels.
  *
  * @param text      raw playlist body
@@ -62,13 +75,19 @@ export function parseM3U(text: string, sourceId: string, limit = 20_000): Channe
       /* Display name is everything after the last comma on the EXTINF line. */
       const comma = line.lastIndexOf(",");
       const name = (comma >= 0 ? line.slice(comma + 1) : "").trim();
+      const tvgId = a["tvg-id"] || undefined;
       pending = {
         name: name || a["tvg-name"] || "Unnamed channel",
         logo: a["tvg-logo"] || undefined,
         group: a["group-title"] || pendingGroup,
-        country: country(a["tvg-country"]),
+        /* Explicit attribute first, then the country encoded in the id. */
+        country: country(a["tvg-country"]) ?? countryFromTvgId(tvgId),
         language: language(a["tvg-language"]),
-        tvgId: a["tvg-id"] || undefined,
+        tvgId,
+        /* Playback headers appear either as EXTINF attributes (below) or as
+           #EXTVLCOPT lines (handled further down). Playlists use both. */
+        userAgent: a["http-user-agent"] || undefined,
+        referer: a["http-referrer"] || a["http-referer"] || undefined,
       };
       continue;
     }

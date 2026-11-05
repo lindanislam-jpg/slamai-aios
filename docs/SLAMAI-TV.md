@@ -94,6 +94,20 @@ rewrites the URLs inside it to point back at the app, and passes the video
 segments straight through. Settings has a switch to turn it off per device —
 some streams are faster direct.
 
+**Where the filters come from.** Filter chips are built from whatever the
+loaded playlists actually contain, so no filter is ever offered with nothing
+behind it. Worth knowing about the free catalog specifically:
+
+- **Genre** — present on 100% of channels.
+- **Country** — the playlists no longer publish `tvg-country`, so it is derived
+  from the channel id instead (`5USA.uk@SD` → `uk`). That covers 100% of the
+  world index. If this ever stops working, country chips and flags disappear
+  silently — `countryFromTvgId` in `src/lib/tv/m3u.ts` is the place to look.
+- **Language** — genuinely absent from this data, so the Language filter hides
+  itself. Use the per-language playlists under Sources instead. A paid
+  provider's own playlist often does carry language, and the filter reappears
+  by itself when it does.
+
 **Nothing is stored server-side.** Sources, favourites and history live in
 `localStorage` on each device. The app has no account and keeps no record of
 what anyone watched. Phone and laptop therefore keep separate favourites.
