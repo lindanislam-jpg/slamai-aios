@@ -136,7 +136,7 @@ maxTradesDay = input.int(3, "Max Setups Per Day", minval=0, group="Daily Guard",
 maxLossesDay = input.int(2, "Stop After N Losing Trades In A Day", minval=0, group="Daily Guard", tooltip="0 = no limit. Once this many trades closed at a loss today, no new setup prints until tomorrow.")
 var int tradesToday = 0
 var int lossesToday = 0
-anchorTrade = input.bool(true, "Anchor Trade Box To The Signal Bar", group="Execution", tooltip="ON = the shaded entry/stop/target block starts on the candle that fired the signal and only grows to the right as the trade runs, so every signal can be traced back to its bar. OFF = the block floats beside the current price like the TradingView position tool, which detaches it from the signal.")
+tradeDraw   = input.string("Locked at the signal bar", "Trade Box Behaviour", options=["Locked at the signal bar", "Grow to the current bar", "Float beside price"], group="Execution", tooltip="Locked = the block, the level lines and the price tags are drawn once on the candle that fired the signal and are NEVER moved again, so a signal can always be traced back to its bar. Grow = the left edge stays on the signal bar and the right edge follows the current candle, so the block spans entry to exit. Float = the old position-tool behaviour, the whole block travels beside the current price.")
 sigBigTri   = input.bool(false, "Bigger LONG / SHORT Triangles", group="Execution", tooltip="The triangles print at normal size by default. Turn this on if they still get lost under the FVG and supply/demand boxes.")
 showBuySell = input.bool(true, "Show BUY / SELL Confirmation Signals", group="Buy / Sell Signals", tooltip="Prints a BUY or SELL tag on the exact bar where the confirmation chain turns CONFIRMED (structure + displacement + HTF bias + no sweep against). This is separate from the locked trade: the LONG / SHORT triangles keep printing on their own, unchanged.")
 bsScore     = input.bool(true, "Include Score On The Tag", group="Buy / Sell Signals")
@@ -1063,17 +1063,17 @@ if longSetup or shortSetup
              color=isL ? color.new(color.lime, 10) : color.new(color.red, 10),
              textcolor=color.black, size=size.small)
 
-// ── Keep the most recent locked trade pinned to the right edge of the chart
-//    (it never moves in price — it only follows the latest bar in time) until
-//    the next setup replaces it.
-// ── ACTIVE trade: the shaded block floats at the CURRENT price (position-
-//    tool style), the thin lines connect it back to the signal bar, and the
-//    tags sit at the right edge. PRICES never change — only screen position
-//    in time. On close everything freezes where it is and fades.
-if showTrade and tradeActive
+// ── How the live trade drawing behaves after it is created.
+//    "Locked at the signal bar" (default) touches NOTHING after creation: the
+//    block, the level lines and the price tags all stay on the candle that
+//    fired the signal, so every signal is traceable and nothing drifts with
+//    the candles. The other two modes move the drawing in TIME only; prices
+//    were always locked and still are.
+if showTrade and tradeActive and tradeDraw != "Locked at the signal bar"
+    tdFloat = tradeDraw == "Float beside price"
     if array.size(tradeBoxes) > 0
         for i = 0 to array.size(tradeBoxes) - 1
-            if not anchorTrade
+            if tdFloat
                 box.set_left(array.get(tradeBoxes, i), bar_index + 1)
             box.set_right(array.get(tradeBoxes, i), bar_index + 18)
     if array.size(tradeLines) > 0
