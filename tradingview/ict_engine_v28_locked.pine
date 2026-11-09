@@ -136,14 +136,15 @@ maxTradesDay = input.int(3, "Max Setups Per Day", minval=0, group="Daily Guard",
 maxLossesDay = input.int(2, "Stop After N Losing Trades In A Day", minval=0, group="Daily Guard", tooltip="0 = no limit. Once this many trades closed at a loss today, no new setup prints until tomorrow.")
 var int tradesToday = 0
 var int lossesToday = 0
-tradeDraw   = input.string("Locked at the signal bar", "Trade Box Behaviour", options=["Locked at the signal bar", "Grow to the current bar", "Float beside price"], group="Execution", tooltip="Locked = the block, the level lines and the price tags are drawn once on the candle that fired the signal and are NEVER moved again, so a signal can always be traced back to its bar. Grow = the left edge stays on the signal bar and the right edge follows the current candle, so the block spans entry to exit. Float = the old position-tool behaviour, the whole block travels beside the current price.")
+rearmOn   = input.bool(true, "Re-arm After Cooldown", group="Execution", tooltip="ON = once a trade has closed and the cooldown has passed, a setup may print immediately if the confirmation chain is still complete. OFF = the chain must drop out and re-confirm first (the old behaviour, which could skip valid setups after a close).")
+// ── v3.2 additions (appended last so saved input positions never shift)
+tradeDraw   = input.string("Locked · candles pass through", "Trade Box Behaviour", options=["Locked · candles pass through", "Locked · fixed width", "Float beside price"], group="Execution", tooltip="Locked · candles pass through = the block is pinned to the candle that fired the signal and its right edge tracks the live candle, so price runs THROUGH it and it freezes spanning entry to exit. Locked · fixed width = pinned to the signal bar and never touched again. Float beside price = the old behaviour, the whole block travels beside the current candle and detaches from its signal.")
 sigBigTri   = input.bool(false, "Bigger LONG / SHORT Triangles", group="Execution", tooltip="The triangles print at normal size by default. Turn this on if they still get lost under the FVG and supply/demand boxes.")
 showBuySell = input.bool(true, "Show BUY / SELL Confirmation Signals", group="Buy / Sell Signals", tooltip="Prints a BUY or SELL tag on the exact bar where the confirmation chain turns CONFIRMED (structure + displacement + HTF bias + no sweep against). This is separate from the locked trade: the LONG / SHORT triangles keep printing on their own, unchanged.")
 bsScore     = input.bool(true, "Include Score On The Tag", group="Buy / Sell Signals")
 bsSize      = input.string("Normal", "Tag Size", options=["Small", "Normal", "Large"], group="Buy / Sell Signals")
 bsOffset    = input.float(0.0, "Tag Distance From Confirmation Close (ATR x)", minval=0.0, step=0.1, group="Buy / Sell Signals", tooltip="0 = pinned exactly to the close of the bar that confirmed. Raise it only if the tag covers the candle.")
 bsSessionOnly = input.bool(false, "Only Inside The Session", group="Buy / Sell Signals", tooltip="OFF = every confirmation is tagged, including overnight ones, which are marked 'outside session' because the engine cannot open a trade then. ON = hide them.")
-rearmOn   = input.bool(true, "Re-arm After Cooldown", group="Execution", tooltip="ON = once a trade has closed and the cooldown has passed, a setup may print immediately if the confirmation chain is still complete. OFF = the chain must drop out and re-confirm first (the old behaviour, which could skip valid setups after a close).")
 
 // ════════════════════════════════════════════════════════════════════════════
 // CORE INDICATORS (TradePulse Pro 2)
@@ -1069,19 +1070,20 @@ if longSetup or shortSetup
 //    fired the signal, so every signal is traceable and nothing drifts with
 //    the candles. The other two modes move the drawing in TIME only; prices
 //    were always locked and still are.
-if showTrade and tradeActive and tradeDraw != "Locked at the signal bar"
+if showTrade and tradeActive and tradeDraw != "Locked · fixed width"
     tdFloat = tradeDraw == "Float beside price"
+    tdRight = tdFloat ? bar_index + 18 : bar_index + 1
     if array.size(tradeBoxes) > 0
         for i = 0 to array.size(tradeBoxes) - 1
             if tdFloat
                 box.set_left(array.get(tradeBoxes, i), bar_index + 1)
-            box.set_right(array.get(tradeBoxes, i), bar_index + 18)
+            box.set_right(array.get(tradeBoxes, i), tdRight)
     if array.size(tradeLines) > 0
         for i = 0 to array.size(tradeLines) - 1
-            line.set_x2(array.get(tradeLines, i), bar_index + 18)
+            line.set_x2(array.get(tradeLines, i), tdRight)
     if array.size(tradeLabels) > 0
         for i = 0 to array.size(tradeLabels) - 1
-            label.set_x(array.get(tradeLabels, i), bar_index + 18)
+            label.set_x(array.get(tradeLabels, i), tdRight + 2)
 
 // ── LOCKED: on close everything fades grey at the original prices — never
 //    deleted, never moved, never recalculated (outcome stamp marks result).
