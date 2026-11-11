@@ -62,7 +62,7 @@ obLookback = input.int(10, "OB Search Lookback", minval=3, maxval=30, group="Ord
 maxOB      = input.int(2,  "Max Active OBs per side", minval=1, maxval=10, group="Order Blocks")
 
 // ── Supply & Demand (rule-based zone model — NOT proof of institutional orders)
-sdOn       = input.bool(true, "Supply & Demand Zones", group="Supply & Demand")
+sdOn       = input.bool(false, "Supply & Demand Zones", group="Supply & Demand")
 sdModel    = input.string("Body + Wick", "Zone Boundary Model", options=["Body", "Wick", "Body + Wick"], group="Supply & Demand")
 sdMaxZones = input.int(3, "Max Active Zones per side", minval=1, maxval=10, group="Supply & Demand")
 sdTouchPct = input.float(25, "Meaningful Touch (% into zone)", minval=5, maxval=100, group="Supply & Demand")
@@ -101,7 +101,7 @@ dashOn = input.bool(true, "ICT Dashboard (top right)", group="Dashboard")
 sdLabels = input.bool(false, "Show Zone Labels (FRESH / TESTED ×n)", group="Supply & Demand", tooltip="Off by default so zone text never sits inside a trade box. Zone boxes still draw; the S/D ZONE row in the dashboard reports the zone.")
 
 // ── Market Scanner (appended last so saved input positions never shift)
-scanOn = input.bool(true, "Show Market Scanner", group="Market Scanner", tooltip="Checks each market on this chart's timeframe for the core confirmation chain: structure break, 9/21 EMA direction, recent displacement, and higher-timeframe bias. READY means all four agree — open that chart for the full engine's confirmed signal.")
+scanOn = input.bool(false, "Show Market Scanner", group="Market Scanner", tooltip="Checks each market on this chart's timeframe for the core confirmation chain: structure break, 9/21 EMA direction, recent displacement, and higher-timeframe bias. READY means all four agree — open that chart for the full engine's confirmed signal.")
 scan1  = input.symbol("CAPITALCOM:NAS100",  "Market 1", group="Market Scanner")
 scan2  = input.symbol("OANDA:SPX500USD",    "Market 2", group="Market Scanner")
 scan3  = input.symbol("CAPITALCOM:US30",    "Market 3", group="Market Scanner")
@@ -110,9 +110,9 @@ scan5  = input.symbol("OANDA:UK100GBP",     "Market 5", group="Market Scanner")
 scan6  = input.symbol("OANDA:XAUUSD",       "Market 6", group="Market Scanner")
 
 // ── Auto Trendlines (appended last so saved input positions never shift)
-tlOn    = input.bool(true, "Auto Trendlines", group="Trendlines", tooltip="Uptrend line through the last two higher swing lows, downtrend line through the last two lower swing highs. Built from confirmed pivots only.")
+tlOn    = input.bool(false, "Auto Trendlines", group="Trendlines", tooltip="Uptrend line through the last two higher swing lows, downtrend line through the last two lower swing highs. Built from confirmed pivots only.")
 tlLen   = input.int(10, "Trendline Swing Length", minval=3, maxval=50, group="Trendlines", tooltip="Bigger = fewer, more important swings. It also delays each line by this many bars, because a swing is only confirmed once that many bars close after it.")
-tlBreak = input.bool(true, "Mark Trendline Breaks", group="Trendlines")
+tlBreak = input.bool(false, "Mark Trendline Breaks", group="Trendlines")
 
 // ── v3.1 additions (appended last so saved input positions never shift)
 dashPosIn = input.string("Middle Left", "ICT Dashboard Position", options=["Top Right", "Top Left", "Middle Right", "Middle Left", "Bottom Right", "Bottom Left"], group="Dashboard", tooltip="Default Middle Left so it never sits under the Beast Signal Engine panel (top right) or the scanner (bottom left).")
@@ -145,6 +145,8 @@ bsScore     = input.bool(true, "Include Score On The Tag", group="Buy / Sell Sig
 bsSize      = input.string("Normal", "Tag Size", options=["Small", "Normal", "Large"], group="Buy / Sell Signals")
 bsOffset    = input.float(0.0, "Tag Distance From Confirmation Close (ATR x)", minval=0.0, step=0.1, group="Buy / Sell Signals", tooltip="0 = pinned exactly to the close of the bar that confirmed. Raise it only if the tag covers the candle.")
 bsSessionOnly = input.bool(false, "Only Inside The Session", group="Buy / Sell Signals", tooltip="OFF = every confirmation is tagged, including overnight ones, which are marked 'outside session' because the engine cannot open a trade then. ON = hide them.")
+bsMinScore  = input.int(60, "Minimum Score To Print A Tag", minval=0, maxval=100, group="Buy / Sell Signals", tooltip="A confirmation on its own is only four conditions (structure, displacement, HTF bias, no sweep against). This is the quality floor the score must also clear before a BUY / SELL tag prints. Default 60 matches the Balanced Setup Mode threshold, so every LONG / SHORT triangle gets a tag. Raise it to 80 to use the tag as a separate high-conviction marker (backtested 2026-11-11: Strict/80 performed WORSE than Balanced/60 on NAS100, gold and US30).")
+bsStrict    = input.bool(true, "Only Tag Tradable Confirmations", group="Buy / Sell Signals", tooltip="ON = the tag also requires what the locked setup requires: market structure pointing the same way, price on the right side of the dealing range, and no falling-knife extreme. OFF = tag every confirmation that clears the score floor.")
 
 // ════════════════════════════════════════════════════════════════════════════
 // CORE INDICATORS (TradePulse Pro 2)
@@ -1246,26 +1248,34 @@ plotshape(shortSetup and sigBigTri,     "ICT SHORT Signal (big)", shape.triangle
 //    on locked trades exactly as before. This layer marks the separate, earlier
 //    moment when the confirmation chain first turns CONFIRMED, pinned to the
 //    close of that exact bar so it never moves afterwards.
-//    A confirmation is not automatically a trade: the locked setup still needs
-//    the score, the structure direction, the day guard and the session. Tags
-//    that confirm outside the session say so on the label.
-bsBuy  = confirmL and not confirmL[1] and barstate.isconfirmed
-bsSell = confirmS and not confirmS[1] and barstate.isconfirmed
+//    A confirmation is not automatically a trade. confirmL / confirmS are only
+//    four conditions; the locked setup needs six more. So the tag is gated here
+//    on the score floor (bsMinScore) and, with bsStrict on, on the same
+//    structure / dealing-range / falling-knife filters the setup uses. Session
+//    and day guard do not hide a tag -- they annotate it, so a confirmation you
+//    must not trade is still visible but clearly marked.
+bsRawBuy   = confirmL and not confirmL[1] and barstate.isconfirmed
+bsRawSell  = confirmS and not confirmS[1] and barstate.isconfirmed
+bsQualBuy  = bullScore >= bsMinScore and (not bsStrict or (structDir ==  1 and isLong     and not knifeDown))
+bsQualSell = bearScore >= bsMinScore and (not bsStrict or (structDir == -1 and not isLong and not knifeUp))
+bsBuy  = bsRawBuy  and bsQualBuy
+bsSell = bsRawSell and bsQualSell
 bsShow = showBuySell and (not bsSessionOnly or inSession)
 if bsShow and (bsBuy or bsSell)
     bsIsBuy = bsBuy
     bsScoreTxt = bsScore ? "  " + str.tostring(bsIsBuy ? bullScore : bearScore) + "/100" : ""
     bsSessTxt  = inSession ? "" : "  · outside session"
-    bsTxt = (bsIsBuy ? "▲ BUY " : "▼ SELL ") + f(close) + bsScoreTxt + bsSessTxt
+    bsGuardTxt = guardOk ? "" : "  · day guard"
+    bsTxt = (bsIsBuy ? "▲ BUY " : "▼ SELL ") + f(close) + bsScoreTxt + bsSessTxt + bsGuardTxt
     label.new(bar_index, close + (bsIsBuy ? -atr * bsOffset : atr * bsOffset), bsTxt,
          style     = bsIsBuy ? label.style_label_up : label.style_label_down,
-         color     = inSession ? (bsIsBuy ? color.new(#00C853, 0) : color.new(#D50000, 0))
-                               : (bsIsBuy ? color.new(#00C853, 55) : color.new(#D50000, 55)),
+         color     = (inSession and guardOk) ? (bsIsBuy ? color.new(#00C853, 0) : color.new(#D50000, 0))
+                                             : (bsIsBuy ? color.new(#00C853, 55) : color.new(#D50000, 55)),
          textcolor = color.white,
          size      = bsSize == "Large" ? size.large : bsSize == "Normal" ? size.normal : size.small)
 
-alertcondition(confirmL and not confirmL[1], "BUY Confirmed",  "TradePulse ICT: BUY confirmed")
-alertcondition(confirmS and not confirmS[1], "SELL Confirmed", "TradePulse ICT: SELL confirmed")
+alertcondition(bsBuy,  "BUY Confirmed",  "TradePulse ICT: BUY confirmed")
+alertcondition(bsSell, "SELL Confirmed", "TradePulse ICT: SELL confirmed")
 
 // ════════════════════════════════════════════════════════════════════════════
 // ALERTS

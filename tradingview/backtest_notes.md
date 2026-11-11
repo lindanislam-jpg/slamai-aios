@@ -101,3 +101,35 @@ Input "Market Preset": Auto (default) / NAS100 / Gold / Custom. Auto applies the
 | HTF 120, stop 2 | -0.79% | 3.89% | 20/46 | 0.90 |
 
 Chosen US30 preset: HTF 240, stop cap 2 (1.5 to 2.5 is the plateau; 4 breaks it). About 8 full trades in the window, so treat as provisional. Beast on US30 stays at its NAS100 settings (+2.04%, 5/5).
+
+## Strict vs Balanced — Strategy Tester, run 2026-11-11
+
+Setup: `ict_strategy_v28.pine`, 15m, Aug 2 2026 – Nov 11 2026, 100k capital,
+20x leverage (margin 5%), slippage 9 ticks, commission 0, orders on bar close.
+Only `Setup Mode` was changed between runs; every other input left at default.
+
+| Market | Mode     | Net PnL  | Profit factor | Trades | Win %  | Max DD |
+|--------|----------|----------|---------------|--------|--------|--------|
+| NAS100 | Balanced | **+0.68%** | 1.084       | 60     | 41.7%  | 4.24%  |
+| NAS100 | Strict   | −0.57%   | 0.927         | 10     | 30.0%  | 2.22%  |
+| Gold   | Balanced | −1.76%   | 0.727         | 33     | 33.3%  | 5.54%  |
+| Gold   | Strict   | −2.35%   | 0.291         | 14     | 14.3%  | 3.31%  |
+| US30   | Balanced | **+1.95%** | **1.643**   | 23     | 56.5%  | 1.51%  |
+| US30   | Strict   | +0.68%   | 1.352         | 11     | 45.5%  | 1.61%  |
+
+**Balanced beat Strict on all three markets.** Raising the score floor from 60 to
+80 cut trade count 2-6x and lowered profit factor every time: it removed winners
+at roughly the same rate as losers. Strict's only consistent gain was a smaller
+drawdown on NAS100.
+
+Caveats, stated plainly:
+* Sample sizes are tiny (10-60 trades). A PF of 1.084 over 60 trades is noise,
+  not an edge. US30's 23 trades at PF 1.64 is the only result that even looks
+  like a signal, and it is still too small to size a live account on.
+* One ~3-month window, one regime. Not walk-forward tested.
+* NAS100 buy-and-hold over the same window was +1,245.75 vs the strategy's
+  +677.45. The strategy underperformed simply holding the index.
+* Gold here is the ICE feed; the earlier +12% / PF 2.5 gold note used a
+  different window and feed and does NOT reproduce here. Treat it as stale.
+* Commission is 0 in these runs. Real Capital.com spread will make all six
+  numbers worse.
