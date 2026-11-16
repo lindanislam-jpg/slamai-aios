@@ -161,3 +161,12 @@ At 09:00, 12:00 and 18:00 Irish time the system reviews itself and the quality r
 | Re-inspection planning | Moving an NCR to "awaiting verification" creates a draft re-inspection of the failed checks | An inspector carries it out and records the result |
 | Alert escalation | A Critical or High alert not acknowledged after 3 days (configurable) is escalated to the Quality Manager and administrators | They acknowledge or assign the alert |
 | Weekly summary | Monday's 09:00 review also writes a summary of the last 7 days against the 7 before | Readers of the System Monitor; emailed too when review emails are on |
+
+## Incoming Inspections
+
+**Incoming Inspections** in the sidebar is the goods-in page. In one step, choose the job number, say what was delivered, add the supplier and delivery note if you have them, pick a result, and take or choose pictures. Then press **Save incoming inspection**.
+
+- With a result of Pass, Fail or Hold, the record is submitted for the Quality Manager's review straight away. "Not decided yet" saves it as a draft to finish later.
+- A Fail raises its NCR automatically (when that automation is on).
+- The pictures are stored under the job as "Incoming materials" evidence and linked to the inspection.
+- The list below the form shows every incoming inspection, newest first, and can be filtered by job number.

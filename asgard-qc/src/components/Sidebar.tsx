@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import {
-  Activity, BadgeCheck, BarChart3, Boxes, Camera, ClipboardCheck, FileText, Flame, FolderKanban, Gauge, Layers, Paintbrush,
+  Activity, BadgeCheck, BarChart3, Boxes, Camera, ClipboardCheck, FileText, Flame, FolderKanban, Gauge, Layers, PackageCheck, Paintbrush,
   Hammer, HeartPulse, Radar, Ruler, Settings, ShieldCheck, Siren, TriangleAlert, Users, Wrench, Menu, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,6 +17,7 @@ export const NAV = [
   { href: "/fabrication", label: "Fabrication QC", icon: Ruler },
   { href: "/welding", label: "Welding QC", icon: Flame },
   { href: "/frames", label: "Frame & Module Tracking", icon: Layers },
+  { href: "/incoming", label: "Incoming Inspections", icon: PackageCheck },
   { href: "/materials", label: "Material Traceability", icon: Boxes },
   { href: "/inspections", label: "Inspection Register", icon: ClipboardCheck },
   { href: "/ndt", label: "NDT & Test Records", icon: Radar },
