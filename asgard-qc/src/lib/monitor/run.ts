@@ -1,4 +1,5 @@
 import { Prisma, type SystemCheckRun } from "@prisma/client";
+import { weeklyDigest } from "../automation";
 import { db } from "../db";
 import { emailStatus, sendMail } from "../email";
 import { recordEvent } from "../audit";
@@ -195,6 +196,8 @@ async function finishRun(run: SystemCheckRun, results: CheckResult[], ctx: Check
   });
   const notifications = await notify(finished, summary, changes, cfg).catch((e) => [{ channel: "in-app", outcome: `failed: ${redact(String(e))}` }]);
   await db.systemCheckRun.update({ where: { id: run.id }, data: { notifications: notifications as unknown as Prisma.InputJsonValue } });
+  // Monday 09:00 also produces the weekly summary; a failure there never fails the review.
+  await weeklyDigest(now, run.kind === "SCHEDULED" && run.slotDate && run.slotTime ? { date: run.slotDate, time: run.slotTime } : null).catch((e) => console.error("weekly digest failed", redact(String(e))));
   await applyRetention(cfg.retentionDays, now).catch(() => undefined);
   return { ...finished, notifications: notifications as unknown as Prisma.JsonValue };
 }
@@ -350,6 +353,20 @@ export async function updateMonitorSettings(actor: Actor, raw: Record<string, un
   };
   const { updateSetting } = await import("../services/settings");
   return updateSetting(actor, "systemMonitor", next);
+}
+
+export async function updateAutomationSettings(actor: Actor, raw: Record<string, unknown>) {
+  assertCan(actor, "settings.manage");
+  const cfg = await getSetting("automation");
+  const on = (k: string) => raw[k] === "on" || raw[k] === true;
+  const { updateSetting } = await import("../services/settings");
+  return updateSetting(actor, "automation", {
+    autoNcrOnFailedInspection: on("autoNcrOnFailedInspection"),
+    autoPlanReinspection: on("autoPlanReinspection"),
+    weeklyDigest: on("weeklyDigest"),
+    reinspectionDueDays: Number(raw.reinspectionDueDays ?? cfg.reinspectionDueDays),
+    escalateUnacknowledgedDays: Number(raw.escalateUnacknowledgedDays ?? cfg.escalateUnacknowledgedDays),
+  });
 }
 
 /** Safety net on page load: at most every 10 minutes, run a due slot the host

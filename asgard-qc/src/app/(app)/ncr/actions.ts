@@ -22,8 +22,8 @@ export async function updateNcrAction(id: string, _p: ActionState, fd: FormData)
 export async function moveNcrAction(id: string, _p: ActionState, fd: FormData) {
   return run(async (actor) => {
     const to = String(fd.get("to")) as NcrStatus;
-    await moveNcr(actor, id, to, (fd.get("note") as string) || null);
-    return `Moved to ${to.replace(/_/g, " ").toLowerCase()}.`;
+    const r = await moveNcr(actor, id, to, (fd.get("note") as string) || null);
+    return `Moved to ${to.replace(/_/g, " ").toLowerCase()}.${r.reinspection ? ` Re-inspection ${r.reinspection.code} was planned automatically.` : ""}`;
   }, [`/ncr/${id}`, "/ncr"]);
 }
 

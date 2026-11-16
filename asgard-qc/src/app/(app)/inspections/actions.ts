@@ -51,7 +51,7 @@ export async function saveChecklistAction(id: string, _p: ActionState, fd: FormD
 export async function submitInspectionAction(id: string): Promise<ActionState> {
   return run(async (actor) => {
     const r = await submitInspection(actor, id);
-    return `${r.code} submitted for review.`;
+    return `${r.code} submitted for review.${r.autoNcr ? ` ${r.autoNcr.code} was raised automatically for the Quality Manager.` : ""}`;
   }, [`/inspections/${id}`, "/inspections"]);
 }
 

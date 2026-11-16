@@ -1,5 +1,6 @@
 import { InspectionResult, InspectionType, RecordStatus, type Prisma } from "@prisma/client";
 import { z } from "zod";
+import { autoNcrForFailedInspection } from "../automation";
 import { db } from "../db";
 import { diff, recordEvent } from "../audit";
 import { ForbiddenError, ValidationError } from "../errors";
@@ -137,7 +138,7 @@ export function submissionProblems(insp: { result: InspectionResult; inspectedAt
   return problems;
 }
 
-export async function submitInspection(actor: Actor, id: string) {
+export async function submitInspection(actor: Actor, id: string, opts: { automation?: boolean } = {}) {
   return transaction(async (tx) => {
     const insp = found(await tx.inspection.findUnique({ where: { id }, include: { items: true } }), "Inspection");
     assertCanWrite(actor, insp.type);
@@ -146,7 +147,9 @@ export async function submitInspection(actor: Actor, id: string) {
     if (problems.length) throw new ValidationError(problems.join(" "));
     const row = await tx.inspection.update({ where: { id }, data: { status: "SUBMITTED" } });
     await recordEvent(tx, actor, "inspection.submit", "Inspection", id, { summary: `${insp.code} submitted — ${insp.result}` });
-    return row;
+    // Historical imports pass automation: false — their NCRs come from the paper register.
+    const autoNcr = opts.automation === false ? null : await autoNcrForFailedInspection(tx, actor, insp);
+    return { ...row, autoNcr: autoNcr ? { id: autoNcr.id, code: autoNcr.code } : null };
   });
 }
 

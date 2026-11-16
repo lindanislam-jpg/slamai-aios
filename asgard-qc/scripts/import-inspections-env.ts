@@ -76,7 +76,7 @@ async function main() {
         });
         tally.created++;
         if (submissionProblems(insp).length === 0) {
-          await submitInspection(actor, insp.id);
+          await submitInspection(actor, insp.id, { automation: false });
           tally.submitted++;
         } else tally.draft++;
       } catch (e) {

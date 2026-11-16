@@ -1,3 +1,4 @@
+import { escalateUnacknowledgedAlerts } from "../automation";
 import { db } from "../db";
 import type { Actor, Permission } from "../permissions";
 import { permissionsFor } from "../permissions";
@@ -33,11 +34,15 @@ export const NOTIFICATION_KINDS: Record<string, { label: string; audience: Permi
   REWORK_AWAITING_INSPECTION: { label: "Rework awaiting inspection", audience: "inspection.review" },
   SYSTEM_REVIEW: { label: "Scheduled system & quality review reports", audience: "system.view" },
   SYSTEM_ESCALATION: { label: "Critical escalations from the scheduled review", audience: "system.view" },
+  AUTO_NCR_RAISED: { label: "NCRs raised automatically from failed inspections", audience: "ncr.manage" },
+  AUTO_REINSPECTION: { label: "Re-inspections planned automatically", audience: "inspection.write" },
+  ALERT_ESCALATION: { label: "Unacknowledged Critical / High alerts", audience: "ncr.close" },
+  WEEKLY_DIGEST: { label: "Weekly quality summary", audience: "system.view" },
 };
 
 /** Notifications written by the scheduled review, not by rule conditions; the
  *  condition scan must not resolve them. */
-export const REPORT_NOTIFICATION_KINDS = ["SYSTEM_REVIEW", "SYSTEM_ESCALATION"];
+export const REPORT_NOTIFICATION_KINDS = ["SYSTEM_REVIEW", "SYSTEM_ESCALATION", "AUTO_NCR_RAISED", "AUTO_REINSPECTION", "ALERT_ESCALATION", "WEEKLY_DIGEST"];
 
 
 const DAY = 86_400_000;
@@ -134,8 +139,9 @@ export async function runNotificationScan(now = new Date()) {
   const stale = await db.notification.findMany({ where: { resolvedAt: null, kind: { notIn: REPORT_NOTIFICATION_KINDS } }, select: { id: true, dedupeKey: true } });
   const toResolve = stale.filter((n) => !liveKeys.has(n.dedupeKey)).map((n) => n.id);
   if (toResolve.length) await db.notification.updateMany({ where: { id: { in: toResolve } }, data: { resolvedAt: now } });
+  const escalated = await escalateUnacknowledgedAlerts(now);
   await db.setting.upsert({ where: { key: "lastNotificationScan" }, create: { key: "lastNotificationScan", value: now.toISOString() }, update: { value: now.toISOString() } });
-  return { conditions: conditions.length, created, resolved: toResolve.length, alerts, conditionList: conditions };
+  return { conditions: conditions.length, created, resolved: toResolve.length, alerts, escalated, conditionList: conditions };
 }
 
 /** Run a scan if the last one is older than `minutes`. Cheap to call on page load. */

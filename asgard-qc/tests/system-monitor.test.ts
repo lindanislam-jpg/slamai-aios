@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { CHECKS, redact, type CheckDef } from "@/lib/monitor/checks";
 import { retryRun, runManual, runReview, tickSchedule } from "@/lib/monitor/run";
-import { dublinToUtc, nextSlot, planTick, slotKey } from "@/lib/monitor/schedule";
+import { dublinToUtc, nextSlot, planTick, slotKey, slotsAround } from "@/lib/monitor/schedule";
 import { raiseNcr } from "@/lib/services/ncrs";
 import { createProject } from "@/lib/services/projects";
 import { updateSetting } from "@/lib/services/settings";
@@ -76,7 +76,9 @@ describe("scheduled review runs", () => {
 
   it("runs every check against the database, stores a report and never duplicates a slot", async () => {
     await makeActor("ADMIN");
-    const now = new Date();
+    // Ten minutes after the most recent slot, whatever time of day the tests run.
+    const last = slotsAround(new Date()).filter((s) => s.at.getTime() <= Date.now() - 600_000).sort((x, y) => y.at.getTime() - x.at.getTime())[0];
+    const now = new Date(last.at.getTime() + 600_000);
     const first = await tickSchedule(now);
     expect(first.action).toBe("ran");
     const run = await db.systemCheckRun.findUniqueOrThrow({ where: { id: first.runId! } });

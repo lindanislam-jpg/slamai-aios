@@ -1,5 +1,6 @@
 import { ActionStatus, ActionType, EffectivenessStatus, ImpactLevel, InspectionResult, NcrSeverity, NcrStatus, Priority, type Prisma } from "@prisma/client";
 import { z } from "zod";
+import { autoReinspectionForNcr } from "../automation";
 import { db } from "../db";
 import { diff, recordEvent } from "../audit";
 import { ValidationError } from "../errors";
@@ -126,7 +127,8 @@ export async function moveNcr(actor: Actor, id: string, to: NcrStatus, note?: st
     }
     const row = await tx.ncr.update({ where: { id }, data: { status: to, ...(n.status === "CLOSED" ? { closedAt: null, closedById: null, closedByName: null } : {}) } });
     await recordEvent(tx, actor, "ncr.status", "Ncr", id, { summary: `${n.code}: ${n.status} → ${to}${note ? ` (${note})` : ""}`, before: { status: n.status }, after: { status: to } });
-    return row;
+    const reinspection = to === "AWAITING_VERIFICATION" ? await autoReinspectionForNcr(tx, actor, row) : null;
+    return { ...row, reinspection: reinspection ? { id: reinspection.id, code: reinspection.code } : null };
   });
 }
 

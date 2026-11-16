@@ -2,7 +2,7 @@
 
 import { run, type ActionState } from "@/lib/action";
 import { formToObject } from "@/lib/validation";
-import { retryRun, runManual, updateMonitorSettings } from "@/lib/monitor/run";
+import { retryRun, runManual, updateAutomationSettings, updateMonitorSettings } from "@/lib/monitor/run";
 
 export async function runNowAction() {
   return run(async (actor) => {
@@ -22,5 +22,12 @@ export async function saveMonitorSettingsAction(_p: ActionState, fd: FormData) {
   return run(async (actor) => {
     await updateMonitorSettings(actor, formToObject(fd));
     return "Scheduled-check settings saved.";
+  }, ["/system", "/"]);
+}
+
+export async function saveAutomationSettingsAction(_p: ActionState, fd: FormData) {
+  return run(async (actor) => {
+    await updateAutomationSettings(actor, formToObject(fd));
+    return "Automation settings saved.";
   }, ["/system", "/"]);
 }

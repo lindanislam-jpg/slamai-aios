@@ -7,17 +7,19 @@ import { db } from "@/lib/db";
 import { emailStatus } from "@/lib/email";
 import { monitorStatus } from "@/lib/monitor/run";
 import { fmtDublin, TIME_ZONE } from "@/lib/monitor/schedule";
-import { retryRunAction, runNowAction, saveMonitorSettingsAction } from "./actions";
+import { getSetting } from "@/lib/settings";
+import { retryRunAction, runNowAction, saveAutomationSettingsAction, saveMonitorSettingsAction } from "./actions";
 
 export const metadata = { title: "System Monitor" };
 
 export default async function SystemMonitor() {
   const actor = await requirePagePermission("system.view");
   const admin = actor.permissions.has("settings.manage");
-  const [st, runs, users] = await Promise.all([
+  const [st, runs, users, auto] = await Promise.all([
     monitorStatus(),
     db.systemCheckRun.findMany({ orderBy: { startedAt: "desc" }, take: 60 }),
     admin ? db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } }) : Promise.resolve([]),
+    getSetting("automation"),
   ]);
   const trend = runs.filter((r) => r.status === "COMPLETED" || r.status === "PARTIAL").slice(0, 14);
   const c = st.cfg;
@@ -62,10 +64,34 @@ export default async function SystemMonitor() {
                 {users.map((u) => <label key={u.id} className="flex items-center gap-2"><input type="checkbox" name="recipientUserIds" value={u.id} defaultChecked={c.recipientUserIds.includes(u.id)} /> {u.name} <span className="text-xs text-ink-300">{u.role.replace(/_/g, " ").toLowerCase()}</span></label>)}
               </div>
             </fieldset>
-            <p className="mt-3 text-xs text-ink-300">Email: no provider is configured, so reports are delivered in-app only and nothing is sent outside the application. Alert thresholds are set in <Link className="link" href="/settings?tab=alerts">Settings → Alert rules</Link>.</p>
+            <p className="mt-3 text-xs text-ink-300">Email goes out only when Microsoft 365 is configured and &quot;Also email reports&quot; is ticked; otherwise reports stay in the app. Alert thresholds are set in <Link className="link" href="/settings?tab=alerts">Settings → Alert rules</Link>.</p>
           </ActionForm>
         </Card>
       )}
+
+      <Card title={<span id="automation">Quality automation</span>}>
+        <p className="mb-3 text-sm text-ink-300">Each automation prepares work for a person or reminds them. None accepts, rejects, closes or releases anything, and every automatic step is in the audit trail (Activity → actions starting &quot;automation&quot;).</p>
+        {admin ? (
+          <ActionForm action={saveAutomationSettingsAction} submit="Save automation settings">
+            <div className="grid gap-3 text-sm lg:grid-cols-2">
+              <label className="flex items-start gap-2"><input type="checkbox" name="autoNcrOnFailedInspection" defaultChecked={auto.autoNcrOnFailedInspection} className="mt-1" /><span><span className="font-medium text-ink-100">Raise the NCR when an inspection fails</span><span className="block text-xs text-ink-300">On submission, a linked NCR is opened with the failed checks filled in. The Quality Manager classifies, investigates or cancels it.</span></span></label>
+              <label className="flex items-start gap-2"><input type="checkbox" name="autoPlanReinspection" defaultChecked={auto.autoPlanReinspection} className="mt-1" /><span><span className="font-medium text-ink-100">Plan the re-inspection when an NCR is ready to verify</span><span className="block text-xs text-ink-300">A draft re-inspection of the failed checks is created for an inspector to carry out.</span></span></label>
+              <label className="flex items-start gap-2"><input type="checkbox" name="weeklyDigest" defaultChecked={auto.weeklyDigest} className="mt-1" /><span><span className="font-medium text-ink-100">Weekly quality summary</span><span className="block text-xs text-ink-300">Written with Monday&apos;s 09:00 review for everyone who can see this page; emailed too when review emails are on.</span></span></label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs text-ink-300">Re-inspection planned in (days)<input name="reinspectionDueDays" type="number" min={0} max={60} defaultValue={auto.reinspectionDueDays} className="input mt-1" /></label>
+                <label className="text-xs text-ink-300">Escalate unacknowledged Critical / High alerts after (days, 0 = off)<input name="escalateUnacknowledgedDays" type="number" min={0} max={60} defaultValue={auto.escalateUnacknowledgedDays} className="input mt-1" /></label>
+              </div>
+            </div>
+          </ActionForm>
+        ) : (
+          <ul className="space-y-1 text-sm text-ink-200">
+            <li>{auto.autoNcrOnFailedInspection ? "On" : "Off"} — NCR raised when an inspection fails</li>
+            <li>{auto.autoPlanReinspection ? "On" : "Off"} — re-inspection planned when an NCR is ready to verify</li>
+            <li>{auto.escalateUnacknowledgedDays ? `On — urgent alerts escalate after ${auto.escalateUnacknowledgedDays} days` : "Off — alert escalation"}</li>
+            <li>{auto.weeklyDigest ? "On" : "Off"} — weekly quality summary</li>
+          </ul>
+        )}
+      </Card>
 
       {trend.length > 1 && (
         <Card title="Trend — last completed reviews" pad={false}>

@@ -60,6 +60,20 @@ export interface SystemMonitorSettings {
   emailReports: boolean;
 }
 
+/** Quality automation switches (see lib/automation.ts). Each step only prepares work for a person. */
+export interface AutomationSettings {
+  /** Raise a linked NCR when an inspection is submitted with the result Fail. */
+  autoNcrOnFailedInspection: boolean;
+  /** Plan the re-inspection when an NCR reaches "awaiting verification". */
+  autoPlanReinspection: boolean;
+  /** Planned date of that re-inspection, in days from now. */
+  reinspectionDueDays: number;
+  /** Escalate Critical / High alerts nobody acknowledged after this many days (0 = off). */
+  escalateUnacknowledgedDays: number;
+  /** Weekly quality summary with Monday's 09:00 review. */
+  weeklyDigest: boolean;
+}
+
 export interface Vocabulary {
   photoCategories: string[];
   productionStages: string[];
@@ -106,6 +120,13 @@ export const SETTING_DEFAULTS = {
     escalateCritical: true,
     emailReports: false,
   } satisfies SystemMonitorSettings as SystemMonitorSettings,
+  automation: {
+    autoNcrOnFailedInspection: true,
+    autoPlanReinspection: true,
+    reinspectionDueDays: 2,
+    escalateUnacknowledgedDays: 3,
+    weeklyDigest: true,
+  } satisfies AutomationSettings as AutomationSettings,
   vocabulary: {
     photoCategories: [...DEFAULT_PHOTO_CATEGORIES],
     productionStages: [...DEFAULT_PRODUCTION_STAGES],

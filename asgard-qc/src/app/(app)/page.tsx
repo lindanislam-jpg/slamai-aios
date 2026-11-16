@@ -1,4 +1,4 @@
-import { Camera, ClipboardPlus, FileDown, Search, TriangleAlert, ChevronRight } from "lucide-react";
+import { Bot, Camera, CheckCircle2, ChevronRight, ClipboardPlus, FileDown, Search, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Bars, Donut, TrendChart } from "@/components/charts";
 import { FilterSelect } from "@/components/fields";
@@ -9,7 +9,8 @@ import { computeKpis, KPI_DEFINITIONS, type DataScope } from "@/lib/kpi";
 import { projectOptions } from "@/lib/options";
 import { enumParam, PERIODS, periodRange, str, type SP } from "@/lib/params";
 import { materialFlags } from "@/lib/services/materials";
-import { listProjects } from "@/lib/services/projects";
+import { attentionQueue, projectHealth, type AttentionLevel, type Rag } from "@/lib/attention";
+import { AUTOMATION_ACTIONS, automationActivity } from "@/lib/automation";
 import { qmsStatus } from "@/lib/integrations/qms";
 import { alertCounts } from "@/lib/services/alerts";
 import { cmrCounts } from "@/lib/services/cmrs";
@@ -30,6 +31,26 @@ function delta(cur: number | null, prev: number | null, kind: "pct" | "count", g
   );
 }
 
+const LEVEL_BAR: Record<AttentionLevel, string> = { CRITICAL: "bg-bad-500", HIGH: "bg-bad-400", MEDIUM: "bg-warn-400", LOW: "bg-ink-400", INFO: "bg-ink-500" };
+const RAG_TONE: Record<Rag, "bad" | "warn" | "ok"> = { RED: "bad", AMBER: "warn", GREEN: "ok" };
+
+type KpiRow = [label: string, value: number | string, title?: string, tone?: "warn" | "bad"];
+
+function KpiGroup({ title, href, rows }: { title: string; href: string; rows: KpiRow[] }) {
+  return (
+    <Card title={title} actions={<Link href={href} className="link text-xs">Open</Link>}>
+      <dl className="space-y-2">
+        {rows.map(([label, value, tip, tone]) => (
+          <div key={label} title={tip} className="flex items-baseline justify-between gap-3 border-b border-ink-600/50 pb-1.5 last:border-0 last:pb-0">
+            <dt className="text-sm text-ink-300">{label}</dt>
+            <dd className={`text-base font-semibold tabular-nums ${tone === "bad" ? "text-bad-400" : tone === "warn" ? "text-warn-400" : "text-ink-100"}`}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
+  );
+}
+
 export default async function Overview({ searchParams }: { searchParams: Promise<SP> }) {
   const actor = await requirePagePermission("records.view");
   const sp = await searchParams;
@@ -37,35 +58,26 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   const projectId = str(sp, "projectId");
   const data = enumParam<DataScope>(sp, "data", ["all", "real", "demo"]) ?? "all";
   const span = range.to.getTime() - range.from.getTime();
-  const [k, prev, projects, materials, activeAll, demoProjects, cmr, alerts, monitor] = await Promise.all([
+  const [k, prev, projects, materials, health, demoProjects, cmr, alerts, monitor, attention, automation] = await Promise.all([
     computeKpis({ from: range.from, to: range.to, projectId, data }),
     computeKpis({ from: new Date(range.from.getTime() - span), to: range.from, projectId, data }),
     projectOptions(),
     db.material.findMany({ where: projectId ? { projectId } : {}, orderBy: { updatedAt: "desc" }, take: 5 }),
-    listProjects(actor, { status: "ACTIVE" }),
+    projectHealth(data),
     db.project.count({ where: { isDemo: true } }),
     cmrCounts(),
     alertCounts(),
     monitorStatus(),
+    attentionQueue(actor, projectId),
+    automationActivity(7),
   ]);
   // Only mention demo data while some exists (it is removed once a company goes live).
   const hasDemo = demoProjects > 0;
-  const active = activeAll.filter((p) => data === "all" || p.isDemo === (data === "demo"));
+  const rag = { RED: health.filter((p) => p.rag === "RED").length, AMBER: health.filter((p) => p.rag === "AMBER").length, GREEN: health.filter((p) => p.rag === "GREEN").length };
+  const urgentAlerts = alerts.bySeverity.CRITICAL + alerts.bySeverity.HIGH;
   const qms = qmsStatus();
   const q = new URLSearchParams(Object.entries(sp).filter(([, v]) => typeof v === "string") as [string, string][]).toString();
   const d = (key: string) => KPI_DEFINITIONS[key].definition;
-
-  const risks: { label: string; area: string; level: "HIGH" | "MEDIUM" | "LOW"; href: string }[] = [];
-  const topDefect = k.weldDefects.byCategory[0];
-  if (topDefect && topDefect.count >= 2) risks.push({ label: `Recurring weld defects (${topDefect.key.toLowerCase()}, ${topDefect.count})`, area: "Welding", level: topDefect.count >= 3 ? "HIGH" : "MEDIUM", href: "/welding?tab=analytics" });
-  if (k.ncrs.overdue) risks.push({ label: `${k.ncrs.overdue} NCR(s) past target date`, area: "All", level: "HIGH", href: "/ncr?overdue=1" });
-  if (k.materials.exceptions) risks.push({ label: `${k.materials.exceptions} material traceability exception(s)`, area: "Materials", level: k.materials.quarantined ? "HIGH" : "MEDIUM", href: "/materials?gaps=1" });
-  const aged = k.ncrAgeing.slice(3).reduce((s, b) => s + b.count, 0);
-  if (aged) risks.push({ label: `NCR ageing > 30 days (${aged})`, area: "All", level: "MEDIUM", href: "/ncr?status=OPEN_ALL" });
-  if (k.actions.overdue) risks.push({ label: `${k.actions.overdue} overdue corrective action(s)`, area: "CAPA", level: "MEDIUM", href: "/ncr?status=OPEN_ALL" });
-  if (k.inspections.overdue) risks.push({ label: `Inspection backlog (${k.inspections.overdue} overdue)`, area: "Production", level: "MEDIUM", href: "/inspections?overdue=1" });
-  if (k.ndt.outstanding) risks.push({ label: `${k.ndt.outstanding} NDT report(s) outstanding`, area: "Welding", level: "LOW", href: "/ndt?outstanding=1" });
-  if (k.evidence.missing) risks.push({ label: `${k.evidence.missing} required evidence item(s) missing`, area: "Evidence", level: "LOW", href: "/photos" });
 
   return (
     <div className="space-y-5">
@@ -89,55 +101,119 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Total inspections" value={k.inspections.total} sub={delta(k.inspections.total, prev.inspections.total, "count", true)} href="/inspections" title={d("totalInspections")} />
-        <Stat label="Inspections completed" value={k.inspections.completed} sub={`${k.inspections.pending} pending`} href="/inspections" title={d("completedInspections")} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+        <Stat label="Needs attention" value={attention.total} tone={attention.urgent ? "bad" : attention.total ? "warn" : "ok"} sub={attention.total ? `${attention.urgent} urgent · ${attention.forYou} for you` : "Nothing waiting"} href="#attention" title="Open alerts of Medium severity or above, plus records waiting for a review, a verification or a planned inspection." />
         <Stat label="Inspection pass rate" value={pct(k.inspections.passRate)} tone="ok" sub={delta(k.inspections.passRate, prev.inspections.passRate, "pct", true)} title={`${d("passRate")} Basis: ${k.inspections.passRateBasis.numerator}/${k.inspections.passRateBasis.denominator}.`} />
         <Stat label="First-pass yield" value={pct(k.inspections.firstPassYield)} tone="ok" sub={delta(k.inspections.firstPassYield, prev.inspections.firstPassYield, "pct", true)} title={`${d("firstPassYield")} Basis: ${k.inspections.fpyBasis.numerator}/${k.inspections.fpyBasis.denominator}.`} />
-        <Stat label="Open NCRs" value={k.ncrs.open} tone={k.ncrs.open ? "warn" : undefined} sub="current" href="/ncr?status=OPEN_ALL" title={d("openNcrs")} />
-        <Stat label="Overdue NCRs" value={k.ncrs.overdue} tone={k.ncrs.overdue ? "bad" : undefined} sub="current" href="/ncr?overdue=1" title={d("overdueNcrs")} />
-        <Stat label="Open corrective actions" value={k.actions.open} sub={`${k.actions.overdue} overdue`} href="/ncr?status=OPEN_ALL" title={d("openActions")} />
-        <Stat label="Rework volume" value={k.rework.volume} sub={k.rework.actualCost != null ? `Actual cost ${k.rework.actualCost.toLocaleString("en-GB")} (${k.rework.costedRecords} costed)` : "No actual cost recorded"} href="/rework" title={`${d("reworkVolume")} ${d("reworkCost")}`} />
-        <Stat label="Weld defects" value={k.weldDefects.total} sub="confirmed, in period" href="/welding?tab=analytics" title={d("weldDefects")} />
-        <Stat label="Material exceptions" value={k.materials.exceptions} tone={k.materials.exceptions ? "warn" : undefined} sub={`${k.materials.quarantined} quarantined`} href="/materials?gaps=1" title={d("materialExceptions")} />
-        <Stat label="Overdue inspections" value={k.inspections.overdue} tone={k.inspections.overdue ? "warn" : undefined} sub={`${k.ndt.outstanding} NDT reports outstanding`} href="/inspections?overdue=1" title={d("overdueInspections")} />
-        <Stat label="Audit actions outstanding" value={k.audit.outstanding} sub={`${k.evidence.missing} evidence gaps`} href="/audits" title={d("outstandingAudit")} />
-        <Stat label="Open CMRs" value={cmr.open} tone={cmr.overdueRequested ? "warn" : undefined} sub={`${cmr.overdueRequested} past requested date`} href="/cmr" title="Corrective maintenance requests not yet completed. Current, not period-filtered." />
-        <Stat label="Equipment unavailable" value={cmr.unavailable} tone={cmr.unavailable ? "warn" : undefined} sub={`${cmr.critical} critical / safety CMRs`} href="/cmr" title="Open CMRs reported with the equipment unavailable for production." />
-        <Stat label="Critical alerts" value={alerts.bySeverity.CRITICAL} tone={alerts.bySeverity.CRITICAL ? "bad" : undefined} sub="open" href="/alerts?severity=CRITICAL" title="Open Smart Quality Alerts with Critical severity." />
-        <Stat label="High alerts" value={alerts.bySeverity.HIGH} tone={alerts.bySeverity.HIGH ? "bad" : undefined} sub="open" href="/alerts?severity=HIGH" title="Open Smart Quality Alerts with High severity." />
-        <Stat label="Medium / low alerts" value={alerts.bySeverity.MEDIUM + alerts.bySeverity.LOW} sub={`${alerts.bySeverity.INFO} informational`} href="/alerts" title="Open Smart Quality Alerts with Medium or Low severity." />
-        <Stat label="Alerts open > 30 days" value={alerts.ageing["> 30 days"]} tone={alerts.ageing["> 30 days"] ? "warn" : undefined} sub={`${alerts.total} open in total`} href="/alerts" title="Ageing of open alerts since first raised." />
+        <Stat label="Open NCRs" value={k.ncrs.open} tone={k.ncrs.overdue ? "bad" : k.ncrs.open ? "warn" : undefined} sub={`${k.ncrs.overdue} overdue`} href="/ncr?status=OPEN_ALL" title={d("openNcrs")} />
+        <Stat label="Projects at risk" value={`${rag.RED} / ${health.length}`} tone={rag.RED ? "bad" : rag.AMBER ? "warn" : "ok"} sub={`${rag.AMBER} amber · ${rag.GREEN} green`} href="#projects" title="Active projects marked red by the fixed rules shown in the project health table." />
+      </div>
+
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[1.7fr_1fr] [&>*]:min-w-0">
+        <Card title={<span id="attention">Needs attention now ({attention.total})</span>} actions={<Link href="/alerts" className="btn-secondary btn-sm">All alerts</Link>} pad={false}>
+          {attention.items.length ? (
+            <ul className="divide-y divide-ink-600/70">
+              {attention.items.slice(0, 10).map((i) => (
+                <li key={i.key}>
+                  <Link href={i.href} className="flex items-center gap-2 px-4 py-2.5 hover:bg-ink-700/50 sm:gap-3">
+                    <span className={`h-9 w-1 shrink-0 rounded-full ${LEVEL_BAR[i.level]}`} aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink-100">{i.title}</span>
+                      <span className="block truncate text-xs text-ink-300">{i.detail} · {i.owner}</span>
+                    </span>
+                    {i.forYou && <Badge tone="gold" label="For you" />}
+                    <Badge value={i.level} />
+                    <span className="hidden w-12 shrink-0 text-right text-xs tabular-nums text-ink-300 sm:block" title="Days waiting">{i.ageDays} d</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex items-center gap-3 p-5 text-sm text-ink-200"><CheckCircle2 className="h-5 w-5 text-ok-400" />Nothing is waiting: no open alerts of Medium severity or above, and no record awaiting review or verification.</div>
+          )}
+          {attention.items.length > 10 && <p className="px-4 py-2 text-xs text-ink-300">Showing the 10 most urgent of {attention.total}. <Link className="link" href="/alerts">See all alerts</Link> · <Link className="link" href="/inspections?status=SUBMITTED">inspections awaiting review</Link></p>}
+        </Card>
+
+        <div className="space-y-4">
+          <Card title={<span className="flex items-center gap-2"><Bot className="h-4 w-4 text-gold-300" />Automation · last {automation.days} days</span>} actions={actor.permissions.has("system.view") ? <Link href="/system#automation" className="link text-xs">Settings</Link> : undefined}>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {Object.entries(AUTOMATION_ACTIONS).map(([key, label]) => (
+                <div key={key} className="flex items-baseline justify-between gap-2 border-b border-ink-600/50 pb-1.5">
+                  <dt className="text-xs text-ink-300">{label}</dt>
+                  <dd className="font-semibold tabular-nums text-ink-100">{automation.counts[key]}</dd>
+                </div>
+              ))}
+            </dl>
+            <ul className="mt-3 space-y-1 text-xs text-ink-300">
+              <li>{automation.cfg.autoNcrOnFailedInspection ? "On" : "Off"} · a failed inspection raises its NCR</li>
+              <li>{automation.cfg.autoPlanReinspection ? "On" : "Off"} · re-inspection planned when an NCR is ready to verify</li>
+              <li>{automation.cfg.escalateUnacknowledgedDays ? `On · urgent alerts escalate after ${automation.cfg.escalateUnacknowledgedDays} days unacknowledged` : "Off · alert escalation"}</li>
+              <li>{automation.cfg.weeklyDigest ? "On" : "Off"} · weekly summary every Monday 09:00</li>
+            </ul>
+            <p className="mt-3 text-[11px] text-ink-400">Automation prepares work and reminds people. It never accepts, closes or releases anything.</p>
+          </Card>
+          <Card title="Quick actions" pad={false}>
+            <ul className="divide-y divide-ink-600/70">
+              {[
+                { href: "/ncr/new", icon: TriangleAlert, t: "Create NCR", s: "Log a new non-conformance report" },
+                { href: "/inspections/new", icon: ClipboardPlus, t: "Record inspection", s: "Add inspection result and evidence" },
+                { href: "/photos?upload=1", icon: Camera, t: "Upload factory photos", s: "Add photographic evidence to a project" },
+                { href: "/materials", icon: Search, t: "Trace material", s: "Search by heat number or certificate" },
+                { href: "/analytics", icon: FileDown, t: "Generate report", s: "PDF quality report or Excel export" },
+              ].map(({ href, icon: Icon, t, s }) => (
+                <li key={href}>
+                  <Link href={href} className="flex items-center gap-3 px-4 py-3 hover:bg-ink-700/50">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ok-600/15 text-ok-400"><Icon className="h-4 w-4" /></span>
+                    <span className="flex-1">
+                      <span className="block text-sm font-medium text-ink-100">{t}</span>
+                      <span className="block text-xs text-ink-300">{s}</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-ink-400" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
       </div>
 
       <SystemHealthPanel compact canOpen={actor.permissions.has("system.view")} latest={monitor.latest} lastGood={monitor.lastGood} next={monitor.next} enabled={monitor.enabled} schedulerSilent={monitor.schedulerSilent} running={monitor.running} />
 
-      <Card title={`Active projects (${active.length})`} actions={<Link href="/projects" className="btn-secondary btn-sm">Project register</Link>} pad={false}>
-        {active.length === 0 ? (
+      <Card title={<span id="projects">Project health ({health.length} active)</span>} actions={<Link href="/projects" className="btn-secondary btn-sm">Project register</Link>} pad={false}>
+        {health.length === 0 ? (
           <div className="p-5"><Empty title="No active projects">Set a project&apos;s status to Active in the Project Register to track it here.</Empty></div>
         ) : (
           <div className="table-wrap border-0">
             <table className="tbl">
-              <thead><tr><th>Project</th><th>Client</th><th>Target</th><th className="text-right">Frames</th><th className="text-right">Inspections</th><th className="text-right">Photos</th><th className="text-right">Open NCRs</th></tr></thead>
+              <thead><tr><th>Status</th><th>Project</th><th>Client</th><th>Target</th><th>ITP progress</th><th className="text-right">Inspections</th><th className="text-right">Open NCRs</th><th>Why</th></tr></thead>
               <tbody>
-                {active.map((p) => (
+                {health.map((p) => (
                   <tr key={p.id}>
+                    <td><Badge tone={RAG_TONE[p.rag]} label={p.rag === "RED" ? "Red" : p.rag === "AMBER" ? "Amber" : "Green"} /></td>
                     <td><Link className="link font-medium" href={`/projects/${p.id}`}>{p.code}</Link> <span className="text-ink-200">{p.name}</span></td>
-                    <td>{p.customerRef ?? <span className="text-ink-400">—</span>}</td>
+                    <td>{p.client ?? <span className="text-ink-400">—</span>}</td>
                     <td className="whitespace-nowrap">{p.targetDate ? fmtDate(p.targetDate) : <span className="text-ink-400">—</span>}</td>
-                    <td className="text-right tabular-nums">{p._count.units}</td>
-                    <td className={`text-right tabular-nums ${p._count.inspections ? "" : "text-warn-400"}`} title={p._count.inspections ? undefined : "No inspections recorded yet"}>{p._count.inspections}</td>
-                    <td className="text-right tabular-nums">{p._count.photos}</td>
-                    <td className={`text-right tabular-nums ${p.ncrs.length ? "text-warn-400" : ""}`}>{p.ncrs.length}</td>
+                    <td>
+                      {p.itp.points ? (
+                        <div className="flex items-center gap-2" title={`${p.itp.done} of ${p.itp.points} control points signed or not applicable`}>
+                          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-ink-600"><div className="h-full rounded-full bg-ok-500" style={{ width: `${Math.round((p.itp.done / p.itp.points) * 100)}%` }} /></div>
+                          <span className="text-xs tabular-nums text-ink-300">{p.itp.done}/{p.itp.points}</span>
+                        </div>
+                      ) : <span className="text-xs text-warn-400">No ITP</span>}
+                    </td>
+                    <td className="text-right tabular-nums">{p.inspections}</td>
+                    <td className={`text-right tabular-nums ${p.overdueNcrs ? "text-bad-400" : p.openNcrs ? "text-warn-400" : ""}`}>{p.openNcrs}</td>
+                    <td className="text-xs text-ink-300">{p.reasons.join(" · ") || "No issues found by the rules"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+        <p className="px-4 py-2 text-[11px] text-ink-400">Red: an overdue NCR, a Critical alert, or the target date has passed. Amber: no ITP, no inspections, an open NCR, or a High alert. Fixed rules read from the records, not an assessment.</p>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr] [&>*]:min-w-0">
         <Card title="Quality performance trend (weekly)">
           <TrendChart data={k.trend} />
         </Card>
@@ -159,7 +235,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-3 [&>*]:min-w-0">
         <Card title="Recent inspections" actions={<Link href="/inspections" className="btn-secondary btn-sm">View all</Link>} pad={false}>
           {k.recentInspections.length ? (
             <div className="overflow-x-auto">
@@ -224,58 +300,47 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
         <Card title="NCR ageing (open NCRs)">
           <Bars data={k.ncrAgeing.map((b) => ({ key: b.label, count: b.count }))} colors={["#1fb894", "#1fb894", "#f0a531", "#f97316", "#e5484d"]} />
         </Card>
-        <Card title="Top quality risks" pad={false}>
-          {risks.length ? (
-            <table className="tbl">
-              <thead><tr><th>Risk</th><th>Area</th><th>Priority</th></tr></thead>
-              <tbody>
-                {risks.slice(0, 6).map((r) => (
-                  <tr key={r.label}>
-                    <td><Link href={r.href} className="hover:underline">{r.label}</Link></td>
-                    <td className="text-ink-300">{r.area}</td>
-                    <td><Badge value={r.level} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : <div className="p-4"><Empty title="No risks flagged from current records" /></div>}
-          <p className="px-4 py-2 text-[11px] text-ink-400">Derived from records by fixed rules (recurrence, overdue, gaps). Not a risk assessment.</p>
-        </Card>
-        <Card title="Quick actions" pad={false}>
-          <ul className="divide-y divide-ink-600/70">
-            {[
-              { href: "/ncr/new", icon: TriangleAlert, t: "Create NCR", s: "Log a new non-conformance report" },
-              { href: "/inspections/new", icon: ClipboardPlus, t: "Record inspection", s: "Add inspection result and evidence" },
-              { href: "/photos?upload=1", icon: Camera, t: "Upload factory photos", s: "Add photographic evidence to a project" },
-              { href: "/materials", icon: Search, t: "Trace material", s: "Search by heat number or certificate" },
-              { href: "/analytics", icon: FileDown, t: "Generate report", s: "PDF quality report or Excel export" },
-            ].map(({ href, icon: Icon, t, s }) => (
-              <li key={href}>
-                <Link href={href} className="flex items-center gap-3 px-4 py-3 hover:bg-ink-700/50">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ok-600/15 text-ok-400"><Icon className="h-4 w-4" /></span>
-                  <span className="flex-1">
-                    <span className="block text-sm font-medium text-ink-100">{t}</span>
-                    <span className="block text-xs text-ink-300">{s}</span>
-                  </span>
-                  <ChevronRight className="h-4 w-4 text-ink-400" />
-                </Link>
-              </li>
-            ))}
-          </ul>
+        <Card title="Alerts by severity" actions={<Link href="/alerts" className="link text-xs">Open alerts</Link>}>
+          <Bars data={[{ key: "Critical", count: alerts.bySeverity.CRITICAL }, { key: "High", count: alerts.bySeverity.HIGH }, { key: "Medium", count: alerts.bySeverity.MEDIUM }, { key: "Low", count: alerts.bySeverity.LOW }, { key: "Info", count: alerts.bySeverity.INFO }]} colors={["#e5484d", "#f97316", "#f0a531", "#1fb894", "#7d8fa3"]} />
+          <p className="mt-2 text-xs text-ink-300">{urgentAlerts} urgent · {alerts.ageing["> 30 days"]} open longer than 30 days</p>
         </Card>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Projects (active / total)" value={`${k.projects.active} / ${k.projects.total}`} sub={`${k.projects.awaitingRelease} awaiting release · ${k.projects.released} released`} href="/projects" />
-        <Stat label="Modules/frames released" value={`${k.release.releasedUnits} / ${k.release.units}`} href="/release" title={d("releasedUnits")} />
-        <Stat label="Outstanding NDT reports" value={k.ndt.outstanding} href="/ndt?outstanding=1" title={d("outstandingNdt")} />
-        <Stat label="Missing project evidence" value={k.evidence.missing} sub={k.evidence.byProject.slice(0, 2).map((p) => `${p.code}: ${p.missing.length}`).join(" · ") || "All required categories present"} title={d("missingEvidence")} />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KpiGroup title="Inspections" href="/inspections" rows={[
+          ["Total in period", k.inspections.total, d("totalInspections")],
+          ["Completed", k.inspections.completed, d("completedInspections")],
+          ["Pending", k.inspections.pending],
+          ["Overdue", k.inspections.overdue, d("overdueInspections"), k.inspections.overdue ? "warn" : undefined],
+          ["Evidence gaps", k.evidence.missing, d("missingEvidence"), k.evidence.missing ? "warn" : undefined],
+        ]} />
+        <KpiGroup title="NCR & corrective action" href="/ncr?status=OPEN_ALL" rows={[
+          ["Open NCRs", k.ncrs.open, d("openNcrs"), k.ncrs.open ? "warn" : undefined],
+          ["Overdue NCRs", k.ncrs.overdue, d("overdueNcrs"), k.ncrs.overdue ? "bad" : undefined],
+          ["Open corrective actions", k.actions.open, d("openActions")],
+          ["Overdue actions", k.actions.overdue, undefined, k.actions.overdue ? "bad" : undefined],
+          ["Audit actions outstanding", k.audit.outstanding, d("outstandingAudit")],
+        ]} />
+        <KpiGroup title="Welding, materials & NDT" href="/welding?tab=analytics" rows={[
+          ["Weld defects confirmed", k.weldDefects.total, d("weldDefects")],
+          ["Rework records", k.rework.volume, `${d("reworkVolume")} ${d("reworkCost")}`],
+          ["Material exceptions", k.materials.exceptions, d("materialExceptions"), k.materials.exceptions ? "warn" : undefined],
+          ["Quarantined materials", k.materials.quarantined, undefined, k.materials.quarantined ? "bad" : undefined],
+          ["NDT reports outstanding", k.ndt.outstanding, d("outstandingNdt"), k.ndt.outstanding ? "warn" : undefined],
+        ]} />
+        <KpiGroup title="Equipment & release" href="/cmr" rows={[
+          ["Open CMRs", cmr.open, "Corrective maintenance requests not yet completed."],
+          ["CMRs past requested date", cmr.overdueRequested, undefined, cmr.overdueRequested ? "warn" : undefined],
+          ["Equipment unavailable", cmr.unavailable, "Open CMRs reported with the equipment unavailable for production.", cmr.unavailable ? "bad" : undefined],
+          ["Frames released", `${k.release.releasedUnits} / ${k.release.units}`, d("releasedUnits")],
+          ["Projects awaiting release", k.projects.awaitingRelease],
+        ]} />
       </div>
-      <p className="text-[11px] text-ink-400">Hover a tile for its definition. Full KPI definitions: <Link className="link" href="/analytics?tab=definitions">Analytics → KPI definitions</Link>.</p>
+      <p className="text-[11px] text-ink-400">Hover a figure for its definition. Full KPI definitions: <Link className="link" href="/analytics?tab=definitions">Analytics → KPI definitions</Link>.</p>
     </div>
   );
 }

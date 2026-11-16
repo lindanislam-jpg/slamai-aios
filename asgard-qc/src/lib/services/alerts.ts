@@ -50,12 +50,18 @@ export async function syncAlerts(conditions: Condition[], rules: Record<string, 
     };
     const a = byKey.get(dedupeKey);
     if (!a) {
-      await transaction(async (tx) => {
+      // Two scans can run at once (two people opening the app): the unique
+      // dedupe key lets only one raise the alert; the other skips it.
+      const raised = await transaction(async (tx) => {
         const code = await nextCode(tx, "QA", 5);
         const row = await tx.qualityAlert.create({ data: { ...data, code, ruleKey: c.kind, dedupeKey, firstRaisedAt: now } });
         await recordEvent(tx, null, "alert.raise", "QualityAlert", row.id, { summary: `${code} ${data.severity} ${c.title}` });
+        return true;
+      }).catch((e) => {
+        if ((e as { code?: string })?.code === "P2002") return false;
+        throw e;
       });
-      tally.raised++;
+      if (raised) tally.raised++;
       continue;
     }
     // Closed by a person while the condition was still present: stays closed

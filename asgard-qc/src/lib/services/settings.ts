@@ -47,6 +47,13 @@ export const SETTING_SCHEMAS = {
     escalateCritical: z.boolean(),
     emailReports: z.boolean().default(false),
   }),
+  automation: z.object({
+    autoNcrOnFailedInspection: z.boolean(),
+    autoPlanReinspection: z.boolean(),
+    reinspectionDueDays: z.number().int().min(0).max(60),
+    escalateUnacknowledgedDays: z.number().int().min(0).max(60),
+    weeklyDigest: z.boolean(),
+  }),
   vocabulary: z.object({ photoCategories: lines.min(1), productionStages: lines.min(1) }),
   branding: z.object({ companyName: z.string().trim().min(1).max(120), departmentName: z.string().trim().min(1).max(120), reportFooter: z.string().trim().max(300) }),
   rolePermissions: z.record(z.enum(ROLES), permList).nullable(),

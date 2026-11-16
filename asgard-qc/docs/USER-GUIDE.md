@@ -144,3 +144,20 @@ At 09:00, 12:00 and 18:00 Irish time the system reviews itself and the quality r
 - The review only reads and checks. It never approves, closes, releases, deletes or changes quality records; it recommends actions with links.
 - Administrators: enable/disable, run a check now, retry failed or missed runs, set recipients, retention, time limits and catch-up window on the System Monitor page. Alert thresholds stay in Settings → Alert rules.
 - Notifications are in-app. Email is not configured, so nothing is emailed.
+
+## Dashboard and automation
+
+**Dashboard.** The top row shows five headline figures. Below it:
+
+- **Needs attention now** lists the most urgent items first: open alerts of Medium severity or above, inspections awaiting review, NCRs awaiting verification, and planned inspections that are due. "For you" marks items your role can act on. Each row opens the record.
+- **Project health** gives every active project a red, amber or green status by fixed rules, with the reasons shown. Red: an overdue NCR, a Critical alert, or the target date has passed. Amber: no ITP, no inspections, an open NCR, or a High alert.
+- The KPI groups at the bottom hold the remaining figures; hover one for its definition.
+
+**Automation.** Each step prepares work or reminds someone. None accepts, rejects, closes or releases anything. Administrators switch each one on or off in **System Monitor → Quality automation**, and every automatic step appears in the Activity Log under actions starting "automation".
+
+| Automation | What happens | Who then acts |
+|---|---|---|
+| NCR on failed inspection | Submitting an inspection with the result Fail opens a linked NCR listing the failed checks | Quality Manager classifies, investigates or cancels it |
+| Re-inspection planning | Moving an NCR to "awaiting verification" creates a draft re-inspection of the failed checks | An inspector carries it out and records the result |
+| Alert escalation | A Critical or High alert not acknowledged after 3 days (configurable) is escalated to the Quality Manager and administrators | They acknowledge or assign the alert |
+| Weekly summary | Monday's 09:00 review also writes a summary of the last 7 days against the 7 before | Readers of the System Monitor; emailed too when review emails are on |
