@@ -133,3 +133,63 @@ Caveats, stated plainly:
   different window and feed and does NOT reproduce here. Treat it as stale.
 * Commission is 0 in these runs. Real Capital.com spread will make all six
   numbers worse.
+
+## Independent replay outside TradingView — 2026-11-17
+
+Run with `autotrader/yf_replay.py` on free Yahoo 15m data (no broker account, no
+TradingView). Engine defaults: Balanced, NY session, thirds at TP1/TP2/TP3,
+stop never moved. ~2.5 months per market.
+
+### Breadth test, 8 markets
+
+| Market | Trades | Win% | Net R |
+|---|---|---|---|
+| Nasdaq futures NQ=F | 21 | 38% | +1.4 |
+| DAX ^GDAXI | 6 | 33% | +0.7 |
+| Dow futures YM=F | 13 | 23% | −3.3 |
+| S&P futures ES=F | 18 | 33% | −3.3 |
+| FTSE ^FTSE | 7 | 14% | −3.3 |
+| Gold futures GC=F | 14 | 14% | −6.4 |
+| Crude CL=F | 16 | 19% | −6.6 |
+| Russell RTY=F | 24 | 21% | −10.9 |
+| **total** | **119** | **25%** | **−31.7** |
+
+### Why it loses — it is arithmetic, not luck
+
+Thirds at TP1(1R)/TP2(2R)/TP3(3R) means a *perfect* winner banks only
+(1+2+3)/3 = **+2.0R**, while any loser costs **−1.0R**. Breakeven therefore needs
+a **33.3% win rate**. The engine delivers 25.2%. Predicted expectancy −0.244R per
+trade; measured −0.266R. The model performs exactly to its own specification.
+
+### Exit models re-scored on the SAME 119 trades (no re-tuning)
+
+| Exit model | Win% | Net R | R/trade |
+|---|---|---|---|
+| Thirds (current) | 25% | −31.8 | −0.267 |
+| Full position at TP1 only | 39% | −26.7 | −0.224 |
+| Full position at TP2 only | 25% | −32.0 | −0.269 |
+| Full position to TP3 only | 19% | −36.8 | −0.309 |
+| Half at TP1, half to TP3 | 20% | −31.7 | −0.267 |
+
+Every exit model loses. The problem is the entries, not the exits. Touch rates:
+TP1 39%, TP2 24%, TP3 16%.
+
+NOTE: a first version of that table showed "Half at TP1" at +4.3R. That was a
+bug — it charged only −0.5R to trades that stopped out before reaching TP1, which
+is 61% of them. Corrected above. Do not quote the +4.3R figure.
+
+### Direction test, and why "just invert it" is dead
+
+TP1 sits at +1R and the stop at −1R, so TP1-vs-stop is a symmetric bracket where
+a coin flip scores 50%.
+
+* In-sample (first 8 markets): signal directionally right **39.0%** of 118
+  resolved trades — worse than random, z ≈ −2.4.
+* Out-of-sample (8 fresh markets: BTC, ETH, silver, nat gas, 10y notes, euro FX,
+  copper): **48.5%** of 132 resolved trades. Indistinguishable from a coin flip.
+
+The "worse than random" result did NOT replicate. Combined 110/250 = 44%,
+z ≈ −1.9, not significant. **Conclusion: the entry signal has no demonstrated
+directional edge in either direction. It is a coin flip, and a coin flip on a
+±1R bracket loses exactly the trading costs.** Do not build an inverted strategy
+on the in-sample number.

@@ -147,6 +147,7 @@ bsOffset    = input.float(0.0, "Tag Distance From Confirmation Close (ATR x)", m
 bsSessionOnly = input.bool(false, "Only Inside The Session", group="Buy / Sell Signals", tooltip="OFF = every confirmation is tagged, including overnight ones, which are marked 'outside session' because the engine cannot open a trade then. ON = hide them.")
 bsMinScore  = input.int(60, "Minimum Score To Print A Tag", minval=0, maxval=100, group="Buy / Sell Signals", tooltip="A confirmation on its own is only four conditions (structure, displacement, HTF bias, no sweep against). This is the quality floor the score must also clear before a BUY / SELL tag prints. Default 60 matches the Balanced Setup Mode threshold, so every LONG / SHORT triangle gets a tag. Raise it to 80 to use the tag as a separate high-conviction marker (backtested 2026-11-11: Strict/80 performed WORSE than Balanced/60 on NAS100, gold and US30).")
 bsStrict    = input.bool(true, "Only Tag Tradable Confirmations", group="Buy / Sell Signals", tooltip="ON = the tag also requires what the locked setup requires: market structure pointing the same way, price on the right side of the dealing range, and no falling-knife extreme. OFF = tag every confirmation that clears the score floor.")
+tradeKeep   = input.bool(true, "Keep Levels Visible After The Trade Closes", group="Execution", tooltip="ON = when a trade ends, its box, its entry/stop/target rays and its ENTRY / SL / TP1 / TP2 / TP3 price tags stay on the chart, dimmed and shrunk, at their original locked prices, so you can trace every past trade. OFF = the old behaviour: the tags are deleted and the box fades almost to nothing, which is invisible on a pure black background.")
 
 // ════════════════════════════════════════════════════════════════════════════
 // CORE INDICATORS (TradePulse Pro 2)
@@ -968,20 +969,27 @@ var label        setupMark   = na
 // LOCKED-SIGNAL RULE: history is never deleted or moved. Closing a trade
 // fades its objects to grey AT THEIR ORIGINAL PRICES and releases tracking.
 f_clearTrade() =>
+    // tradeKeep ON: dim the closed trade but keep every level readable, so the
+    // win/loss history can be traced. OFF: the old near-invisible fade, which
+    // disappears completely on a pure black chart background.
     if array.size(tradeBoxes) > 0
         for i = 0 to array.size(tradeBoxes) - 1
-            box.set_bgcolor(array.get(tradeBoxes, i), color.new(color.gray, 92))
-            box.set_border_color(array.get(tradeBoxes, i), color.new(color.gray, 80))
+            box.set_bgcolor(array.get(tradeBoxes, i), color.new(color.gray, tradeKeep ? 80 : 92))
+            box.set_border_color(array.get(tradeBoxes, i), color.new(color.gray, tradeKeep ? 55 : 80))
         array.clear(tradeBoxes)
     if array.size(tradeLines) > 0
         for i = 0 to array.size(tradeLines) - 1
-            line.set_color(array.get(tradeLines, i), color.new(color.gray, 70))
+            line.set_color(array.get(tradeLines, i), color.new(color.gray, tradeKeep ? 45 : 70))
         array.clear(tradeLines)
-    // closed trades keep their grey box + result stamp; the price tags are
-    // removed so they never overlap the tags of the next live trade
     if array.size(tradeLabels) > 0
         for i = 0 to array.size(tradeLabels) - 1
-            label.delete(array.get(tradeLabels, i))
+            lb = array.get(tradeLabels, i)
+            if tradeKeep
+                label.set_color(lb, color.new(color.gray, 30))
+                label.set_textcolor(lb, color.new(color.white, 20))
+                label.set_size(lb, size.tiny)
+            else
+                label.delete(lb)
         array.clear(tradeLabels)
 
 if longSetup or shortSetup
