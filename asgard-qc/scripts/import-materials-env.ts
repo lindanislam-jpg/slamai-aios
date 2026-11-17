@@ -10,9 +10,8 @@
  *  "uploaded, unverified": nothing is accepted or verified by the import. The
  *  source file is kept in the location field. An entry already imported (same
  *  project, description, heat number and delivery reference) is skipped. */
-import { createHash } from "node:crypto";
-import { gunzipSync } from "node:zlib";
 import { db } from "../src/lib/db";
+import { readPayload } from "./payload";
 import { createMaterial } from "../src/lib/services/materials";
 import { actorFromUser } from "../src/lib/session";
 
@@ -24,12 +23,8 @@ interface Entry {
 const cut = (s: string | null | undefined, n: number) => (s ? String(s).trim().slice(0, n) || null : null);
 
 async function main() {
-  const gz = process.env.MATERIAL_IMPORT_GZ?.trim();
-  if (!gz) return console.log("MATERIAL_IMPORT_GZ not set — no materials imported.");
-  const raw = gunzipSync(Buffer.from(gz, "base64")).toString("utf8");
-  const sha = createHash("sha256").update(raw).digest("hex");
-  if (sha !== process.env.MATERIAL_IMPORT_SHA256?.trim()) throw new Error(`Material payload checksum mismatch (got ${sha}). Nothing imported.`);
-  const entries = JSON.parse(raw) as Entry[];
+  const entries = readPayload<Entry[]>("MATERIAL_IMPORT");
+  if (!entries) return console.log("MATERIAL_IMPORT_GZ not set — no materials imported.");
   const admin = await db.user.findFirst({ where: { role: "ADMIN", active: true }, orderBy: { createdAt: "asc" } });
   if (!admin) throw new Error("No active administrator found.");
   const actor = await actorFromUser(admin);

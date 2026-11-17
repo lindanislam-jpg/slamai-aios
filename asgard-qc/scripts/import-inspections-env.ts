@@ -11,9 +11,8 @@
  *  admin and is submitted for Quality Manager review when complete (never
  *  accepted). A record whose source is already imported for that project is skipped. */
 import type { InspectionResult, InspectionType } from "@prisma/client";
-import { createHash } from "node:crypto";
-import { gunzipSync } from "node:zlib";
 import { db } from "../src/lib/db";
+import { readPayload } from "./payload";
 import { createInspection, submissionProblems, submitInspection } from "../src/lib/services/inspections";
 import { actorFromUser } from "../src/lib/session";
 
@@ -27,12 +26,8 @@ interface Rec {
 const cut = (s: string | null | undefined, n: number) => (s ? s.slice(0, n) : null);
 
 async function main() {
-  const gz = process.env.INSPECTION_IMPORT_GZ?.trim();
-  if (!gz) return console.log("INSPECTION_IMPORT_GZ not set — no inspections imported.");
-  const raw = gunzipSync(Buffer.from(gz, "base64")).toString("utf8");
-  const sha = createHash("sha256").update(raw).digest("hex");
-  if (sha !== process.env.INSPECTION_IMPORT_SHA256?.trim()) throw new Error(`Inspection payload checksum mismatch (got ${sha}). Nothing imported.`);
-  const projects = JSON.parse(raw) as { project: string; records: Rec[] }[];
+  const projects = readPayload<{ project: string; records: Rec[] }[]>("INSPECTION_IMPORT");
+  if (!projects) return console.log("INSPECTION_IMPORT_GZ not set — no inspections imported.");
   const admin = await db.user.findFirst({ where: { role: "ADMIN", active: true }, orderBy: { createdAt: "asc" } });
   if (!admin) throw new Error("No active administrator found.");
   const actor = await actorFromUser(admin);

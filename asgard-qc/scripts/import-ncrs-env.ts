@@ -13,9 +13,8 @@
  *  Runs as the first admin. An entry already applied (same paper number, or an
  *  NCR already linked to that inspection) is skipped, so a re-run changes nothing. */
 import type { NcrStatus, Priority } from "@prisma/client";
-import { createHash } from "node:crypto";
-import { gunzipSync } from "node:zlib";
 import { db } from "../src/lib/db";
+import { readPayload } from "./payload";
 import { recordEvent } from "../src/lib/audit";
 import { nextCode } from "../src/lib/sequence";
 import { raiseNcr } from "../src/lib/services/ncrs";
@@ -46,12 +45,8 @@ const cut = (s: string | null | undefined, n: number) => (s ? s.slice(0, n) : nu
 const day = (s: string | null | undefined) => (s ? new Date(`${s}T12:00:00Z`) : null);
 
 async function main() {
-  const gz = process.env.NCR_IMPORT_GZ?.trim();
-  if (!gz) return console.log("NCR_IMPORT_GZ not set — no NCRs imported.");
-  const raw = gunzipSync(Buffer.from(gz, "base64")).toString("utf8");
-  const sha = createHash("sha256").update(raw).digest("hex");
-  if (sha !== process.env.NCR_IMPORT_SHA256?.trim()) throw new Error(`NCR payload checksum mismatch (got ${sha}). Nothing imported.`);
-  const entries = JSON.parse(raw) as NcrImportEntry[];
+  const entries = readPayload<NcrImportEntry[]>("NCR_IMPORT");
+  if (!entries) return console.log("NCR_IMPORT_GZ not set — no NCRs imported.");
   const admin = await db.user.findFirst({ where: { role: "ADMIN", active: true }, orderBy: { createdAt: "asc" } });
   if (!admin) throw new Error("No active administrator found.");
   console.log("NCR import:", JSON.stringify(await applyNcrImport(await actorFromUser(admin), entries)));

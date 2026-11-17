@@ -36,15 +36,15 @@ if [ -n "$DATABASE_URL" ] && [ "$db_writes" = "true" ]; then
     if [ -n "${itp_targets// /}" ] && [ -n "${itp_rows// /}" ]; then
       npm run db:apply-itp
     fi
-    insp_rows="${INSPECTION_IMPORT_GZ:-}"
+    insp_rows="${INSPECTION_IMPORT_GZ:-}${INSPECTION_IMPORT_GZ_2:-}"
     if [ -n "${insp_rows// /}" ]; then
       npm run db:import-inspections
     fi
-    ncr_rows="${NCR_IMPORT_GZ:-}"
+    ncr_rows="${NCR_IMPORT_GZ:-}${NCR_IMPORT_GZ_2:-}"
     if [ -n "${ncr_rows// /}" ]; then
       npm run db:import-ncrs
     fi
-    mat_rows="${MATERIAL_IMPORT_GZ:-}"
+    mat_rows="${MATERIAL_IMPORT_GZ:-}${MATERIAL_IMPORT_GZ_2:-}"
     if [ -n "${mat_rows// /}" ]; then
       npm run db:import-materials
     fi
