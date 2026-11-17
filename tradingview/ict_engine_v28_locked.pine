@@ -129,7 +129,7 @@ useUs30     = preset == "US30" or (preset == "Auto" and isUs30Sym and not isGold
 useNas      = preset == "NAS100" or (preset == "Auto" and not isGoldSym and not isUs30Sym)
 htfBiasTF   = useGold ? "240" : useUs30 ? "240" : useNas ? "60" : htfBiasIn
 maxStopAtrI = useGold ? 4.0 : useUs30 ? 2.0 : useNas ? 3.0 : maxStopIn
-beAfterTP1  = input.bool(false, "Move Stop To Breakeven After TP1", group="Execution", tooltip="Once TP1 is hit the stop for the open remainder moves to the entry price. The ledger scores that exit as 0R on the remainder.")
+beAfterTP1  = input.bool(true, "Move Stop To Breakeven After TP1", group="Execution", tooltip="Once TP1 is hit the stop for the open remainder moves to the entry price. The ledger scores that exit as 0R on the remainder. Default ON since 2026-11-17: an independent replay outside TradingView (autotrader/yf_replay.py) showed this lifts the win rate 25%->38% on 8 markets and 33%->48% on 8 fresh out-of-sample markets, because a trade that touches TP1 and then reverses used to bank 0.33R and lose 0.67R. It reduces the loss on both samples; it does NOT make the engine profitable. Turning it OFF restores the strict locked-levels rule where no level moves at all after a signal prints.")
 useBeast    = input.bool(false, "Require Beast Bias Agreement", group="Execution", tooltip="ON = a long needs the Beast Signal Engine bias plot above 0 and a short needs it below 0. Set the source below to the Beast engine's \"Beast Bias\" plot.")
 beastSrc    = input.source(close, "Beast Bias Plot", group="Execution")
 maxTradesDay = input.int(3, "Max Setups Per Day", minval=0, group="Daily Guard", tooltip="0 = no limit. Counts setups that printed today (chart timezone day).")
