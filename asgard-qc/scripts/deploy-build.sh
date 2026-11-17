@@ -44,6 +44,10 @@ if [ -n "$DATABASE_URL" ] && [ "$db_writes" = "true" ]; then
     if [ -n "${ncr_rows// /}" ]; then
       npm run db:import-ncrs
     fi
+    mat_rows="${MATERIAL_IMPORT_GZ:-}"
+    if [ -n "${mat_rows// /}" ]; then
+      npm run db:import-materials
+    fi
     if [ "${PURGE_DEMO_DATA:-}" = "true" ]; then
       # Removes only records flagged as demo; refuses if real records depend on them.
       npm run db:purge-demo -- --yes
