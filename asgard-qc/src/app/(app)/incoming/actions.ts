@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireApiActor } from "@/lib/auth";
 import { publicMessage } from "@/lib/errors";
-import { createInspection, submitInspection } from "@/lib/services/inspections";
+import { bulkAcceptIncoming, createInspection, submitInspection } from "@/lib/services/inspections";
 
 const input = z.object({
   projectId: z.string().min(1, "Choose a job number."),
@@ -41,4 +42,25 @@ export async function createIncomingAction(raw: unknown): Promise<IncomingState>
   } catch (err) {
     return { ok: false, error: err instanceof z.ZodError ? err.issues[0].message : publicMessage(err) };
   }
+}
+
+/** Form action: the person accepts the ticked draft deliveries (Pass) and submits them for review. */
+export async function bulkAcceptIncomingAction(fd: FormData) {
+  const actor = await requireApiActor();
+  const ids = fd.getAll("ids").map(String).filter(Boolean);
+  const back = String(fd.get("back") ?? "/incoming");
+  let msg: string;
+  if (!ids.length) msg = "Tick at least one draft record first.";
+  else {
+    try {
+      const r = await bulkAcceptIncoming(actor, ids);
+      msg = `${r.accepted.length} accepted and submitted for review.` + (r.skipped.length ? ` ${r.skipped.length} not changed: ${r.skipped.slice(0, 5).map((x) => `${x.code} (${x.reason})`).join("; ")}${r.skipped.length > 5 ? " …" : ""}` : "");
+    } catch (err) {
+      msg = publicMessage(err);
+    }
+  }
+  for (const p of ["/incoming", "/inspections", "/"]) revalidatePath(p);
+  const url = new URL(back.startsWith("/incoming") ? back : "/incoming", "http://x");
+  url.searchParams.set("msg", msg);
+  redirect(`${url.pathname}${url.search}`);
 }

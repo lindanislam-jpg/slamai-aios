@@ -296,3 +296,42 @@ export async function approveTemplate(actor: Actor, id: string) {
     return row;
   });
 }
+
+/**
+ * A person accepts several goods-in deliveries at once (result Pass), e.g.
+ * after looking through the photos of historical MIS reports. Only draft
+ * incoming inspections are touched. Checklist lines still Pending are answered
+ * Pass by the same decision, with a note saying so, then each record is
+ * submitted for review in the normal way. A record is skipped (and reported)
+ * if it is not a draft incoming inspection or has a failed checklist line.
+ * Each record keeps its own audit trail; nothing is accepted by the system.
+ */
+export async function bulkAcceptIncoming(actor: Actor, ids: string[]) {
+  assertCanWrite(actor, "INCOMING_MATERIAL");
+  const unique = [...new Set(ids)].slice(0, 500);
+  const out = { accepted: [] as string[], skipped: [] as { code: string; reason: string }[] };
+  const stamp = new Date().toISOString().slice(0, 10);
+  for (const id of unique) {
+    const r = await transaction(async (tx) => {
+      const insp = await tx.inspection.findUnique({ where: { id }, include: { items: true } });
+      if (!insp) return { code: id, reason: "not found" };
+      if (insp.type !== "INCOMING_MATERIAL") return { code: insp.code, reason: "not an incoming inspection" };
+      if (insp.status !== "DRAFT") return { code: insp.code, reason: `already ${insp.status.toLowerCase()}` };
+      if (insp.items.some((i) => i.result === "FAIL")) return { code: insp.code, reason: "a checklist line failed — open it and decide individually" };
+      if (!insp.inspectedAt) return { code: insp.code, reason: "no inspection date on the record — open it and add the date" };
+      const note = `Accepted with the delivery by ${actor.name} on ${stamp} (several deliveries accepted together).`;
+      const pending = insp.items.filter((i) => i.result === "PENDING");
+      for (const i of pending) await tx.checklistItem.update({ where: { id: i.id }, data: { result: "PASS", notes: [i.notes, note].filter(Boolean).join(" ").slice(0, 1000) } });
+      await tx.inspection.update({ where: { id }, data: { result: "PASS", status: "SUBMITTED" } });
+      await recordEvent(tx, actor, "inspection.bulk_accept", "Inspection", id, {
+        summary: `${insp.code} accepted (Pass) and submitted — ${pending.length} pending checklist line(s) answered Pass`,
+        before: { result: insp.result, status: insp.status },
+        after: { result: "PASS", status: "SUBMITTED" },
+      });
+      return null;
+    }).catch((e: unknown) => ({ code: id, reason: e instanceof Error ? e.message : "failed" }));
+    if (r) out.skipped.push(r);
+    else out.accepted.push(id);
+  }
+  return out;
+}
