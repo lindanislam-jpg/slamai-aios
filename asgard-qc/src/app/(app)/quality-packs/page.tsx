@@ -1,5 +1,7 @@
 import { FilterBar, FilterInput, FilterSelect } from "@/components/fields";
+import { PackFolderAttach } from "@/components/packs/PackFolderAttach";
 import { PackPdfUpload } from "@/components/packs/PackPdfUpload";
+import { PROJECT_FILE_EXTENSIONS } from "@/lib/domain/constants";
 import { PackSummary, PackTable, RecordPackForm } from "@/components/packs/PackViews";
 import { getSetting } from "@/lib/settings";
 import { storage } from "@/lib/storage";
@@ -7,7 +9,7 @@ import { Card, Empty, PageHeader, Stat } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { projectOptions } from "@/lib/options";
 import { str, type SP } from "@/lib/params";
-import { DISCIPLINES, listPacks, packCounts } from "@/lib/services/quality-packs";
+import { DISCIPLINES, listPacks, packCounts, packTargets } from "@/lib/services/quality-packs";
 
 export const metadata = { title: "Quality Packs" };
 
@@ -20,7 +22,7 @@ export default async function QualityPacksPage({ searchParams }: { searchParams:
   const discipline = str(sp, "discipline");
   const q = str(sp, "q");
   const msg = str(sp, "msg");
-  const [rows, counts, projects, limits] = await Promise.all([listPacks({ projectId, stage, discipline, q }), packCounts({ projectId }), projectOptions(), getSetting("uploadLimits")]);
+  const [rows, counts, projects, limits, targets] = await Promise.all([listPacks({ projectId, stage, discipline, q }), packCounts({ projectId }), projectOptions(), getSetting("uploadLimits"), packTargets(projectId)]);
   const returned = counts.reduce((n, c) => n + c.returned, 0);
   const issued = counts.reduce((n, c) => n + c.issued, 0);
   const canWrite = actor.permissions.has("inspection.write");
@@ -37,6 +39,11 @@ export default async function QualityPacksPage({ searchParams }: { searchParams:
         <Stat label="Projects with packs" value={counts.length} />
       </div>
       {counts.length > 0 && <Card title="By project" pad={false} className="mb-5"><PackSummary counts={counts} hrefFor={hrefFor} /></Card>}
+      {canWrite && targets.length > 0 && (
+        <Card title="Attach the pack files from your OneDrive folders" className="mb-5">
+          <PackFolderAttach packs={targets} extensions={PROJECT_FILE_EXTENSIONS} maxFileMb={limits.maxFileMb} direct={storage().driver === "vercel-blob"} />
+        </Card>
+      )}
       {canWrite && (
         <Card title="Add packs from PDFs" className="mb-5">
           <PackPdfUpload projects={projects} direct={storage().driver === "vercel-blob"} maxFileMb={limits.maxFileMb} />

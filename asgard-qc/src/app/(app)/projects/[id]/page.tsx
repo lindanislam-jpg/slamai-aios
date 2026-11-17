@@ -24,7 +24,8 @@ import { projectFieldDefs, unitFieldDefs } from "../fields";
 import { ItpTab } from "./ItpTab";
 import { PackPdfUpload } from "@/components/packs/PackPdfUpload";
 import { PackSummary, PackTable, RecordPackForm } from "@/components/packs/PackViews";
-import { listPacks, packCounts } from "@/lib/services/quality-packs";
+import { listPacks, packCounts, packTargets } from "@/lib/services/quality-packs";
+import { PackFolderAttach } from "@/components/packs/PackFolderAttach";
 import { ReportGenerator } from "./ReportGenerator";
 
 const TABS = ["overview", "timeline", "photos", "materials", "fabrication", "welding", "inspections", "ncrs", "files", "documents", "packs", "itp", "release", "reports"] as const;
@@ -535,7 +536,7 @@ async function Reports({ actor, projectId, units }: { actor: Actor; projectId: s
 }
 
 async function Packs({ actor, projectId, msg }: { actor: Actor; projectId: string; msg: string | null }) {
-  const [rows, counts, limits] = await Promise.all([listPacks({ projectId }), packCounts({ projectId }), getSetting("uploadLimits")]);
+  const [rows, counts, limits, targets] = await Promise.all([listPacks({ projectId }), packCounts({ projectId }), getSetting("uploadLimits"), packTargets(projectId)]);
   const canWrite = actor.permissions.has("inspection.write");
   const back = `/projects/${projectId}?tab=packs`;
   const returned = rows.filter((r) => r.stage === "RETURNED");
@@ -544,6 +545,11 @@ async function Packs({ actor, projectId, msg }: { actor: Actor; projectId: strin
     <div className="space-y-5">
       {msg && <p className="rounded-lg border border-gold-600/50 bg-gold-500/10 px-4 py-3 text-sm" role="status">{msg}</p>}
       {counts.length > 0 && <Card title="Returned / issued by discipline" pad={false}><PackSummary counts={counts} hrefFor={(_, s) => `/quality-packs?projectId=${projectId}${s ? `&stage=${s}` : ""}`} /></Card>}
+      {canWrite && targets.length > 0 && (
+        <Card title="Attach the pack files from your OneDrive folder">
+          <PackFolderAttach packs={targets} extensions={PROJECT_FILE_EXTENSIONS} maxFileMb={limits.maxFileMb} direct={storage().driver === "vercel-blob"} />
+        </Card>
+      )}
       {canWrite && (
         <Card title="Add packs from PDFs">
           <PackPdfUpload projects={[]} projectId={projectId} direct={storage().driver === "vercel-blob"} maxFileMb={limits.maxFileMb} />

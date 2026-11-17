@@ -1204,9 +1204,13 @@ model ProjectFile {
   removedByName  String?
   removeReason   String?
   isDemo         Boolean       @default(false)
-  qualityPacks   QualityPack[]
+  qualityPacks   QualityPack[] @relation("PackMainFile")
+  /// The quality pack this file belongs to, when it was attached from the pack's folder.
+  qualityPackId  String?
+  qualityPack    QualityPack?  @relation("PackFiles", fields: [qualityPackId], references: [id], onDelete: SetNull)
 
   @@index([projectId, removedAt])
+  @@index([qualityPackId])
   @@index([sha256])
 }
 
@@ -1268,14 +1272,14 @@ enum PackStage {
 /// "2. Returned" folder; `sourcePath` keeps that location, the files stay in
 /// SharePoint. Entries can also be recorded by hand.
 model QualityPack {
-  id             String       @id @default(cuid())
-  code           String       @unique
+  id             String        @id @default(cuid())
+  code           String        @unique
   projectId      String
-  project        Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
   discipline     String
   name           String
   stage          PackStage
-  kind           String       @default("file")
+  kind           String        @default("file")
   fileCount      Int?
   files          String[]
   sourcePath     String?
@@ -1285,9 +1289,11 @@ model QualityPack {
   returnedByName String?
   notes          String?
   createdByName  String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  projectFile    ProjectFile? @relation(fields: [projectFileId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  projectFile    ProjectFile?  @relation("PackMainFile", fields: [projectFileId], references: [id])
+  /// Files attached from the pack's folder (e.g. every PDF in a returned pack folder).
+  attachedFiles  ProjectFile[] @relation("PackFiles")
   projectFileId  String?
 
   @@unique([projectId, sourcePath])

@@ -39,7 +39,7 @@ export async function listPacks(f: PackFilter, take = 1000) {
     where: packWhere(f),
     orderBy: [{ returnedAt: { sort: "desc", nulls: "last" } }, { project: { code: "asc" } }, { discipline: "asc" }, { name: "asc" }],
     take,
-    include: { project: { select: { id: true, code: true, name: true } }, projectFile: { select: { id: true, fileName: true, removedAt: true } } },
+    include: { project: { select: { id: true, code: true, name: true } }, projectFile: { select: { id: true, fileName: true, removedAt: true } }, attachedFiles: { where: { removedAt: null }, orderBy: { fileName: "asc" }, select: { id: true, fileName: true } } },
   });
 }
 
@@ -202,4 +202,37 @@ export async function packsFromFiles(actor: Actor, raw: { projectId: string; dis
   const missing = d.fileCodes.filter((c) => !files.some((f) => f.code === c));
   if (missing.length) out.skipped.push(...missing.map((c) => `${c} (file not found on this project)`));
   return out;
+}
+
+/**
+ * Link files already stored on a project (uploaded through the normal
+ * project-file upload) to the quality pack they came from. A file can belong
+ * to one pack; a file already linked to another pack is left as it is.
+ */
+export async function attachFilesToPacks(actor: Actor, links: { packId: string; fileCode: string }[]) {
+  assertCan(actor, "inspection.write");
+  const out = { linked: 0, already: 0, problems: [] as string[] };
+  for (const l of links.slice(0, 2000)) {
+    const pack = await db.qualityPack.findUnique({ where: { id: l.packId }, select: { id: true, code: true, projectId: true } });
+    if (!pack) { out.problems.push(`${l.fileCode}: pack not found`); continue; }
+    const file = await db.projectFile.findFirst({ where: { code: l.fileCode, projectId: pack.projectId, removedAt: null }, select: { id: true, qualityPackId: true, fileName: true } });
+    if (!file) { out.problems.push(`${l.fileCode}: file not found on the pack's project`); continue; }
+    if (file.qualityPackId === pack.id) { out.already++; continue; }
+    if (file.qualityPackId) { out.problems.push(`${file.fileName}: already belongs to another pack`); continue; }
+    await transaction(async (tx) => {
+      await tx.projectFile.update({ where: { id: file.id }, data: { qualityPackId: pack.id } });
+      await recordEvent(tx, actor, "quality_pack.attach_file", "QualityPack", pack.id, { summary: `${pack.code}: ${file.fileName} (${l.fileCode}) attached` });
+    });
+    out.linked++;
+  }
+  return out;
+}
+
+/** Packs imported from SharePoint, with how many files each has in the app, for matching picked folders. */
+export async function packTargets(projectId?: string | null) {
+  const rows = await db.qualityPack.findMany({
+    where: { sourcePath: { not: null }, ...(projectId ? { projectId } : {}) },
+    select: { id: true, code: true, name: true, kind: true, stage: true, projectId: true, sourcePath: true, project: { select: { code: true } }, _count: { select: { attachedFiles: { where: { removedAt: null } } } } },
+  });
+  return rows.map((r) => ({ id: r.id, code: r.code, name: r.name, kind: r.kind, stage: r.stage, job: r.project.code, projectId: r.projectId, sourcePath: r.sourcePath, files: r._count.attachedFiles }));
 }

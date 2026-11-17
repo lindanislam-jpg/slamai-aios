@@ -46,7 +46,9 @@ export function PackTable({ rows, canWrite, back, showProject = true }: { rows: 
                 ) : p.kind === "upload" ? "PDF uploaded" : p.kind === "file" ? "1 file" : "Recorded in the app"}
               </td>
               <td className="whitespace-nowrap text-xs">{p.returnedAt ? fmtDate(p.returnedAt) : p.stage === "RETURNED" ? <span className="text-ink-400" title="The SharePoint folder listing carries no return date">date not recorded</span> : "—"}{p.returnedByName && <div className="text-ink-400">{p.returnedByName}</div>}</td>
-              <td className="text-xs">{p.projectFile && !p.projectFile.removedAt ? <a className="link" href={`/api/files/project-file/${p.projectFile.id}`}>Download PDF</a> : p.sourceUrl ? <a className="link" href={p.sourceUrl} target="_blank" rel="noreferrer">Open in SharePoint</a> : p.sourcePath ? <span className="text-ink-400" title={p.sourcePath}>SharePoint</span> : p.createdByName ? `By ${p.createdByName}` : "—"}</td>
+              <td className="text-xs">{p.attachedFiles.length > 0 ? (
+                <details><summary className="link cursor-pointer">{p.attachedFiles.length} file(s) in the app</summary><ul className="mt-1 max-h-48 overflow-auto">{p.attachedFiles.map((f) => <li key={f.id} className="truncate"><a className="link" href={`/api/files/project-file/${f.id}`}>{f.fileName}</a></li>)}</ul></details>
+              ) : p.projectFile && !p.projectFile.removedAt ? <a className="link" href={`/api/files/project-file/${p.projectFile.id}`}>Download PDF</a> : p.sourceUrl ? <a className="link" href={p.sourceUrl} target="_blank" rel="noreferrer">Open in SharePoint</a> : p.sourcePath ? <span className="text-ink-400" title={p.sourcePath}>SharePoint</span> : p.createdByName ? `By ${p.createdByName}` : "—"}</td>
               {canWrite && (
                 <td>
                   {p.stage === "ISSUED" && (

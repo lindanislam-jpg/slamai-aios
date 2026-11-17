@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { createProject } from "@/lib/services/projects";
 import { uploadProjectFiles } from "@/lib/services/files";
-import { disciplineName, importPacks, listPacks, markPackReturned, packCounts, packsFromFiles, recordPack } from "@/lib/services/quality-packs";
+import { attachFilesToPacks, disciplineName, importPacks, listPacks, markPackReturned, packCounts, packsFromFiles, packTargets, recordPack } from "@/lib/services/quality-packs";
 import { makeActor, resetDb } from "./helpers";
 
 describe("quality packs", () => {
@@ -62,5 +62,25 @@ describe("quality packs", () => {
     expect(rows[0].projectFile?.fileName).toMatch(/\.pdf$/);
     expect(rows[0].returnedAt?.toISOString().slice(0, 10)).toBe("2026-11-12");
     expect((await packsFromFiles(qm, { projectId: p.id, discipline: "Structural", stage: "RETURNED", fileCodes: codes })).created).toHaveLength(0);
+  });
+
+  it("links uploaded files to the pack they came from, once, and only on the pack's own project", async () => {
+    const qm = await makeActor("QUALITY_MANAGER");
+    const p = await createProject(qm, { name: "Skids", code: "AMM602" });
+    const other = await createProject(qm, { name: "Other", code: "AMM999" });
+    await importPacks(qm, [{ project: "AMM602", discipline: "Structural", stage: "RETURNED", name: "Admin Skid", kind: "folder", fileCount: 2, files: [], sourcePath: "X/2. Returned/Admin Skid" }]);
+    const [pack] = await packTargets(p.id);
+    expect(pack).toMatchObject({ name: "Admin Skid", files: 0, job: "AMM602" });
+    const up = await uploadProjectFiles(qm, p.id, [{ name: "Skid A.pdf", data: Buffer.from("%PDF a") }, { name: "Skid B.pdf", data: Buffer.from("%PDF b") }], { category: "Handover / QC pack", unitId: null, notes: null });
+    const wrong = await uploadProjectFiles(qm, other.id, [{ name: "Elsewhere.pdf", data: Buffer.from("%PDF c") }], { category: "Handover / QC pack", unitId: null, notes: null });
+    const codes = up.flatMap((u) => (u.ok ? [u.code] : []));
+    const wrongCode = wrong.flatMap((u) => (u.ok ? [u.code] : []))[0];
+    const r = await attachFilesToPacks(qm, [...codes.map((c) => ({ packId: pack.id, fileCode: c })), { packId: pack.id, fileCode: wrongCode }]);
+    expect(r).toMatchObject({ linked: 2, already: 0 });
+    expect(r.problems).toHaveLength(1);
+    expect((await attachFilesToPacks(qm, [{ packId: pack.id, fileCode: codes[0] }])).already).toBe(1);
+    expect((await packTargets(p.id))[0].files).toBe(2);
+    expect((await listPacks({ projectId: p.id }))[0].attachedFiles.map((f) => f.fileName)).toEqual(["Skid A.pdf", "Skid B.pdf"]);
+    await expect(attachFilesToPacks(await makeActor("AUDITOR"), [])).rejects.toThrow();
   });
 });

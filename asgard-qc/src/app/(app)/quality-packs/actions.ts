@@ -53,3 +53,15 @@ export async function packsFromFilesAction(input: { projectId: string; disciplin
     return { ok: false as const, error: publicMessage(e) };
   }
 }
+
+export async function attachPackFilesAction(projectIds: string[], links: { packId: string; fileCode: string }[]) {
+  try {
+    const actor = await requireApiActor();
+    const { attachFilesToPacks } = await import("@/lib/services/quality-packs");
+    const r = await attachFilesToPacks(actor, links);
+    for (const p of ["/quality-packs", "/", ...projectIds.map((id) => `/projects/${id}`)]) revalidatePath(p);
+    return { ok: true as const, ...r };
+  } catch (e) {
+    return { ok: false as const, error: publicMessage(e) };
+  }
+}
