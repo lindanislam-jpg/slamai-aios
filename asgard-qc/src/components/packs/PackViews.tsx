@@ -41,7 +41,7 @@ export function PackTable({ rows, canWrite, back, showProject = true }: { rows: 
               <td className="text-xs">{p.discipline}</td>
               <td><Badge value={p.stage} tone={p.stage === "RETURNED" ? "ok" : "warn"} label={p.stage === "RETURNED" ? "Returned" : "Issued"} /></td>
               <td className="max-w-80 text-xs text-ink-300">
-                {p.kind === "folder" ? (
+                {p.kind === "folder" && p.fileCount == null && p.files.length === 0 ? "Folder — contents in SharePoint" : p.kind === "folder" ? (
                   <details><summary className="cursor-pointer">{p.fileCount ?? p.files.length} file(s)</summary><ul className="mt-1 max-h-48 overflow-auto">{p.files.map((f) => <li key={f} className="truncate">{f}</li>)}</ul></details>
                 ) : p.kind === "file" ? "1 file" : "Recorded in the app"}
               </td>

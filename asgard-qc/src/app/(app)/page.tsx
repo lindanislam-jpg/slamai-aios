@@ -217,7 +217,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
             <ul className="divide-y divide-ink-700 border-t border-ink-700 text-sm lg:border-l lg:border-t-0">
               {packsRecent.map((p) => (
                 <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2">
-                  <div className="min-w-0"><div className="truncate font-medium">{p.name}</div><div className="text-[11px] text-ink-400">{p.project.code} · {p.discipline}{p.kind === "folder" ? ` · ${p.fileCount ?? p.files.length} file(s)` : ""}</div></div>
+                  <div className="min-w-0"><div className="truncate font-medium">{p.name}</div><div className="text-[11px] text-ink-400">{p.project.code} · {p.discipline}{p.kind === "folder" && (p.fileCount ?? p.files.length) ? ` · ${p.fileCount ?? p.files.length} file(s)` : ""}</div></div>
                   <div className="shrink-0 text-right text-xs text-ink-300">{p.returnedAt ? fmtDate(p.returnedAt) : "date not recorded"}</div>
                 </li>
               ))}
