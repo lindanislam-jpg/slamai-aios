@@ -5,7 +5,7 @@
  *                              heatNumber, certificateRef, quantity, unit, source }
  *    MATERIAL_IMPORT_SHA256  sha256 of the uncompressed JSON; refuses to run if altered.
  *  Each entry is a transcription of a mill certificate, delivery docket or
- *  goods-in record. It is created through the audited material service as the
+ *  goods-in record (project "STORES" = stores stock not yet allocated to a job). It is created through the audited material service as the
  *  first admin with the status "awaiting inspection" and its certificate as
  *  "uploaded, unverified": nothing is accepted or verified by the import. The
  *  source file is kept in the location field. An entry already imported (same
@@ -32,10 +32,12 @@ async function main() {
   const projects = new Map<string, string | null>();
   for (const e of entries) {
     try {
-      const code = e.project.toUpperCase();
-      if (!projects.has(code)) projects.set(code, (await db.project.findUnique({ where: { code }, select: { id: true } }))?.id ?? null);
-      const projectId = projects.get(code);
-      if (!projectId) throw new Error("project not found");
+      // "STORES" = stock held in stores, not yet allocated to a job.
+      const code = (e.project ?? "").toUpperCase();
+      const stores = code === "" || code === "STORES";
+      if (!stores && !projects.has(code)) projects.set(code, (await db.project.findUnique({ where: { code }, select: { id: true } }))?.id ?? null);
+      const projectId = stores ? null : projects.get(code);
+      if (!stores && !projectId) throw new Error("project not found");
       const description = e.description.trim().slice(0, 500);
       const heatNumber = cut(e.heatNumber, 120);
       const deliveryRef = cut(e.deliveryRef, 120);

@@ -39,7 +39,7 @@ export async function listPacks(f: PackFilter, take = 1000) {
     where: packWhere(f),
     orderBy: [{ returnedAt: { sort: "desc", nulls: "last" } }, { project: { code: "asc" } }, { discipline: "asc" }, { name: "asc" }],
     take,
-    include: { project: { select: { id: true, code: true, name: true } } },
+    include: { project: { select: { id: true, code: true, name: true } }, projectFile: { select: { id: true, fileName: true, removedAt: true } } },
   });
 }
 
@@ -164,4 +164,42 @@ export async function importPacks(actor: Actor, items: PackImportItem[]) {
     }
   }
   return tally;
+}
+
+/**
+ * Packs from uploaded PDFs: each file already stored on the project (via the
+ * normal project-file upload) becomes one pack, named after the file, with
+ * the file linked for download. A file already linked to a pack is skipped.
+ */
+export async function packsFromFiles(actor: Actor, raw: { projectId: string; discipline: string; stage: PackStage; date?: string | null; fileCodes: string[] }) {
+  assertCan(actor, "inspection.write");
+  const d = z.object({
+    projectId: z.string().min(1),
+    discipline: z.string().trim().min(1).max(60),
+    stage: z.enum(["ISSUED", "RETURNED"]),
+    date: z.coerce.date().optional().nullable(),
+    fileCodes: z.array(z.string().min(1)).min(1).max(100),
+  }).parse({ ...raw, date: raw.date || null });
+  const files = await db.projectFile.findMany({ where: { projectId: d.projectId, code: { in: d.fileCodes }, removedAt: null }, include: { qualityPacks: { select: { code: true } } } });
+  const out = { created: [] as string[], skipped: [] as string[] };
+  for (const f of files) {
+    if (f.qualityPacks.length) { out.skipped.push(`${f.fileName} (already pack ${f.qualityPacks[0].code})`); continue; }
+    await transaction(async (tx) => {
+      const code = await nextCode(tx, "QP", 4);
+      const when = d.date ?? new Date();
+      const row = await tx.qualityPack.create({
+        data: {
+          code, projectId: d.projectId, discipline: d.discipline, name: f.fileName.replace(/\.[a-z0-9]{1,5}$/i, "").slice(0, 200), stage: d.stage, kind: "upload",
+          fileCount: 1, files: [f.fileName], projectFileId: f.id,
+          issuedAt: d.stage === "ISSUED" ? when : null, returnedAt: d.stage === "RETURNED" ? when : null,
+          createdByName: actor.name,
+        },
+      });
+      await recordEvent(tx, actor, "quality_pack.upload", "QualityPack", row.id, { summary: `${code} ${row.name} (${d.stage.toLowerCase()}) from file ${f.code}` });
+      out.created.push(code);
+    });
+  }
+  const missing = d.fileCodes.filter((c) => !files.some((f) => f.code === c));
+  if (missing.length) out.skipped.push(...missing.map((c) => `${c} (file not found on this project)`));
+  return out;
 }

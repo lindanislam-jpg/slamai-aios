@@ -1184,26 +1184,27 @@ model ControlPoint {
 /// client correspondence, QC packs). Not a controlled document: no approval
 /// workflow. Removal is a recorded withdrawal; the stored bytes are kept.
 model ProjectFile {
-  id             String    @id @default(cuid())
-  code           String    @unique
+  id             String        @id @default(cuid())
+  code           String        @unique
   projectId      String
-  project        Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
   unitId         String?
-  unit           Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  unit           Unit?         @relation(fields: [unitId], references: [id], onDelete: SetNull)
   category       String
   notes          String?
   fileName       String
   mimeType       String
   sizeBytes      Int
   sha256         String
-  storageKey     String    @unique
-  uploadedAt     DateTime  @default(now())
+  storageKey     String        @unique
+  uploadedAt     DateTime      @default(now())
   uploadedById   String?
   uploadedByName String?
   removedAt      DateTime?
   removedByName  String?
   removeReason   String?
-  isDemo         Boolean   @default(false)
+  isDemo         Boolean       @default(false)
+  qualityPacks   QualityPack[]
 
   @@index([projectId, removedAt])
   @@index([sha256])
@@ -1267,14 +1268,14 @@ enum PackStage {
 /// "2. Returned" folder; `sourcePath` keeps that location, the files stay in
 /// SharePoint. Entries can also be recorded by hand.
 model QualityPack {
-  id             String    @id @default(cuid())
-  code           String    @unique
+  id             String       @id @default(cuid())
+  code           String       @unique
   projectId      String
-  project        Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
   discipline     String
   name           String
   stage          PackStage
-  kind           String    @default("file")
+  kind           String       @default("file")
   fileCount      Int?
   files          String[]
   sourcePath     String?
@@ -1284,8 +1285,10 @@ model QualityPack {
   returnedByName String?
   notes          String?
   createdByName  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  projectFile    ProjectFile? @relation(fields: [projectFileId], references: [id])
+  projectFileId  String?
 
   @@unique([projectId, sourcePath])
   @@index([stage, projectId])

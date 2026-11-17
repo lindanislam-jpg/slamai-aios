@@ -22,6 +22,7 @@ import { removeFileAction } from "./file-actions";
 import { createUnitAction, updateProjectAction, updateUnitAction } from "../actions";
 import { projectFieldDefs, unitFieldDefs } from "../fields";
 import { ItpTab } from "./ItpTab";
+import { PackPdfUpload } from "@/components/packs/PackPdfUpload";
 import { PackSummary, PackTable, RecordPackForm } from "@/components/packs/PackViews";
 import { listPacks, packCounts } from "@/lib/services/quality-packs";
 import { ReportGenerator } from "./ReportGenerator";
@@ -534,7 +535,7 @@ async function Reports({ actor, projectId, units }: { actor: Actor; projectId: s
 }
 
 async function Packs({ actor, projectId, msg }: { actor: Actor; projectId: string; msg: string | null }) {
-  const [rows, counts] = await Promise.all([listPacks({ projectId }), packCounts({ projectId })]);
+  const [rows, counts, limits] = await Promise.all([listPacks({ projectId }), packCounts({ projectId }), getSetting("uploadLimits")]);
   const canWrite = actor.permissions.has("inspection.write");
   const back = `/projects/${projectId}?tab=packs`;
   const returned = rows.filter((r) => r.stage === "RETURNED");
@@ -543,7 +544,12 @@ async function Packs({ actor, projectId, msg }: { actor: Actor; projectId: strin
     <div className="space-y-5">
       {msg && <p className="rounded-lg border border-gold-600/50 bg-gold-500/10 px-4 py-3 text-sm" role="status">{msg}</p>}
       {counts.length > 0 && <Card title="Returned / issued by discipline" pad={false}><PackSummary counts={counts} hrefFor={(_, s) => `/quality-packs?projectId=${projectId}${s ? `&stage=${s}` : ""}`} /></Card>}
-      {canWrite && <Card title="Record a pack"><RecordPackForm projects={[]} projectId={projectId} back={back} /></Card>}
+      {canWrite && (
+        <Card title="Add packs from PDFs">
+          <PackPdfUpload projects={[]} projectId={projectId} direct={storage().driver === "vercel-blob"} maxFileMb={limits.maxFileMb} />
+          <details className="mt-4 border-t border-ink-700 pt-3"><summary className="cursor-pointer text-sm text-ink-300">No PDF? Record a pack by typing</summary><div className="mt-3"><RecordPackForm projects={[]} projectId={projectId} back={back} /></div></details>
+        </Card>
+      )}
       <Card title={`Returned (${returned.length})`} pad={false}>{returned.length ? <PackTable rows={returned} canWrite={canWrite} back={back} showProject={false} /> : <div className="card-pad text-sm text-ink-300">No packs returned yet.</div>}</Card>
       <Card title={`Issued, not back yet (${issued.length})`} pad={false}>{issued.length ? <PackTable rows={issued} canWrite={canWrite} back={back} showProject={false} /> : <div className="card-pad text-sm text-ink-300">No packs out on the floor.</div>}</Card>
     </div>

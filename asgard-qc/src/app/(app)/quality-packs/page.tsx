@@ -1,5 +1,8 @@
 import { FilterBar, FilterInput, FilterSelect } from "@/components/fields";
+import { PackPdfUpload } from "@/components/packs/PackPdfUpload";
 import { PackSummary, PackTable, RecordPackForm } from "@/components/packs/PackViews";
+import { getSetting } from "@/lib/settings";
+import { storage } from "@/lib/storage";
 import { Card, Empty, PageHeader, Stat } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { projectOptions } from "@/lib/options";
@@ -17,7 +20,7 @@ export default async function QualityPacksPage({ searchParams }: { searchParams:
   const discipline = str(sp, "discipline");
   const q = str(sp, "q");
   const msg = str(sp, "msg");
-  const [rows, counts, projects] = await Promise.all([listPacks({ projectId, stage, discipline, q }), packCounts({ projectId }), projectOptions()]);
+  const [rows, counts, projects, limits] = await Promise.all([listPacks({ projectId, stage, discipline, q }), packCounts({ projectId }), projectOptions(), getSetting("uploadLimits")]);
   const returned = counts.reduce((n, c) => n + c.returned, 0);
   const issued = counts.reduce((n, c) => n + c.issued, 0);
   const canWrite = actor.permissions.has("inspection.write");
@@ -34,7 +37,12 @@ export default async function QualityPacksPage({ searchParams }: { searchParams:
         <Stat label="Projects with packs" value={counts.length} />
       </div>
       {counts.length > 0 && <Card title="By project" pad={false} className="mb-5"><PackSummary counts={counts} hrefFor={hrefFor} /></Card>}
-      {canWrite && <Card title="Record a pack" className="mb-5"><RecordPackForm projects={projects} back={back} /></Card>}
+      {canWrite && (
+        <Card title="Add packs from PDFs" className="mb-5">
+          <PackPdfUpload projects={projects} direct={storage().driver === "vercel-blob"} maxFileMb={limits.maxFileMb} />
+          <details className="mt-4 border-t border-ink-700 pt-3"><summary className="cursor-pointer text-sm text-ink-300">No PDF? Record a pack by typing</summary><div className="mt-3"><RecordPackForm projects={projects} back={back} /></div></details>
+        </Card>
+      )}
       <FilterBar reset="/quality-packs">
         <FilterSelect name="projectId" label="Project" options={projects} value={projectId} empty="All projects" />
         <FilterSelect name="stage" label="Status" options={[{ value: "RETURNED", label: "Returned" }, { value: "ISSUED", label: "Issued (not back)" }]} value={stage} empty="All" />

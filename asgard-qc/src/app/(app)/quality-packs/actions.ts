@@ -41,3 +41,15 @@ export async function markReturnedAction(fd: FormData) {
   }
   back(fd, msg);
 }
+
+export async function packsFromFilesAction(input: { projectId: string; discipline: string; stage: "ISSUED" | "RETURNED"; date?: string | null; fileCodes: string[] }) {
+  try {
+    const actor = await requireApiActor();
+    const { packsFromFiles } = await import("@/lib/services/quality-packs");
+    const r = await packsFromFiles(actor, input);
+    for (const p of ["/quality-packs", "/", `/projects/${input.projectId}`]) revalidatePath(p);
+    return { ok: true as const, ...r };
+  } catch (e) {
+    return { ok: false as const, error: publicMessage(e) };
+  }
+}

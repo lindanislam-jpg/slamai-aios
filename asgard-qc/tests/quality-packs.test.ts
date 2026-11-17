@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { createProject } from "@/lib/services/projects";
-import { disciplineName, importPacks, listPacks, markPackReturned, packCounts, recordPack } from "@/lib/services/quality-packs";
+import { uploadProjectFiles } from "@/lib/services/files";
+import { disciplineName, importPacks, listPacks, markPackReturned, packCounts, packsFromFiles, recordPack } from "@/lib/services/quality-packs";
 import { makeActor, resetDb } from "./helpers";
 
 describe("quality packs", () => {
@@ -45,5 +46,21 @@ describe("quality packs", () => {
     await expect(markPackReturned(qc, pk.id, {})).rejects.toThrow(/already returned/);
     expect(await db.auditEvent.count({ where: { entityId: pk.id } })).toBe(2);
     await expect(recordPack(await makeActor("AUDITOR"), { projectId: p.id, discipline: "Electrical", name: "x", stage: "ISSUED" })).rejects.toThrow();
+  });
+
+  it("turns uploaded PDFs into packs named after the file, linked for download, once", async () => {
+    const qm = await makeActor("QUALITY_MANAGER");
+    const p = await createProject(qm, { name: "Skids" });
+    const up = await uploadProjectFiles(qm, p.id, [{ name: "Skid No 4 Paint QC Pack.pdf", data: Buffer.from("%PDF-1.4 test pack 4") }, { name: "Skid No 5.pdf", data: Buffer.from("%PDF-1.4 test pack 5") }], { category: "Handover / QC pack", unitId: null, notes: null });
+    const codes = up.flatMap((u) => (u.ok ? [u.code] : []));
+    expect(codes).toHaveLength(2);
+    const r = await packsFromFiles(qm, { projectId: p.id, discipline: "Structural", stage: "RETURNED", date: "2026-11-12", fileCodes: [...codes, "PF-9999"] });
+    expect(r.created).toHaveLength(2);
+    expect(r.skipped).toEqual(["PF-9999 (file not found on this project)"]);
+    const rows = await listPacks({ projectId: p.id, stage: "RETURNED" });
+    expect(rows.map((x) => x.name).sort()).toEqual(["Skid No 4 Paint QC Pack", "Skid No 5"]);
+    expect(rows[0].projectFile?.fileName).toMatch(/\.pdf$/);
+    expect(rows[0].returnedAt?.toISOString().slice(0, 10)).toBe("2026-11-12");
+    expect((await packsFromFiles(qm, { projectId: p.id, discipline: "Structural", stage: "RETURNED", fileCodes: codes })).created).toHaveLength(0);
   });
 });
