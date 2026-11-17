@@ -55,15 +55,36 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
   const [picked, setPicked] = useState<{ file: File; targetId: string; auto: boolean }[]>([]);
   const byId = new Map(targets.map((t) => [t.id, t]));
 
+  const [ignored, setIgnored] = useState(0);
+  const bulk = picked.length > 25;
+
   function choose(list: FileList | null) {
     setLines([]);
+    setIgnored(0);
     if (!list?.length) return;
-    const pdfs = Array.from(list).filter((f) => /\.pdf$/i.test(f.name));
+    const all = Array.from(list);
+    const pdfs = all.filter((f) => /\.pdf$/i.test(f.name));
     if (!pdfs.length) { setLines([{ file: "—", status: "error", text: "No PDF files in what you chose." }]); return; }
-    setPicked(pdfs.map((file) => {
+    const rows = pdfs.map((file) => {
       const t = match(file.name);
       return { file, targetId: t?.id ?? "", auto: !!t };
-    }));
+    });
+    // A big folder (e.g. the whole Large Projects folder): keep only the MIS
+    // PDFs that belong to a record, one per record, and leave everything else.
+    if (pdfs.length > 25) {
+      const seen = new Set<string>();
+      const keep = rows.filter((r) => {
+        if (!r.targetId || seen.has(r.targetId)) return false;
+        const t = byId.get(r.targetId);
+        if (t && t.photos > 0 && !again) return false;
+        seen.add(r.targetId);
+        return true;
+      });
+      setIgnored(all.length - keep.length);
+      setPicked(keep);
+      return;
+    }
+    setPicked(rows);
   }
 
   async function run() {
@@ -115,7 +136,7 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
     <div className="space-y-3">
       <p className="text-sm text-ink-300">
         {sourced.length} incoming inspections were transcribed from MIS report PDFs on SharePoint; <b className="text-ink-100">{missing}</b> have no pictures yet.
-        Choose the PDFs from your OneDrive copy of the job folders (you can select many at once, or a whole folder). Each PDF is matched to its record by file name and its photos are attached unchanged.
+        Quickest: click <b>Choose a whole folder</b> and pick your OneDrive <b>0.2 - Large Projects</b> folder — every MIS for these records is found at once — then click <b>Add photos</b>. You can also choose single PDFs. Each PDF is matched to its record by file name and its photos are attached unchanged.
       </p>
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-600 p-3">
         <span className="text-sm font-semibold text-ink-100">1.</span>
@@ -131,11 +152,17 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
           Add photos{picked.length ? ` to ${new Set(picked.filter((p) => p.targetId).map((p) => p.targetId)).size} record(s)` : ""}
         </button>
         <span className="text-xs text-ink-300" role="status">
-          {busy ? "" : !picked.length ? "No PDFs chosen yet." : `${picked.length} PDF(s) chosen · ${picked.filter((p) => p.targetId).length} matched${picked.some((p) => !p.targetId) ? " · pick the record for the others below" : ""}`}
+          {busy ? "" : !picked.length ? (ignored ? `None of the ${ignored} files is an MIS for a record without pictures.` : "No PDFs chosen yet.") : `${picked.length} PDF(s) chosen · ${picked.filter((p) => p.targetId).length} matched${ignored ? ` · ${ignored} other files ignored` : ""}${picked.some((p) => !p.targetId) ? " · pick the record for the others below" : ""}`}
         </span>
         <label className="flex basis-full items-center gap-2 text-xs text-ink-300"><input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />Also add to records that already have pictures</label>
       </div>
-      {picked.length > 0 && !busy && (
+      {bulk && !busy && (
+        <details className="rounded-lg border border-ink-600 p-3 text-xs text-ink-300">
+          <summary className="cursor-pointer text-sm text-ink-100">{picked.length} MIS PDFs found for records without pictures — click <b>Add photos</b> to add them all</summary>
+          <ul className="mt-2 max-h-72 overflow-auto">{picked.map((p) => <li key={p.targetId} className="truncate">{byId.get(p.targetId)?.job} · {byId.get(p.targetId)?.code} ← {p.file.name}</li>)}</ul>
+        </details>
+      )}
+      {picked.length > 0 && !bulk && !busy && (
         <div className="rounded-lg border border-ink-600 p-3">
           <p className="mb-2 text-sm">Check the record for each PDF (change it if needed), then click <b>Add photos</b>.</p>
           <div className="max-h-80 overflow-auto">
