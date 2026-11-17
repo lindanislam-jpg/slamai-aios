@@ -139,22 +139,23 @@ model Project {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  units       Unit[]
-  itpPlans    ItpPlan[]
-  photos      Photo[]
-  inspections Inspection[]
-  welds       Weld[]
-  materials   Material[]
-  ndt         NdtRecord[]
-  coatings    CoatingRecord[]
-  ncrs        Ncr[]
-  repairs     Repair[]
-  documents   Document[]
-  files       ProjectFile[]
-  releases    ReleaseRecord[]
-  reports     ReportJob[]
-  cmrs        Cmr[]
-  alerts      QualityAlert[]
+  units        Unit[]
+  itpPlans     ItpPlan[]
+  photos       Photo[]
+  inspections  Inspection[]
+  welds        Weld[]
+  materials    Material[]
+  ndt          NdtRecord[]
+  coatings     CoatingRecord[]
+  ncrs         Ncr[]
+  repairs      Repair[]
+  documents    Document[]
+  files        ProjectFile[]
+  releases     ReleaseRecord[]
+  reports      ReportJob[]
+  cmrs         Cmr[]
+  alerts       QualityAlert[]
+  qualityPacks QualityPack[]
 
   @@index([status])
 }
@@ -1251,4 +1252,41 @@ model SystemCheckRun {
 
   @@index([startedAt])
   @@index([status])
+}
+
+// ───────────────────────── Quality packs ─────────────────────────
+
+enum PackStage {
+  ISSUED
+  RETURNED
+}
+
+/// An inspection / QC pack sent to the shop floor (Issued) or back completed
+/// (Returned), per discipline. Imported entries mirror one item in the
+/// project's SharePoint "In Process Inspections/<discipline>/1. Issued" or
+/// "2. Returned" folder; `sourcePath` keeps that location, the files stay in
+/// SharePoint. Entries can also be recorded by hand.
+model QualityPack {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  discipline     String
+  name           String
+  stage          PackStage
+  kind           String    @default("file")
+  fileCount      Int?
+  files          String[]
+  sourcePath     String?
+  sourceUrl      String?
+  issuedAt       DateTime?
+  returnedAt     DateTime?
+  returnedByName String?
+  notes          String?
+  createdByName  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([projectId, sourcePath])
+  @@index([stage, projectId])
 }

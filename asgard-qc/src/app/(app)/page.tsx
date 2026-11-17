@@ -9,6 +9,7 @@ import { computeKpis, KPI_DEFINITIONS, type DataScope } from "@/lib/kpi";
 import { projectOptions } from "@/lib/options";
 import { enumParam, PERIODS, periodRange, str, type SP } from "@/lib/params";
 import { materialFlags } from "@/lib/services/materials";
+import { listPacks, packCounts } from "@/lib/services/quality-packs";
 import { attentionQueue, projectHealth, type AttentionLevel, type Rag } from "@/lib/attention";
 import { aiStatus } from "@/lib/ai/vision";
 import { AUTOMATION_ACTIONS, automationActivity } from "@/lib/automation";
@@ -59,7 +60,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   const projectId = str(sp, "projectId");
   const data = enumParam<DataScope>(sp, "data", ["all", "real", "demo"]) ?? "all";
   const span = range.to.getTime() - range.from.getTime();
-  const [k, prev, projects, materials, health, demoProjects, cmr, alerts, monitor, attention, automation] = await Promise.all([
+  const [k, prev, projects, materials, health, demoProjects, cmr, alerts, monitor, attention, automation, packsBack, packsRecent] = await Promise.all([
     computeKpis({ from: range.from, to: range.to, projectId, data }),
     computeKpis({ from: new Date(range.from.getTime() - span), to: range.from, projectId, data }),
     projectOptions(),
@@ -71,7 +72,10 @@ export default async function Overview({ searchParams }: { searchParams: Promise
     monitorStatus(),
     attentionQueue(actor, projectId),
     automationActivity(7),
+    packCounts({ projectId, stage: "RETURNED" }),
+    listPacks({ projectId, stage: "RETURNED" }, 8),
   ]);
+  const packsReturned = packsBack.reduce((n, c) => n + c.returned, 0);
   // Only mention demo data while some exists (it is removed once a company goes live).
   const hasDemo = demoProjects > 0;
   const aiReady = aiStatus().configured;
@@ -192,6 +196,35 @@ export default async function Overview({ searchParams }: { searchParams: Promise
       </div>
 
       <SystemHealthPanel compact canOpen={actor.permissions.has("system.view")} latest={monitor.latest} lastGood={monitor.lastGood} next={monitor.next} enabled={monitor.enabled} schedulerSilent={monitor.schedulerSilent} running={monitor.running} />
+
+      <Card title={<span id="packs">Returned quality packs ({packsReturned})</span>} actions={<Link href={`/quality-packs?stage=RETURNED${projectId ? `&projectId=${projectId}` : ""}`} className="btn-secondary btn-sm">All returned packs</Link>} pad={false}>
+        {packsBack.length === 0 ? <div className="card-pad text-sm text-ink-300">No quality packs returned yet{projectId ? " for this project" : ""}.</div> : (
+          <div className="grid gap-0 lg:grid-cols-[1fr_1.3fr] [&>*]:min-w-0">
+            <div className="table-wrap">
+              <table className="tbl">
+                <thead><tr><th>Project</th><th className="text-right">Returned</th><th>By discipline</th></tr></thead>
+                <tbody>
+                  {packsBack.map((c) => (
+                    <tr key={c.project.id}>
+                      <td><Link className="link font-medium" href={`/projects/${c.project.id}?tab=packs`}>{c.project.code}</Link><div className="max-w-40 truncate text-[11px] text-ink-300">{c.project.name}</div></td>
+                      <td className="text-right font-semibold text-ok-400">{c.returned}</td>
+                      <td className="text-xs text-ink-300">{Object.entries(c.byDiscipline).filter(([, v]) => v.returned).map(([d, v]) => `${d} ${v.returned}`).join(" · ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ul className="divide-y divide-ink-700 border-t border-ink-700 text-sm lg:border-l lg:border-t-0">
+              {packsRecent.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                  <div className="min-w-0"><div className="truncate font-medium">{p.name}</div><div className="text-[11px] text-ink-400">{p.project.code} · {p.discipline}{p.kind === "folder" ? ` · ${p.fileCount ?? p.files.length} file(s)` : ""}</div></div>
+                  <div className="shrink-0 text-right text-xs text-ink-300">{p.returnedAt ? fmtDate(p.returnedAt) : "date not recorded"}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
 
       <Card title={<span id="projects">Project health ({health.length} active)</span>} actions={<Link href="/projects" className="btn-secondary btn-sm">Project register</Link>} pad={false}>
         {health.length === 0 ? (

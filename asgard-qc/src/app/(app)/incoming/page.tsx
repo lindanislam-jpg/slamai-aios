@@ -45,14 +45,17 @@ export default async function IncomingPage({ searchParams }: { searchParams: Pro
     projectOptions(),
     getSetting("uploadLimits"),
     db.inspection.findMany({
-      where: { ...base, comments: { contains: "Source: SharePoint " } },
-      select: { id: true, code: true, projectId: true, comments: true, project: { select: { code: true } }, _count: { select: { photos: { where: { deletedAt: null } } } } },
+      where: base,
+      orderBy: [{ project: { code: "asc" } }, { inspectedAt: { sort: "desc", nulls: "last" } }],
+      take: 2000,
+      select: { id: true, code: true, projectId: true, comments: true, componentRef: true, inspectedAt: true, project: { select: { code: true } }, _count: { select: { photos: { where: { deletedAt: null } } } } },
     }),
     db.inspection.groupBy({ by: ["result", "status"], where: base, _count: { _all: true } }),
   ]);
   const targets: PdfTarget[] = sourced.flatMap((r) => {
     const src = /Source: SharePoint (.+)/.exec(r.comments ?? "")?.[1]?.trim();
-    return src && /\.pdf$/i.test(src) ? [{ id: r.id, code: r.code, job: r.project.code, projectId: r.projectId, key: pdfMatchKey(src), photos: r._count.photos }] : [];
+    const label = [r.inspectedAt?.toISOString().slice(0, 10), r.componentRef].filter(Boolean).join(" ").slice(0, 70) || "incoming inspection";
+    return [{ id: r.id, code: r.code, job: r.project.code, projectId: r.projectId, key: src && /\.pdf$/i.test(src) ? pdfMatchKey(src) : null, label, photos: r._count.photos }];
   });
   const count = (f: (t: (typeof totals)[number]) => boolean) => totals.filter(f).reduce((n, t) => n + t._count._all, 0);
   const all = count(() => true);

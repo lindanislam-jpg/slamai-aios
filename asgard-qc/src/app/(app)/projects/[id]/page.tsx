@@ -22,9 +22,11 @@ import { removeFileAction } from "./file-actions";
 import { createUnitAction, updateProjectAction, updateUnitAction } from "../actions";
 import { projectFieldDefs, unitFieldDefs } from "../fields";
 import { ItpTab } from "./ItpTab";
+import { PackSummary, PackTable, RecordPackForm } from "@/components/packs/PackViews";
+import { listPacks, packCounts } from "@/lib/services/quality-packs";
 import { ReportGenerator } from "./ReportGenerator";
 
-const TABS = ["overview", "timeline", "photos", "materials", "fabrication", "welding", "inspections", "ncrs", "files", "documents", "itp", "release", "reports"] as const;
+const TABS = ["overview", "timeline", "photos", "materials", "fabrication", "welding", "inspections", "ncrs", "files", "documents", "packs", "itp", "release", "reports"] as const;
 
 export default async function ProjectDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<SP> }) {
   const actor = await requirePagePermission("records.view");
@@ -34,7 +36,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
   const project = await getProject(actor, id);
   const counts = await db.project.findUnique({
     where: { id },
-    select: { _count: { select: { photos: { where: { deletedAt: null } }, materials: true, inspections: true, welds: true, ncrs: true, documents: true, reports: true, files: { where: { removedAt: null } } } } },
+    select: { _count: { select: { photos: { where: { deletedAt: null } }, materials: true, inspections: true, welds: true, ncrs: true, documents: true, reports: true, qualityPacks: true, files: { where: { removedAt: null } } } } },
   });
   const c = counts!._count;
   const fabCount = await db.inspection.count({ where: { projectId: id, type: { in: ["FABRICATION", "DIMENSIONAL"] } } });
@@ -72,6 +74,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
           { key: "ncrs", label: "NCRs", count: c.ncrs },
           { key: "files", label: "Files", count: c.files },
           { key: "documents", label: "Documents", count: c.documents },
+          { key: "packs", label: "Quality packs", count: c.qualityPacks },
           { key: "itp", label: "ITP" },
           { key: "release", label: "Final release" },
           { key: "reports", label: "Reports", count: c.reports },
@@ -87,6 +90,7 @@ export default async function ProjectDetail({ params, searchParams }: { params: 
       {tab === "ncrs" && <Ncrs projectId={id} />}
       {tab === "files" && <Files actor={actor} projectId={id} units={project.units} />}
       {tab === "documents" && <Documents projectId={id} />}
+      {tab === "packs" && <Packs actor={actor} projectId={id} msg={str(sp, "msg")} />}
       {tab === "itp" && <ItpTab actor={actor} projectId={id} />}
       {tab === "release" && <Release actor={actor} projectId={id} units={project.units} />}
       {tab === "reports" && <Reports actor={actor} projectId={id} units={project.units} />}
@@ -525,6 +529,23 @@ async function Reports({ actor, projectId, units }: { actor: Actor; projectId: s
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+async function Packs({ actor, projectId, msg }: { actor: Actor; projectId: string; msg: string | null }) {
+  const [rows, counts] = await Promise.all([listPacks({ projectId }), packCounts({ projectId })]);
+  const canWrite = actor.permissions.has("inspection.write");
+  const back = `/projects/${projectId}?tab=packs`;
+  const returned = rows.filter((r) => r.stage === "RETURNED");
+  const issued = rows.filter((r) => r.stage === "ISSUED");
+  return (
+    <div className="space-y-5">
+      {msg && <p className="rounded-lg border border-gold-600/50 bg-gold-500/10 px-4 py-3 text-sm" role="status">{msg}</p>}
+      {counts.length > 0 && <Card title="Returned / issued by discipline" pad={false}><PackSummary counts={counts} hrefFor={(_, s) => `/quality-packs?projectId=${projectId}${s ? `&stage=${s}` : ""}`} /></Card>}
+      {canWrite && <Card title="Record a pack"><RecordPackForm projects={[]} projectId={projectId} back={back} /></Card>}
+      <Card title={`Returned (${returned.length})`} pad={false}>{returned.length ? <PackTable rows={returned} canWrite={canWrite} back={back} showProject={false} /> : <div className="card-pad text-sm text-ink-300">No packs returned yet.</div>}</Card>
+      <Card title={`Issued, not back yet (${issued.length})`} pad={false}>{issued.length ? <PackTable rows={issued} canWrite={canWrite} back={back} showProject={false} /> : <div className="card-pad text-sm text-ink-300">No packs out on the floor.</div>}</Card>
     </div>
   );
 }
