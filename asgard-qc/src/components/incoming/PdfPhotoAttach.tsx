@@ -25,6 +25,10 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
   const [lines, setLines] = useState<Line[]>([]);
   const [again, setAgain] = useState(false);
   const byKey = new Map(targets.flatMap((t) => (t.key ? [[t.key, t] as const] : [])));
+  // Same name ignoring spaces, dashes, brackets and dots, for small renames between SharePoint and OneDrive.
+  const loose = (k: string) => k.replace(/\.pdf$/i, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const byLoose = new Map(targets.flatMap((t) => (t.key ? [[loose(t.key), t] as const] : [])));
+  const match = (name: string) => byKey.get(pdfMatchKey(name)) ?? byLoose.get(loose(pdfMatchKey(name)));
   const sourced = targets.filter((t) => t.key);
   const missing = sourced.filter((t) => t.photos === 0).length;
 
@@ -56,7 +60,7 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
     const pdfs = Array.from(list).filter((f) => /\.pdf$/i.test(f.name));
     if (!pdfs.length) { setLines([{ file: "—", status: "error", text: "No PDF files in what you chose." }]); return; }
     setPicked(pdfs.map((file) => {
-      const t = byKey.get(pdfMatchKey(file.name));
+      const t = match(file.name);
       return { file, targetId: t?.id ?? "", auto: !!t };
     }));
   }
@@ -112,19 +116,27 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
         {sourced.length} incoming inspections were transcribed from MIS report PDFs on SharePoint; <b className="text-ink-100">{missing}</b> have no pictures yet.
         Choose the PDFs from your OneDrive copy of the job folders (you can select many at once, or a whole folder). Each PDF is matched to its record by file name and its photos are attached unchanged.
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className={`btn-primary cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}><FileUp className="h-4 w-4" />Choose MIS PDFs
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-600 p-3">
+        <span className="text-sm font-semibold text-ink-100">1.</span>
+        <label className={`btn-secondary cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}><FileUp className="h-4 w-4" />Choose MIS PDFs
           <input type="file" multiple accept=".pdf,application/pdf" className="sr-only" disabled={!!busy} onChange={(e) => { choose(e.target.files); e.target.value = ""; }} />
         </label>
         <label className={`btn-secondary cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}><FileUp className="h-4 w-4" />Choose a whole folder
           {/* @ts-expect-error webkitdirectory is supported by Chrome, Edge, Safari and Firefox but not in React's types */}
           <input type="file" webkitdirectory="" multiple className="sr-only" disabled={!!busy} onChange={(e) => { choose(e.target.files); e.target.value = ""; }} />
         </label>
-        <label className="flex items-center gap-2 text-xs text-ink-300"><input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />Also add to records that already have pictures</label>
+        <span className="ml-2 text-sm font-semibold text-ink-100">2.</span>
+        <button type="button" className="btn-primary" disabled={!!busy || !picked.some((p) => p.targetId)} onClick={() => void run()}>
+          Add photos{picked.length ? ` to ${new Set(picked.filter((p) => p.targetId).map((p) => p.targetId)).size} record(s)` : ""}
+        </button>
+        <span className="text-xs text-ink-300" role="status">
+          {busy ? "" : !picked.length ? "No PDFs chosen yet." : `${picked.length} PDF(s) chosen · ${picked.filter((p) => p.targetId).length} matched${picked.some((p) => !p.targetId) ? " · pick the record for the others below" : ""}`}
+        </span>
+        <label className="flex basis-full items-center gap-2 text-xs text-ink-300"><input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />Also add to records that already have pictures</label>
       </div>
       {picked.length > 0 && !busy && (
         <div className="rounded-lg border border-ink-600 p-3">
-          <p className="mb-2 text-sm">{picked.length} PDF(s) chosen · {picked.filter((p) => p.auto).length} matched to a record by file name. Check the record for each, then click Add photos.</p>
+          <p className="mb-2 text-sm">Check the record for each PDF (change it if needed), then click <b>Add photos</b>.</p>
           <div className="max-h-80 overflow-auto">
             <table className="tbl">
               <thead><tr><th>PDF</th><th>Add its photos to</th></tr></thead>
@@ -145,8 +157,7 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
             </table>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="btn-primary" disabled={!picked.some((p) => p.targetId)} onClick={() => void run()}>Add photos to {new Set(picked.filter((p) => p.targetId).map((p) => p.targetId)).size} record(s)</button>
-            <button type="button" className="btn-ghost" onClick={() => setPicked([])}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={() => setPicked([])}>Clear the chosen PDFs</button>
           </div>
         </div>
       )}
