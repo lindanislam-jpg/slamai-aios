@@ -73,6 +73,10 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   ]);
   // Only mention demo data while some exists (it is removed once a company goes live).
   const hasDemo = demoProjects > 0;
+  // An empty period is usually "nothing recorded lately", not "no records": say where the records are.
+  const older = k.inspections.total === 0 && str(sp, "period") !== "365"
+    ? await db.inspection.count({ where: { status: { not: "CANCELLED" }, inspectedAt: { gte: new Date(Date.now() - 365 * 86_400_000) }, ...(projectId ? { projectId } : {}) } })
+    : 0;
   const rag = { RED: health.filter((p) => p.rag === "RED").length, AMBER: health.filter((p) => p.rag === "AMBER").length, GREEN: health.filter((p) => p.rag === "GREEN").length };
   const urgentAlerts = alerts.bySeverity.CRITICAL + alerts.bySeverity.HIGH;
   const qms = qmsStatus();
@@ -98,6 +102,13 @@ export default async function Overview({ searchParams }: { searchParams: Promise
       {!qms.connected && (
         <div className="rounded-lg border border-gold-600/40 bg-gold-600/5 px-4 py-2 text-xs text-gold-300">
           Source: ASGARD Quality Command Centre database. External QMS: {qms.label}.{hasDemo && " Records marked DEMO are synthetic and must not be reported as company results."}
+        </div>
+      )}
+
+      {older > 0 && (
+        <div className="rounded-lg border border-info-500/40 bg-info-500/10 px-4 py-2 text-sm text-ink-100">
+          No inspections were recorded in this period ({range.label.toLowerCase()}). There are {older} in the last 12 months.{" "}
+          <Link className="link" href={`/?period=365${projectId ? `&projectId=${projectId}` : ""}`}>Show the last 12 months</Link>
         </div>
       )}
 
