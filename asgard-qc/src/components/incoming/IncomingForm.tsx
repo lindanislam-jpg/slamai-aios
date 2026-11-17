@@ -30,7 +30,7 @@ export function IncomingForm({ projects, maxFileMb, maxFiles, direct, defaultPro
       const key = `${file.name}-${file.size}-${file.lastModified}`;
       if (files.some((f) => f.key === key) || next.some((f) => f.key === key)) continue;
       const okType = /\.(jpe?g|png|heic|heif)$/i.test(file.name) || /^image\/(jpeg|png|heic|heif)$/.test(file.type);
-      const err = !okType ? "Not a JPG, PNG or HEIC file" : file.size > maxFileMb * 1_048_576 ? `Larger than ${maxFileMb} MB` : file.size === 0 ? "Empty file" : undefined;
+      const err = !okType ? "Not a photo. Add PDFs under Project Register → the project → Files" : file.size > maxFileMb * 1_048_576 ? `Larger than ${maxFileMb} MB` : file.size === 0 ? "Empty file" : undefined;
       next.push({ key, file, preview: !err && /jpe?g|png/i.test(file.type) ? URL.createObjectURL(file) : null, error: err });
     }
     setFiles((cur) => [...cur, ...next].slice(0, maxFiles));

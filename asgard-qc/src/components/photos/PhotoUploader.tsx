@@ -61,7 +61,7 @@ export function PhotoUploader({ projects, units, categories, stages, inspectionT
       const key = `${file.name}-${file.size}-${file.lastModified}`;
       if (files.some((f) => f.key === key) || next.some((f) => f.key === key)) continue;
       let err: string | undefined;
-      if (!isAllowed(file)) err = "Not a JPG, PNG or HEIC file";
+      if (!isAllowed(file)) err = "Not a photo (JPG, PNG, HEIC). Add PDFs and other documents under Project Register → the project → Files";
       else if (file.size > maxFileMb * 1_048_576) err = `Larger than ${maxFileMb} MB`;
       else if (file.size === 0) err = "Empty file";
       const previewable = !err && /jpe?g|png/i.test(file.type);
@@ -163,6 +163,7 @@ export function PhotoUploader({ projects, units, categories, stages, inspectionT
         <ImagePlus className="mx-auto h-8 w-8 text-gold-400" />
         <p className="mt-2 text-sm text-ink-100">Drag factory photos here</p>
         <p className="text-xs text-ink-300">JPG, PNG or HEIC · up to {maxFileMb} MB each · {maxFiles} per upload · originals are stored unchanged</p>
+        <p className="mt-1 text-xs text-ink-300">Photos only. PDFs, drawings and certificates go under <Link className="link" href="/projects">Project Register</Link> → the project → Files.</p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           <label className="btn-secondary cursor-pointer"><Upload className="h-4 w-4" />Choose files
             <input type="file" name="files" multiple accept={ACCEPT} className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
