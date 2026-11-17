@@ -4,7 +4,8 @@ import { upload } from "@vercel/blob/client";
 import { FileUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { extractPdfJpegs, pdfMatchKey } from "@/lib/pdf-jpegs";
+import { pdfToPictures } from "@/lib/client/pdf-pages";
+import { pdfMatchKey } from "@/lib/pdf-jpegs";
 
 export interface PdfTarget { id: string; code: string; job: string; projectId: string; key: string | null; label: string; photos: number }
 type Line = { file: string; status: "ok" | "skip" | "error"; text: string };
@@ -75,25 +76,25 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
         setBusy(`Reading ${n + 1} of ${todo.length}: ${f.name}`);
         if (t.photos > 0 && !again) { out.push({ file: f.name, status: "skip", text: `${t.code} already has ${t.photos} picture(s) — tick "Also add to records that already have pictures" to add anyway` }); setLines([...out]); continue; }
         try {
-          const photos = extractPdfJpegs(new Uint8Array(await f.arrayBuffer()));
-          if (!photos.length) { out.push({ file: f.name, status: "skip", text: `${t.code}: no photos could be taken out of this PDF (it may be a scan) — add pictures on the record by hand` }); setLines([...out]); continue; }
-          const base = f.name.replace(/\.pdf$/i, "");
+          setBusy(`${f.name}: reading the report…`);
+          const photos = await pdfToPictures(f);
+          const asPages = photos[0]?.asPages ?? false;
+          if (!photos.length) { out.push({ file: f.name, status: "error", text: `${t.code}: the PDF could not be read` }); setLines([...out]); continue; }
           let ok = 0;
           const errors: string[] = [];
           for (const [i, p] of photos.entries()) {
-            setBusy(`${f.name}: photo ${i + 1} of ${photos.length}`);
-            if (p.bytes.length > maxFileMb * 1_048_576) { errors.push(`photo ${i + 1} larger than ${maxFileMb} MB`); continue; }
-            const file = new File([p.bytes as BlobPart], `${base}-photo-${String(i + 1).padStart(2, "0")}.jpg`, { type: "image/jpeg" });
+            setBusy(`${f.name}: ${asPages ? "page" : "photo"} ${i + 1} of ${photos.length}`);
+            if (p.file.size > maxFileMb * 1_048_576) { errors.push(`${asPages ? "page" : "photo"} ${i + 1} larger than ${maxFileMb} MB`); continue; }
             try {
-              await sendOne(t.projectId, t.id, file, `Photo ${i + 1} of ${photos.length} from ${f.name}`);
+              await sendOne(t.projectId, t.id, p.file, p.caption);
               ok++;
             } catch (e) {
-              errors.push(`photo ${i + 1}: ${e instanceof Error ? e.message : "failed"}`);
+              errors.push(`${asPages ? "page" : "photo"} ${i + 1}: ${e instanceof Error ? e.message : "failed"}`);
             }
           }
           const dup = errors.filter((e) => /already uploaded/i.test(e)).length;
           if (dup && dup === errors.length && ok === 0) { out.push({ file: f.name, status: "skip", text: `${t.code}: these ${dup} photo(s) are already in the app — nothing added twice` }); setLines([...out]); continue; }
-          out.push({ file: f.name, status: errors.length ? "error" : "ok", text: `${t.code} (${t.job}): ${ok} of ${photos.length} photo(s) attached${errors.length ? ` — ${errors.slice(0, 3).join("; ")}` : ""}` });
+          out.push({ file: f.name, status: errors.length ? "error" : "ok", text: `${t.code} (${t.job}): ${ok} of ${photos.length} ${asPages ? "report page(s) attached as pictures" : "photo(s) attached"}${errors.length ? ` — ${errors.slice(0, 3).join("; ")}` : ""}` });
         } catch (e) {
           out.push({ file: f.name, status: "error", text: `${t.code}: ${e instanceof Error ? e.message : "could not read the PDF"}` });
         }

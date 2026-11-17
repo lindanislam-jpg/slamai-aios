@@ -31,12 +31,15 @@ interface Pending {
 
 type Result = { name: string; ok: true; id: string; code: string; takenAt: string | null; previewAvailable: boolean } | { name: string; ok: false; error: string };
 
-const ACCEPT = ".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif";
+const ACCEPT = ".jpg,.jpeg,.png,.heic,.heif,.pdf,image/jpeg,image/png,image/heic,image/heif,application/pdf";
 const BATCH = 5;
 const LINK_KEYS = ["inspectionId", "ncrId", "weldId", "materialId", "repairId"] as const;
 
+const isPdf = (f: File) => /\.pdf$/i.test(f.name) || f.type === "application/pdf";
+
 function isAllowed(f: File) {
   const n = f.name.toLowerCase();
+  if (isPdf(f)) return true;
   return /\.(jpe?g|png|heic|heif)$/.test(n) || ["image/jpeg", "image/png", "image/heic", "image/heif"].includes(f.type);
 }
 
@@ -61,8 +64,8 @@ export function PhotoUploader({ projects, units, categories, stages, inspectionT
       const key = `${file.name}-${file.size}-${file.lastModified}`;
       if (files.some((f) => f.key === key) || next.some((f) => f.key === key)) continue;
       let err: string | undefined;
-      if (!isAllowed(file)) err = "Not a photo (JPG, PNG, HEIC). Add PDFs and other documents under Project Register → the project → Files";
-      else if (file.size > maxFileMb * 1_048_576) err = `Larger than ${maxFileMb} MB`;
+      if (!isAllowed(file)) err = "Not a photo (JPG, PNG, HEIC) or PDF report";
+      else if (!isPdf(file) && file.size > maxFileMb * 1_048_576) err = `Larger than ${maxFileMb} MB`;
       else if (file.size === 0) err = "Empty file";
       const previewable = !err && /jpe?g|png/i.test(file.type);
       next.push({ key, file, preview: previewable ? URL.createObjectURL(file) : null, error: err });
@@ -82,9 +85,26 @@ export function PhotoUploader({ projects, units, categories, stages, inspectionT
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const valid = files.filter((f) => !f.error);
+    const chosen = files.filter((f) => !f.error);
     if (!projectId) return setError("Choose a project.");
-    if (!valid.length) return setError("Add at least one valid photo.");
+    if (!chosen.length) return setError("Add at least one valid photo.");
+    // A PDF report (e.g. an MIS) is turned into its photos, or one picture per page.
+    const valid: Pending[] = [];
+    const pdfProblems: string[] = [];
+    for (const p of chosen) {
+      if (!isPdf(p.file)) { valid.push(p); continue; }
+      setProgress(`Reading ${p.file.name}…`);
+      try {
+        const { pdfToPictures } = await import("@/lib/client/pdf-pages");
+        const pics = await pdfToPictures(p.file);
+        if (!pics.length) pdfProblems.push(`${p.file.name}: no pictures could be made from this PDF`);
+        for (const pic of pics) valid.push({ key: `${p.key}-${pic.file.name}`, file: pic.file, preview: null });
+      } catch (err) {
+        pdfProblems.push(`${p.file.name}: ${err instanceof Error ? err.message : "could not read the PDF"}`);
+      }
+    }
+    if (pdfProblems.length) setError(pdfProblems.join(" · "));
+    if (!valid.length) return;
     const meta = new FormData(e.currentTarget);
     meta.delete("files");
     meta.delete("camera");
@@ -126,7 +146,7 @@ export function PhotoUploader({ projects, units, categories, stages, inspectionT
         setResults([...all]);
       }
       const okKeys = new Set(all.filter((r) => r.ok).map((r) => r.name));
-      setFiles((cur) => cur.filter((f) => !okKeys.has(f.file.name.slice(0, 200))));
+      setFiles((cur) => cur.filter((f) => !okKeys.has(f.file.name.slice(0, 200)) && !(isPdf(f.file) && [...okKeys].some((n) => n.startsWith(f.file.name.replace(/\.pdf$/i, ""))))));
       router.refresh();
     } catch {
       setError("Network error — some photos may not have uploaded. Check the results below.");
@@ -163,7 +183,7 @@ export function PhotoUploader({ projects, units, categories, stages, inspectionT
         <ImagePlus className="mx-auto h-8 w-8 text-gold-400" />
         <p className="mt-2 text-sm text-ink-100">Drag factory photos here</p>
         <p className="text-xs text-ink-300">JPG, PNG or HEIC · up to {maxFileMb} MB each · {maxFiles} per upload · originals are stored unchanged</p>
-        <p className="mt-1 text-xs text-ink-300">Photos only. PDFs, drawings and certificates go under <Link className="link" href="/projects">Project Register</Link> → the project → Files.</p>
+        <p className="mt-1 text-xs text-ink-300">Photos, or a PDF report such as an MIS (its photos are taken out, or each page becomes a picture). Drawings and certificates go under <Link className="link" href="/projects">Project Register</Link> → the project → Files.</p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           <label className="btn-secondary cursor-pointer"><Upload className="h-4 w-4" />Choose files
             <input type="file" name="files" multiple accept={ACCEPT} className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />

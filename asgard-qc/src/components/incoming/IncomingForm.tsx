@@ -6,11 +6,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createIncomingAction } from "@/app/(app)/incoming/actions";
+import { pdfToPictures } from "@/lib/client/pdf-pages";
 
 type Opt = { value: string; label: string };
 interface Pending { key: string; file: File; preview: string | null; error?: string }
 
-const ACCEPT = ".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif";
+const ACCEPT = ".jpg,.jpeg,.png,.heic,.heif,.pdf,image/jpeg,image/png,image/heic,image/heif,application/pdf";
 const CATEGORY = "Incoming materials";
 
 /** One step for goods-in: job number, what arrived, the result and the photos. */
@@ -29,18 +30,32 @@ export function IncomingForm({ projects, maxFileMb, maxFiles, direct, defaultPro
     for (const file of Array.from(list)) {
       const key = `${file.name}-${file.size}-${file.lastModified}`;
       if (files.some((f) => f.key === key) || next.some((f) => f.key === key)) continue;
-      const okType = /\.(jpe?g|png|heic|heif)$/i.test(file.name) || /^image\/(jpeg|png|heic|heif)$/.test(file.type);
-      const err = !okType ? "Not a photo. Add PDFs under Project Register → the project → Files" : file.size > maxFileMb * 1_048_576 ? `Larger than ${maxFileMb} MB` : file.size === 0 ? "Empty file" : undefined;
+      const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+      const okType = isPdf || /\.(jpe?g|png|heic|heif)$/i.test(file.name) || /^image\/(jpeg|png|heic|heif)$/.test(file.type);
+      const err = !okType ? "Not a photo or PDF" : !isPdf && file.size > maxFileMb * 1_048_576 ? `Larger than ${maxFileMb} MB` : file.size === 0 ? "Empty file" : undefined;
       next.push({ key, file, preview: !err && /jpe?g|png/i.test(file.type) ? URL.createObjectURL(file) : null, error: err });
     }
     setFiles((cur) => [...cur, ...next].slice(0, maxFiles));
   }
 
-  async function sendPhotos(projectId: string, inspectionId: string, caption: string, valid: Pending[]) {
+  async function sendPhotos(projectId: string, inspectionId: string, caption: string, chosen: Pending[]) {
     const failed: string[] = [];
     let stored = 0;
-    const meta = { projectId, inspectionId, category: CATEGORY, inspectionType: "INCOMING_MATERIAL", caption };
+    // An MIS report PDF becomes its photos (or one picture per page).
+    const valid: (Pending & { caption?: string })[] = [];
+    for (const p of chosen) {
+      if (!/\.pdf$/i.test(p.file.name) && p.file.type !== "application/pdf") { valid.push(p); continue; }
+      setBusy(`Reading ${p.file.name}…`);
+      try {
+        const pics = await pdfToPictures(p.file);
+        if (!pics.length) failed.push(`${p.file.name}: no pictures could be made from this PDF`);
+        for (const pic of pics) valid.push({ key: `${p.key}-${pic.file.name}`, file: pic.file, preview: null, caption: pic.caption });
+      } catch (e) {
+        failed.push(`${p.file.name}: ${e instanceof Error ? e.message : "could not read the PDF"}`);
+      }
+    }
     for (const [i, p] of valid.entries()) {
+      const meta = { projectId, inspectionId, category: CATEGORY, inspectionType: "INCOMING_MATERIAL", caption: p.caption ?? caption };
       setBusy(`Uploading photo ${i + 1} of ${valid.length}…`);
       try {
         let res: Response;
@@ -131,10 +146,10 @@ export function IncomingForm({ projects, maxFileMb, maxFiles, direct, defaultPro
           <label className="btn-secondary cursor-pointer"><Camera className="h-4 w-4" />Take photo
             <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
           </label>
-          <label className="btn-secondary cursor-pointer"><Upload className="h-4 w-4" />Choose pictures
+          <label className="btn-secondary cursor-pointer"><Upload className="h-4 w-4" />Choose pictures or MIS PDF
             <input type="file" multiple accept={ACCEPT} className="sr-only" onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
           </label>
-          <span className="text-xs text-ink-300">{files.length ? `${files.filter((f) => !f.error).length} picture(s) ready` : `JPG, PNG or HEIC · up to ${maxFileMb} MB each · originals are stored unchanged`}</span>
+          <span className="text-xs text-ink-300">{files.length ? `${files.filter((f) => !f.error).length} picture(s) ready` : `JPG, PNG, HEIC or the MIS report PDF · up to ${maxFileMb} MB each · originals are stored unchanged`}</span>
         </div>
         {files.length > 0 && (
           <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-8">
@@ -144,7 +159,7 @@ export function IncomingForm({ projects, maxFileMb, maxFiles, direct, defaultPro
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={f.preview} alt={f.file.name} className="aspect-square w-full object-cover" />
                 ) : (
-                  <div className="flex aspect-square items-center justify-center bg-ink-700 p-1 text-center text-[10px] text-ink-300">{f.error ?? "HEIC — no preview"}</div>
+                  <div className="flex aspect-square items-center justify-center bg-ink-700 p-1 text-center text-[10px] text-ink-300">{f.error ?? (/\.pdf$/i.test(f.file.name) ? "MIS PDF — its photos will be added" : "HEIC — no preview")}</div>
                 )}
                 <button type="button" onClick={() => setFiles((cur) => cur.filter((x) => x.key !== f.key))} className="absolute right-1 top-1 rounded bg-ink-950/80 px-1.5 text-xs text-ink-100" aria-label={`Remove ${f.file.name}`}>×</button>
               </li>
