@@ -48,6 +48,10 @@ if [ -n "$DATABASE_URL" ] && [ "$db_writes" = "true" ]; then
     if [ -n "${mat_rows// /}" ]; then
       npm run db:import-materials
     fi
+    stock_rows="${STOCK_SHEET_GZ:-}${STOCK_SHEET_GZ_2:-}"
+    if [ -n "${stock_rows// /}" ]; then
+      npm run db:import-stock-sheet
+    fi
     pack_rows="${PACK_IMPORT_GZ:-}${PACK_IMPORT_GZ_2:-}"
     if [ -n "${pack_rows// /}" ]; then
       npm run db:import-packs
