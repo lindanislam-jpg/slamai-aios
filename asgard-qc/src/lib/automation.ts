@@ -172,6 +172,7 @@ export const AUTOMATION_ACTIONS: Record<string, string> = {
   "automation.reinspection_planned": "Re-inspections planned",
   "automation.alert_escalated": "Alerts escalated",
   "automation.weekly_digest": "Weekly summaries sent",
+  "automation.photo_read": "Photos read by AI",
 };
 
 /** What automation did recently, for the dashboard. */

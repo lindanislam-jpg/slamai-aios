@@ -4,6 +4,7 @@ import { SystemHealthPanel } from "@/components/system/SystemHealthPanel";
 import { Badge, Card, Empty, PageHeader } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { aiStatus } from "@/lib/ai/vision";
 import { emailStatus } from "@/lib/email";
 import { monitorStatus } from "@/lib/monitor/run";
 import { fmtDublin, TIME_ZONE } from "@/lib/monitor/schedule";
@@ -24,6 +25,7 @@ export default async function SystemMonitor() {
   const trend = runs.filter((r) => r.status === "COMPLETED" || r.status === "PARTIAL").slice(0, 14);
   const c = st.cfg;
   const mailReady = emailStatus().configured;
+  const aiReady = aiStatus().configured;
 
   return (
     <div className="space-y-5">
@@ -77,6 +79,7 @@ export default async function SystemMonitor() {
               <label className="flex items-start gap-2"><input type="checkbox" name="autoNcrOnFailedInspection" defaultChecked={auto.autoNcrOnFailedInspection} className="mt-1" /><span><span className="font-medium text-ink-100">Raise the NCR when an inspection fails</span><span className="block text-xs text-ink-300">On submission, a linked NCR is opened with the failed checks filled in. The Quality Manager classifies, investigates or cancels it.</span></span></label>
               <label className="flex items-start gap-2"><input type="checkbox" name="autoPlanReinspection" defaultChecked={auto.autoPlanReinspection} className="mt-1" /><span><span className="font-medium text-ink-100">Plan the re-inspection when an NCR is ready to verify</span><span className="block text-xs text-ink-300">A draft re-inspection of the failed checks is created for an inspector to carry out.</span></span></label>
               <label className="flex items-start gap-2"><input type="checkbox" name="weeklyDigest" defaultChecked={auto.weeklyDigest} className="mt-1" /><span><span className="font-medium text-ink-100">Weekly quality summary</span><span className="block text-xs text-ink-300">Written with Monday&apos;s 09:00 review for everyone who can see this page; emailed too when review emails are on.</span></span></label>
+              <label className="flex items-start gap-2"><input type="checkbox" name="aiReadPhotos" defaultChecked={auto.aiReadPhotos} className="mt-1" /><span><span className="font-medium text-ink-100">Read photos with AI</span><span className="block text-xs text-ink-300">Each uploaded photo is read and its empty caption and description filled in. Category, possible defects and markings such as heat numbers stay as suggestions to apply. {aiReady ? "AI is configured." : "Not active yet: no AI key is set."}</span></span></label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs text-ink-300">Re-inspection planned in (days)<input name="reinspectionDueDays" type="number" min={0} max={60} defaultValue={auto.reinspectionDueDays} className="input mt-1" /></label>
                 <label className="text-xs text-ink-300">Escalate unacknowledged Critical / High alerts after (days, 0 = off)<input name="escalateUnacknowledgedDays" type="number" min={0} max={60} defaultValue={auto.escalateUnacknowledgedDays} className="input mt-1" /></label>
@@ -89,6 +92,7 @@ export default async function SystemMonitor() {
             <li>{auto.autoPlanReinspection ? "On" : "Off"} — re-inspection planned when an NCR is ready to verify</li>
             <li>{auto.escalateUnacknowledgedDays ? `On — urgent alerts escalate after ${auto.escalateUnacknowledgedDays} days` : "Off — alert escalation"}</li>
             <li>{auto.weeklyDigest ? "On" : "Off"} — weekly quality summary</li>
+            <li>{auto.aiReadPhotos && aiReady ? "On" : "Off"} — photos read by AI</li>
           </ul>
         )}
       </Card>

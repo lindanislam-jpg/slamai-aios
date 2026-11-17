@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { autoReadPhoto } from "@/lib/ai/vision";
 import { requireApiActor } from "@/lib/auth";
 import { AppError, publicMessage } from "@/lib/errors";
 import { registerUploadedPhoto, type PhotoMeta } from "@/lib/services/photos";
@@ -11,6 +12,7 @@ export async function POST(req: Request) {
     const actor = await requireApiActor("photo.upload");
     const { projectId, key, fileName, ...meta } = (await req.json()) as Record<string, string>;
     const result = await registerUploadedPhoto(actor, String(projectId ?? ""), String(key ?? ""), String(fileName ?? ""), meta as unknown as PhotoMeta);
+    if (result.ok) after(() => autoReadPhoto(actor, result.id));
     return NextResponse.json({ result });
   } catch (err) {
     return NextResponse.json({ error: publicMessage(err) }, { status: err instanceof AppError ? err.status : 500 });

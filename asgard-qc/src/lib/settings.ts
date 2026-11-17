@@ -72,6 +72,8 @@ export interface AutomationSettings {
   escalateUnacknowledgedDays: number;
   /** Weekly quality summary with Monday's 09:00 review. */
   weeklyDigest: boolean;
+  /** Read each uploaded photo with AI and fill its empty caption and description (needs an AI key). */
+  aiReadPhotos: boolean;
 }
 
 export interface Vocabulary {
@@ -126,6 +128,7 @@ export const SETTING_DEFAULTS = {
     reinspectionDueDays: 2,
     escalateUnacknowledgedDays: 3,
     weeklyDigest: true,
+    aiReadPhotos: true,
   } satisfies AutomationSettings as AutomationSettings,
   vocabulary: {
     photoCategories: [...DEFAULT_PHOTO_CATEGORIES],

@@ -105,6 +105,31 @@ export async function suggestForPhoto(actor: Actor, photoId: string): Promise<Ai
   return suggestion;
 }
 
+/**
+ * Automation: read a newly uploaded photo and fill its caption and description
+ * when the uploader left them empty. Everything else the AI saw (category,
+ * possible observations, legible markings such as heat numbers) stays a draft
+ * on the photo for a person to apply. Never throws: the upload already succeeded.
+ */
+export async function autoReadPhoto(actor: Actor, photoId: string) {
+  try {
+    if (!aiStatus().configured || !(await getSetting("automation")).aiReadPhotos) return;
+    const s = await suggestForPhoto(actor, photoId);
+    const photo = await db.photo.findUnique({ where: { id: photoId }, select: { code: true, caption: true, description: true } });
+    if (!photo) return;
+    const data: { caption?: string; description?: string } = {};
+    if (!photo.caption?.trim() && s.caption) data.caption = `${s.caption.slice(0, 280)} (AI)`;
+    if (!photo.description?.trim() && s.description) data.description = `AI description, not an inspection result: ${s.description}`.slice(0, 4000);
+    if (!Object.keys(data).length) return;
+    await db.$transaction(async (tx) => {
+      await tx.photo.update({ where: { id: photoId }, data });
+      await recordEvent(tx, null, "automation.photo_read", "Photo", photoId, { summary: `${photo.code}: caption/description filled from the AI reading`, after: data });
+    });
+  } catch (e) {
+    console.error("automatic photo reading failed", photoId, e instanceof Error ? e.message : e);
+  }
+}
+
 type Parsed = z.infer<typeof SuggestionSchema>;
 
 async function askAnthropic(model: string, base64: string, prompt: string): Promise<Parsed | null> {

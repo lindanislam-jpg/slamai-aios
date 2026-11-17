@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { autoReadPhoto } from "@/lib/ai/vision";
 import { requireApiActor } from "@/lib/auth";
 import { AppError, publicMessage } from "@/lib/errors";
 import { uploadPhotos, type PhotoMeta } from "@/lib/services/photos";
@@ -28,6 +29,10 @@ export async function POST(req: Request) {
       files.push({ name: f.name, data: Buffer.from(await f.arrayBuffer()) });
     }
     const results = await uploadPhotos(actor, projectId, files, meta as unknown as PhotoMeta);
+    // Read the photos after the response, so the upload is never slowed or failed by the AI.
+    after(async () => {
+      for (const r of results) if (r.ok) await autoReadPhoto(actor, r.id);
+    });
     return NextResponse.json({ results });
   } catch (err) {
     const status = err instanceof AppError ? err.status : 500;

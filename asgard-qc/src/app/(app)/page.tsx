@@ -10,6 +10,7 @@ import { projectOptions } from "@/lib/options";
 import { enumParam, PERIODS, periodRange, str, type SP } from "@/lib/params";
 import { materialFlags } from "@/lib/services/materials";
 import { attentionQueue, projectHealth, type AttentionLevel, type Rag } from "@/lib/attention";
+import { aiStatus } from "@/lib/ai/vision";
 import { AUTOMATION_ACTIONS, automationActivity } from "@/lib/automation";
 import { qmsStatus } from "@/lib/integrations/qms";
 import { alertCounts } from "@/lib/services/alerts";
@@ -73,6 +74,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   ]);
   // Only mention demo data while some exists (it is removed once a company goes live).
   const hasDemo = demoProjects > 0;
+  const aiReady = aiStatus().configured;
   // An empty period is usually "nothing recorded lately", not "no records": say where the records are.
   const older = k.inspections.total === 0 && str(sp, "period") !== "365"
     ? await db.inspection.count({ where: { status: { not: "CANCELLED" }, inspectedAt: { gte: new Date(Date.now() - 365 * 86_400_000) }, ...(projectId ? { projectId } : {}) } })
@@ -160,6 +162,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
               <li>{automation.cfg.autoPlanReinspection ? "On" : "Off"} · re-inspection planned when an NCR is ready to verify</li>
               <li>{automation.cfg.escalateUnacknowledgedDays ? `On · urgent alerts escalate after ${automation.cfg.escalateUnacknowledgedDays} days unacknowledged` : "Off · alert escalation"}</li>
               <li>{automation.cfg.weeklyDigest ? "On" : "Off"} · weekly summary every Monday 09:00</li>
+              <li>{automation.cfg.aiReadPhotos && aiReady ? "On" : automation.cfg.aiReadPhotos ? "Waiting for AI key" : "Off"} · photos read by AI on upload</li>
             </ul>
             <p className="mt-3 text-[11px] text-ink-400">Automation prepares work and reminds people. It never accepts, closes or releases anything.</p>
           </Card>

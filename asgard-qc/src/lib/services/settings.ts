@@ -53,6 +53,7 @@ export const SETTING_SCHEMAS = {
     reinspectionDueDays: z.number().int().min(0).max(60),
     escalateUnacknowledgedDays: z.number().int().min(0).max(60),
     weeklyDigest: z.boolean(),
+    aiReadPhotos: z.boolean().default(true),
   }),
   vocabulary: z.object({ photoCategories: lines.min(1), productionStages: lines.min(1) }),
   branding: z.object({ companyName: z.string().trim().min(1).max(120), departmentName: z.string().trim().min(1).max(120), reportFooter: z.string().trim().max(300) }),

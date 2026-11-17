@@ -60,3 +60,39 @@ describe("AI photo review via OpenAI", () => {
     expect((await db.photo.findUnique({ where: { id } }))?.aiSuggestion).toBeNull();
   });
 });
+
+describe("automatic photo reading on upload", () => {
+  it("fills an empty caption and description, keeps the rest as a draft, and never overwrites what a person wrote", async () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    const { autoReadPhoto } = await import("@/lib/ai/vision");
+    const qc = await makeActor("QC_INSPECTOR");
+    const p = await createProject(qc, { name: "Auto read" });
+    const [a, b] = await uploadPhotos(qc, p.id, [{ name: "a.jpg", data: await jpeg({}) }, { name: "b.jpg", data: await jpeg({ color: "#334455" }) }], { category: "Incoming materials" });
+    await db.photo.update({ where: { id: (b as { id: string }).id }, data: { caption: "Typed by inspector" } });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => reply({
+      caption: "SHS lengths on a delivery truck", description: "Steel hollow sections strapped on a flatbed.", category: "Incoming materials",
+      possibleObservations: ["Possible surface rust"], possibleDefectCategories: [], visibleText: "HEAT 161171", imageQualityNotes: "",
+    })));
+    for (const up of [a, b]) await autoReadPhoto(qc, (up as { id: string }).id);
+    const pa = await db.photo.findUniqueOrThrow({ where: { id: (a as { id: string }).id } });
+    const pb = await db.photo.findUniqueOrThrow({ where: { id: (b as { id: string }).id } });
+    expect(pa.caption).toBe("SHS lengths on a delivery truck (AI)");
+    expect(pa.description).toMatch(/^AI description, not an inspection result:/);
+    expect(pa.heatNumber).toBeNull();
+    expect((pa.aiSuggestion as { visibleText: string }).visibleText).toBe("HEAT 161171");
+    expect(pb.caption).toBe("Typed by inspector");
+    expect(await db.auditEvent.count({ where: { action: "automation.photo_read" } })).toBe(2);
+  });
+
+  it("does nothing without an AI key and never throws", async () => {
+    const { autoReadPhoto } = await import("@/lib/ai/vision");
+    const qc = await makeActor("QC_INSPECTOR");
+    const p = await createProject(qc, { name: "No key" });
+    const [a] = await uploadPhotos(qc, p.id, [{ name: "a.jpg", data: await jpeg({}) }], { category: "Incoming materials" });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await autoReadPhoto(qc, (a as { id: string }).id);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await db.photo.findUniqueOrThrow({ where: { id: (a as { id: string }).id } })).caption).toBeNull();
+  });
+});

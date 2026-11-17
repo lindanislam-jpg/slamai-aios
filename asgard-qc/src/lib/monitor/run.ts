@@ -364,6 +364,7 @@ export async function updateAutomationSettings(actor: Actor, raw: Record<string,
     autoNcrOnFailedInspection: on("autoNcrOnFailedInspection"),
     autoPlanReinspection: on("autoPlanReinspection"),
     weeklyDigest: on("weeklyDigest"),
+    aiReadPhotos: on("aiReadPhotos"),
     reinspectionDueDays: Number(raw.reinspectionDueDays ?? cfg.reinspectionDueDays),
     escalateUnacknowledgedDays: Number(raw.escalateUnacknowledgedDays ?? cfg.escalateUnacknowledgedDays),
   });
