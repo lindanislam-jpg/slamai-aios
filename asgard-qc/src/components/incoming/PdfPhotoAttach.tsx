@@ -56,13 +56,22 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
   const byId = new Map(targets.map((t) => [t.id, t]));
 
   const [ignored, setIgnored] = useState(0);
+  const [note, setNote] = useState("");
+  const [drag, setDrag] = useState(false);
   const bulk = picked.length > 25;
 
-  function choose(list: FileList | null) {
+  function choose(list: FileList | File[] | null) {
     setLines([]);
     setIgnored(0);
-    if (!list?.length) return;
-    const all = Array.from(list);
+    const all = list ? Array.from(list) : [];
+    if (!all.length) {
+      setPicked([]);
+      setNote("The browser gave the app no files from that folder. With OneDrive this happens when files are online-only or the \"Upload files?\" prompt was cancelled. Try dragging the folder onto this box instead, or choose one project folder at a time.");
+      return;
+    }
+    const pdfCount = all.filter((f) => /\.pdf$/i.test(f.name)).length;
+    const matchCount = all.filter((f) => /\.pdf$/i.test(f.name) && match(f.name)).length;
+    setNote(`Read ${all.length} file(s): ${pdfCount} PDF(s), ${matchCount} named like an MIS record.`);
     const pdfs = all.filter((f) => /\.pdf$/i.test(f.name));
     if (!pdfs.length) { setLines([{ file: "—", status: "error", text: "No PDF files in what you chose." }]); return; }
     const rows = pdfs.map((file) => {
@@ -85,6 +94,28 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
       return;
     }
     setPicked(rows);
+  }
+
+  async function readDropped(items: DataTransferItemList) {
+    type Entry = { isFile: boolean; isDirectory: boolean; name: string; file?: (ok: (f: File) => void, err: (e: unknown) => void) => void; createReader?: () => { readEntries: (ok: (e: Entry[]) => void, err: (e: unknown) => void) => void } };
+    const out: File[] = [];
+    const walk = async (e: Entry): Promise<void> => {
+      if (e.isFile && e.file) {
+        if (/\.pdf$/i.test(e.name)) out.push(await new Promise<File>((ok, err) => e.file!(ok, err)));
+      } else if (e.isDirectory && e.createReader) {
+        const reader = e.createReader();
+        for (;;) {
+          const batch = await new Promise<Entry[]>((ok, err) => reader.readEntries(ok, err));
+          if (!batch.length) break;
+          for (const c of batch) await walk(c);
+          setNote(`Reading the folder… ${out.length} PDF(s) found so far`);
+        }
+      }
+    };
+    const roots = Array.from(items).map((i) => (i as unknown as { webkitGetAsEntry: () => Entry | null }).webkitGetAsEntry()).filter((x): x is Entry => !!x);
+    setNote("Reading the folder…");
+    for (const r of roots) await walk(r);
+    choose(out);
   }
 
   async function run() {
@@ -133,7 +164,12 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
 
   const ok = lines.filter((l) => l.status === "ok").length;
   return (
-    <div className="space-y-3">
+    <div
+      className={`space-y-3 rounded-lg ${drag ? "outline-dashed outline-2 outline-gold-500" : ""}`}
+      onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={(e) => { e.preventDefault(); setDrag(false); if (!busy) void readDropped(e.dataTransfer.items); }}
+    >
       <p className="text-sm text-ink-300">
         {sourced.length} incoming inspections were transcribed from MIS report PDFs on SharePoint; <b className="text-ink-100">{missing}</b> have no pictures yet.
         Quickest: click <b>Choose a whole folder</b> and pick your OneDrive <b>0.2 - Large Projects</b> folder — every MIS for these records is found at once — then click <b>Add photos</b>. You can also choose single PDFs. Each PDF is matched to its record by file name and its photos are attached unchanged.
@@ -154,6 +190,7 @@ export function PdfPhotoAttach({ targets, direct, maxFileMb }: { targets: PdfTar
         <span className="text-xs text-ink-300" role="status">
           {busy ? "" : !picked.length ? (ignored ? `None of the ${ignored} files is an MIS for a record without pictures.` : "No PDFs chosen yet.") : `${picked.length} PDF(s) chosen · ${picked.filter((p) => p.targetId).length} matched${ignored ? ` · ${ignored} other files ignored` : ""}${picked.some((p) => !p.targetId) ? " · pick the record for the others below" : ""}`}
         </span>
+        <p className="basis-full text-xs text-ink-300">Or <b className="text-ink-100">drag a folder or PDFs from File Explorer onto this box.</b>{note && <span className="mt-1 block text-gold-300">{note}</span>}</p>
         <label className="flex basis-full items-center gap-2 text-xs text-ink-300"><input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />Also add to records that already have pictures</label>
       </div>
       {bulk && !busy && (
