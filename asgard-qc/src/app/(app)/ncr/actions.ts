@@ -66,3 +66,15 @@ export async function effectivenessAction(id: string, _p: ActionState, fd: FormD
     return status === "EFFECTIVE" ? "Recorded as effective." : "Recorded as not effective — NCR reopened.";
   }, [`/ncr/${id}`, "/ncr"]);
 }
+
+/** Form action: raise an NCR for every inspection that recorded a problem and has none. */
+export async function raiseNcrsForFailsAction() {
+  const { requireApiActor } = await import("@/lib/auth");
+  const { raiseNcrsForFailedInspections } = await import("@/lib/automation");
+  const { revalidatePath } = await import("next/cache");
+  const { redirect } = await import("next/navigation");
+  const actor = await requireApiActor();
+  const r = await raiseNcrsForFailedInspections(actor);
+  for (const p of ["/ncr", "/", "/incoming", "/inspections"]) revalidatePath(p);
+  redirect(`/ncr?status=OPEN_ALL&raised=${r.raised.length}`);
+}

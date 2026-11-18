@@ -24,6 +24,7 @@
     "db:import-ncrs": "tsx --conditions=react-server scripts/import-ncrs-env.ts",
     "db:import-materials": "tsx --conditions=react-server scripts/import-materials-env.ts",
     "db:import-stock-sheet": "tsx --conditions=react-server scripts/import-stock-sheet-env.ts",
+    "db:raise-ncrs": "tsx --conditions=react-server scripts/raise-ncrs-env.ts",
     "db:import-packs": "tsx --conditions=react-server scripts/import-packs-env.ts",
     "db:import-projects": "tsx --conditions=react-server scripts/import-projects-env.ts",
     "db:purge-demo": "tsx --conditions=react-server scripts/purge-demo.ts",

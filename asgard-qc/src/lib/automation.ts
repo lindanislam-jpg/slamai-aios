@@ -186,3 +186,70 @@ export async function automationActivity(days = 7) {
   const counts = Object.fromEntries(Object.keys(AUTOMATION_ACTIONS).map((a) => [a, groups.find((g) => g.action === a)?._count ?? 0])) as Record<string, number>;
   return { days, counts, recent, cfg };
 }
+
+/**
+ * On request of a person who manages NCRs: raise one NCR for every
+ * inspection that recorded a problem (overall result Fail, or any check
+ * marked Fail) and has no NCR yet. Cancelled inspections and re-inspections
+ * are left out. Each NCR is Open, priority Medium, with the failed checks and
+ * the inspection's own comments copied in, for the Quality Manager to
+ * classify, investigate or cancel with a reason. Re-running changes nothing.
+ */
+export async function raiseNcrsForFailedInspections(actor: Actor, opts: { projectId?: string | null } = {}) {
+  if (!actor.permissions.has("ncr.raise") && !actor.permissions.has("ncr.manage")) throw new Error("Not allowed to raise NCRs.");
+  const candidates = await db.inspection.findMany({
+    where: {
+      status: { not: "CANCELLED" },
+      reinspectionOfId: null,
+      ncrs: { none: {} },
+      OR: [{ result: "FAIL" }, { items: { some: { result: "FAIL" } } }],
+      ...(opts.projectId ? { projectId: opts.projectId } : {}),
+    },
+    include: { items: { orderBy: { order: "asc" } }, project: { select: { code: true } } },
+    orderBy: [{ inspectedAt: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
+  });
+  const raised: { code: string; inspection: string; project: string }[] = [];
+  for (const insp of candidates) {
+    const ncr = await db.$transaction(async (tx) => {
+      if (await tx.ncr.findFirst({ where: { inspectionId: insp.id }, select: { id: true } })) return null;
+      const failed = insp.items.filter((i) => i.result === "FAIL");
+      const lines = failed.slice(0, 20).map((i) => `- ${i.description}${i.requirement ? ` (required: ${i.requirement})` : ""}${i.actual ? ` — found: ${i.actual}` : ""}${i.notes ? ` — ${i.notes}` : ""}`);
+      const when = insp.inspectedAt ? insp.inspectedAt.toISOString().slice(0, 10) : "date not recorded";
+      const code = await nextCode(tx, "NCR", 4);
+      const row = await tx.ncr.create({
+        data: {
+          code,
+          projectId: insp.projectId,
+          unitId: insp.unitId,
+          inspectionId: insp.id,
+          componentRef: insp.componentRef,
+          drawingRef: insp.drawingRef,
+          stageOfDetection: insp.stage,
+          detectedBy: insp.inspectorName,
+          requirementRef: insp.criteriaRef,
+          raisedById: actor.id,
+          raisedByName: actor.name,
+          defectCategory: CATEGORY_BY_TYPE[insp.type] ?? "Other / requires review",
+          priority: "MEDIUM",
+          description: [
+            `Raised from inspection ${insp.code} (${when}), which recorded a problem and had no NCR.`,
+            failed.length ? `Failed checks:\n${lines.join("\n")}` : null,
+            insp.comments ? `Inspection notes:\n${insp.comments}` : null,
+            "Quality Manager: confirm whether it was already resolved, classify and assign, or cancel with a reason.",
+          ].filter(Boolean).join("\n").slice(0, 4000),
+          isDemo: insp.isDemo,
+        },
+      });
+      await recordEvent(tx, actor, "ncr.raise_for_failed_inspection", "Ncr", row.id, { summary: `${code} raised from failed inspection ${insp.code}` });
+      return row;
+    }, { timeout: 20_000 });
+    if (ncr) raised.push({ code: ncr.code, inspection: insp.code, project: insp.project.code });
+  }
+  if (raised.length) {
+    await db.$transaction((tx) => notifyHolders(tx, "ncr.manage", {
+      kind: "AUTO_NCR_RAISED", dedupeKey: `NCR_BATCH:${raised[0].code}`, severity: "warning",
+      title: `${raised.length} NCR(s) raised for failed inspections`, body: `${raised.slice(0, 8).map((r) => `${r.code} (${r.project})`).join(", ")}${raised.length > 8 ? " …" : ""}. Review, classify and assign them.`, href: "/ncr?status=OPEN_ALL",
+    }));
+  }
+  return { checked: candidates.length, raised };
+}

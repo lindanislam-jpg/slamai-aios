@@ -56,6 +56,9 @@ if [ -n "$DATABASE_URL" ] && [ "$db_writes" = "true" ]; then
     if [ -n "${pack_rows// /}" ]; then
       npm run db:import-packs
     fi
+    if [ "${RAISE_NCRS_FOR_FAILS:-}" = "true" ]; then
+      npm run db:raise-ncrs
+    fi
     if [ "${PURGE_DEMO_DATA:-}" = "true" ]; then
       # Removes only records flagged as demo; refuses if real records depend on them.
       npm run db:purge-demo -- --yes

@@ -8,6 +8,8 @@ import { NCR_DEFECT_CATEGORIES } from "@/lib/domain/constants";
 import { projectOptions } from "@/lib/options";
 import { enumParam, str, type SP } from "@/lib/params";
 import { listNcrs } from "@/lib/services/ncrs";
+import { db } from "@/lib/db";
+import { raiseNcrsForFailsAction } from "./actions";
 
 export const metadata = { title: "NCR & CAPA" };
 
@@ -26,7 +28,12 @@ export default async function NcrRegister({ searchParams }: { searchParams: Prom
     q: str(sp, "q"),
     overdue: str(sp, "overdue") === "1",
   };
-  const [rows, projects] = await Promise.all([listNcrs(actor, filter), projectOptions()]);
+  const [rows, projects, failedWithout] = await Promise.all([
+    listNcrs(actor, filter),
+    projectOptions(),
+    db.inspection.count({ where: { status: { not: "CANCELLED" }, reinspectionOfId: null, ncrs: { none: {} }, OR: [{ result: "FAIL" }, { items: { some: { result: "FAIL" } } }] } }),
+  ]);
+  const justRaised = str(sp, "raised");
   const now = Date.now();
   const open = rows.filter((n) => !["CLOSED", "CANCELLED"].includes(n.status));
   const overdue = open.filter((n) => n.targetDate && n.targetDate.getTime() < now);
@@ -52,6 +59,13 @@ export default async function NcrRegister({ searchParams }: { searchParams: Prom
           </>
         }
       />
+      {justRaised && <p className="mb-4 rounded-lg border border-gold-600/50 bg-gold-500/10 px-4 py-3 text-sm" role="status">{justRaised} NCR(s) raised for failed inspections. They are Open below for review.</p>}
+      {failedWithout > 0 && actor.permissions.has("ncr.raise") && (
+        <form action={raiseNcrsForFailsAction} className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warn-600/50 bg-warn-600/10 px-4 py-3 text-sm">
+          <span><b>{failedWithout}</b> inspection(s) recorded a problem but have no NCR.</span>
+          <button className="btn-primary" type="submit">Raise NCRs for all {failedWithout}</button>
+        </form>
+      )}
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Shown" value={rows.length} />
         <Stat label="Open" value={open.length} tone={open.length ? "warn" : undefined} />
