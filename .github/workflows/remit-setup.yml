@@ -1,0 +1,77 @@
+name: Set up money-transfer database
+
+# Run manually only.
+#
+# Seeding runs against a real database. Wiring that to `push` would re-run it on
+# every commit and, worse, would make an accidental force-push a database
+# event. A human clicks this when they mean it.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which database is REMIT_DATABASE_URL pointing at? (for the run log only)"
+        required: true
+        default: "preview"
+        type: choice
+        options:
+          - preview
+          - production
+
+# Never let two setup runs touch the same database at once.
+concurrency:
+  group: remit-setup
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    name: Push schema and seed reference data
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      # Set this in Settings → Secrets and variables → Actions → New repository
+      # secret. GitHub masks it in all logs, and `setup:remit` additionally
+      # redacts the connection string to host and database name in its output.
+      DATABASE_URL: ${{ secrets.REMIT_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.REMIT_DATABASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Fail with an explanation rather than a confusing connection error.
+      - name: Check the secret is present
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::REMIT_DATABASE_URL is not set."
+            echo "Add it under Settings → Secrets and variables → Actions."
+            echo "Use the same Postgres connection string your deployment uses."
+            exit 1
+          fi
+          echo "Target: ${{ inputs.target }}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate the Prisma client
+        run: npx prisma generate
+
+      # Pushes the schema, seeds the corridor / fee rule / demo accounts,
+      # verifies the result, and reports anything still missing. Idempotent.
+      - name: Set up the database
+        run: npm run setup:remit
+
+      - name: What is left to do
+        if: success()
+        run: |
+          echo "::notice::Database is ready."
+          echo "Still required on the deployment itself (this workflow cannot set them):"
+          echo "  NEXTAUTH_SECRET  — generate with: openssl rand -base64 32"
+          echo "  DATABASE_URL     — the same connection string used here"
+          echo "  DIRECT_URL       — the same again"
+          echo "  REMIT_DEMO_MODE  — true, to enable the sandbox simulator"
+          echo "Then redeploy, and check GET /api/remit/health on the deployment."
