@@ -262,3 +262,59 @@ is free to run.
 
 Making this profitable would require a different entry thesis, which is new
 research rather than repair.
+
+## Replacement-thesis research — 2026-11-18, concluded
+
+After the ICT engine was shown to have no edge, four alternative entry theses
+were tested with the same harness. Each had a pre-committed pass condition.
+All four failed. Research stopped.
+
+| Thesis | Horizon | Sample | Result |
+|---|---|---|---|
+| ICT confluence (original) | 15m | 189 trades, 12 fresh markets | 49.7% direction, z = −0.07 |
+| Opening-range breakout | 15m | 177 / 90 trades, 8 markets | 45.2% (30-min OR), 50.0% (60-min OR) |
+| Stretch fade / continuation | 15m | 195 in-sample, 434 out-of-sample | sign FLIPS between samples |
+| Time-series momentum | daily | 629 periods, 18 markets, 10 years | **loses to buy-and-hold, t = −4.42** |
+
+### Tie-break measurement check (the one methodological doubt — closed)
+
+Suspicion: counting a bar that touches both target and stop as a LOSS biased
+every result downward. **It did not.** Re-measured by dropping into 5-minute
+bars to see which level was reached first:
+
+* opening-range breakout: **0** ambiguous bars in 177 trades. 45.2% under all
+  three rules (pessimistic / resolved / optimistic) — identical.
+* stretch fade: **2** ambiguous bars in 195 trades. 42.1% → 43.1%. One point.
+
+A single 15m bar almost never straddles both a 1 ATR target and a 1 ATR stop.
+The numbers were honest all along.
+
+### Why "both directions lose" was NOT a contradiction
+
+Fade scored 42% on 8 futures; continuation scored 43.5% on 14 *different*
+markets. Those were never opposite sides of the same trade. Read within each
+sample: the 8 futures implied continuation ≈57%, the 14 fresh markets implied
+fade ≈56.5%. **The effect flipped sign between samples** — the signature of
+noise, not of an edge.
+
+### The momentum trap, worth remembering
+
+Time-series momentum was the ONLY thesis to produce a significant hit rate:
+56.1%, z = +3.07 on 629 periods. It was still worthless. Split by asset class
+and benchmarked against simply holding:
+
+| | Momentum | Always long | Difference |
+|---|---|---|---|
+| Equity indices | +0.62% (t=+1.21) | +2.81% (t=+5.87) | **−2.19%, t = −4.42** |
+| Everything else | +0.80% (t=+1.08) | +1.99% (t=+2.73) | −1.19%, t = −1.42 |
+
+The hit rate came from being long during a decade when markets rose. The trend
+filter only pulled you out of rising markets. **A significant hit rate is not
+an edge — always benchmark against the passive alternative.**
+
+### Conclusion
+
+Across horizons from 15 minutes to three months, and across indices, futures,
+crypto, equities, ETFs, FX and grains, nothing beat its benchmark. Six separate
+in-sample patterns collapsed under out-of-sample or benchmark testing. The
+research is stopped, not paused.
