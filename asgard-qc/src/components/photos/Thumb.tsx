@@ -12,7 +12,7 @@ export function Thumb({ id, hasThumb, alt, className }: { id: string; hasThumb: 
       </div>
     );
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={`/api/files/photo/${id}?size=thumb`} alt={alt} loading="lazy" className={clsx("bg-ink-700 object-cover", className)} />;
+  return <img src={`/api/files/photo/${id}?size=thumb`} alt="" title={alt} loading="lazy" className={clsx("bg-ink-700 object-cover", className)} />;
 }
 
 export function PhotoDate({ takenAt, uploadedAt }: { takenAt: Date | null; uploadedAt: Date }) {

@@ -186,7 +186,7 @@ export default async function InspectionDetail({ params }: { params: Promise<{ i
                   <Link key={ph.id} href={`/photos/${ph.id}`} className="group block overflow-hidden rounded-md border border-ink-600" title={ph.caption ?? ph.code}>
                     {ph.thumbKey ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={`/api/files/photo/${ph.id}?size=thumb`} alt={ph.caption ?? ph.code} className="aspect-square w-full object-cover transition group-hover:opacity-80" loading="lazy" />
+                      <img src={`/api/files/photo/${ph.id}?size=thumb`} alt="" title={ph.caption ?? ph.code} className="aspect-square w-full bg-ink-700 object-cover transition group-hover:opacity-80" loading="lazy" />
                     ) : (
                       <div className="flex aspect-square items-center justify-center bg-ink-700 text-[10px] text-ink-300">No preview</div>
                     )}

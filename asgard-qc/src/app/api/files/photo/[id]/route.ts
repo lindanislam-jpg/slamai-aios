@@ -18,14 +18,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!photo || (photo.deletedAt && !actor.permissions.has("photo.review"))) return new NextResponse("Not found", { status: 404 });
     const key = thumb ? photo.thumbKey : photo.storageKey;
     if (!key) return new NextResponse("No preview available", { status: 404 });
-    const data = await storage().get(key);
+    let data: Buffer;
+    try {
+      data = await storage().get(key);
+    } catch (e) {
+      // Usually the file store refusing access (e.g. a storage limit reached), not a missing photo.
+      console.error(`photo ${photo.code}: file store read failed —`, e instanceof Error ? e.message : e);
+      return NextResponse.json({ error: "The photo store did not return this file. Check the Blob store status in Vercel (Storage)." }, { status: 503 });
+    }
     const safeName = photo.originalName.replace(/[^\w.\- ]+/g, "_");
     return new NextResponse(new Uint8Array(data), {
       headers: {
         "Content-Type": thumb ? "image/jpeg" : photo.mimeType,
         "Content-Length": String(data.length),
         "Content-Disposition": thumb ? "inline" : `attachment; filename="${photo.code}-${safeName}"`,
-        "Cache-Control": "private, max-age=300",
+        // A stored photo never changes, so browsers can keep it and not ask the store again.
+        "Cache-Control": thumb ? "private, max-age=604800, immutable" : "private, max-age=3600",
         "X-Content-Type-Options": "nosniff",
       },
     });

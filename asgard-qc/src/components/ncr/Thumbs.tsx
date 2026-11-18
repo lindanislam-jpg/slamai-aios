@@ -20,7 +20,7 @@ export function Thumbs({ photos, size = "h-24 w-32" }: { photos: ThumbPhoto[]; s
           <div className={`${size} overflow-hidden rounded-md border border-ink-600 bg-ink-900`}>
             {p.thumbKey ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={`/api/files/photo/${p.id}?size=thumb`} alt={p.caption ?? p.code} className="h-full w-full object-cover transition group-hover:scale-105" loading="lazy" />
+              <img src={`/api/files/photo/${p.id}?size=thumb`} alt="" title={p.caption ?? p.code} className="h-full w-full bg-ink-700 object-cover transition group-hover:scale-105" loading="lazy" />
             ) : (
               <div className="flex h-full items-center justify-center px-2 text-center text-[10px] text-ink-300">No preview (original stored)</div>
             )}
