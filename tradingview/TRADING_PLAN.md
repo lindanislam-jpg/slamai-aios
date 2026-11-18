@@ -1,60 +1,61 @@
-# TradePulse trading plan (demo only — no market has a demonstrated edge)
+# TradePulse trading plan (demo only — the engine has no demonstrated edge)
 
-Rewritten 2026-11-17. The 2026-11-11 version recommended US30 as the Tier 1 demo
-market on the strength of one Strategy Tester window. Two weeks of live ledger
-data contradict it, and the two measurements cannot be reconciled. Until that is
-resolved, **this plan authorises demo trading only.** It is a rule set, not a
-promise of profit, and right now it is not even a claim of edge.
+Rewritten 2026-11-18, after ~500 trades across 26 markets measured outside
+TradingView showed the entry signal is a coin flip on direction (49.7%
+out-of-sample). Earlier versions of this plan recommended NAS100, then gold,
+then US30, each on a single favourable backtest window. All three
+recommendations are withdrawn.
 
-## STOP — what is and is not known (read before anything else)
+This is a rule set for demo practice. It is not a claim that the system makes
+money, because the evidence says it does not.
 
-**This section has been corrected twice on 2026-11-17. Treat every explanation
-below as unconfirmed.** Two theories were raised and both were disproven by
-direct observation on the same day. That record is kept here deliberately, so
-nobody re-runs the dead ends.
+## STOP — the engine has no edge. Demo only, and probably not even that.
 
-### The one thing that is solid
+**Settled 2026-11-18.** Earlier versions of this section chased explanations for
+why one backtest looked good. That question is now closed by a larger test: the
+backtest was noise.
 
-The two Pine files generate trades identically. A full diff of
-`ict_engine_v28_locked.pine` against `ict_strategy_v28.pine` shows the only
-differences are the indicator/strategy header, four display-only defaults, the
-BUY/SELL tag gating, `tradeKeep`, and the strategy bridge. Every line deciding
-whether a trade fires is identical.
+Across ~500 trades on 26 markets — indices, futures, crypto, single stocks,
+ETFs, FX and grains — measured outside TradingView with
+`autotrader/yf_replay.py`:
 
-### The disagreement, still unexplained
+| Measure | Result |
+|---|---|
+| Direction, in-sample | 44.4% |
+| Direction, out-of-sample #1 (132 trades) | 48.5% |
+| Direction, out-of-sample #2 (189 trades) | **49.7%**, z = −0.07 |
+| Net R, 8-market breadth test (119 trades) | **−31.7R**, 25% win rate |
+| Five exit models | all negative |
+| Confluence score as a quality ranking | no predictive power |
 
-| Measurement | Window | Trades | Per day | Result |
-|---|---|---|---|---|
-| Strategy Tester `ict_strategy_v28` (US30) | labelled Aug 2 – Nov 11 | 23 | ~0.2 | +1.95%, PF 1.64 |
-| Indicator ledger (US30) | chart history | 26 | ~1.7 | **−9.3R, 4 W / 22 L** |
+TP1 sits at +1R against a −1R stop, so direction is a symmetric bracket where a
+coin flip scores 50%. The engine scores 49.7% on fresh data. **It flips a coin.**
+A coin flip on a ±1R bracket loses exactly the trading costs.
 
-### Theories raised and KILLED — do not retry these
+This is not a bug, a setting, or a tuning problem. The implementation is sound —
+non-repainting, honestly accounted, levels locked. The thesis is what fails.
 
-1. *"The tester only had two weeks of bars loaded, so the per-day maths was
-   wrong."* **Disproven.** Loading the saved `TradePulse ICT Backtest` strategy
-   and opening its List of Trades shows a first trade on **Sep 1, 2026** — about
-   2.5 months of history. The Strategy Tester is not limited to two weeks.
-2. *"TradingView counts each `strategy.exit` partial as its own trade, inflating
-   the win rate."* **Disproven.** In the List of Trades each trade number carries
-   exactly one Entry row and one Exit row with a single size. Varying sizes
-   (1, 0.2, 1.4) come from percent-of-equity position sizing, not from splitting
-   a position.
+### Leads that looked real and died out-of-sample — do not reopen
 
-### What this means right now
+1. **"Invert the signal"** — 39.0% in-sample looked exploitable; 48.5% on fresh
+   markets. Dead.
+2. **"Half at TP1, half to TP3 makes +4.3R"** — a bug that charged only −0.5R to
+   trades stopping out before TP1, which is 61% of them. Corrected: −31.7R.
+3. **"The confluence score is anti-predictive"** — 47.5→40.0→35.0% in-sample
+   reversed to 47.7→51.9→54.2% out-of-sample. All three pre-committed pass
+   conditions failed.
 
-No explanation for the sign disagreement survives contact with the evidence. The
-frequency gap is real and unexplained. **No real money on this engine.**
+Anything that looks promising in-sample must clear a pre-committed out-of-sample
+test before it is believed. Three for three have failed so far.
 
-The decisive test is an independent third implementation outside TradingView:
-the Python port in `autotrader/` run with `--replay`. It is blocked on a
-Capital.com demo API key in `autotrader/.env` (`CAPITAL_API_KEY` and
-`CAPITAL_PASSWORD` are empty; only the identifier is filled in).
+### What this means
 
-Also note, so it is not rediscovered: the saved `TradePulse ICT Backtest` script
-is NOT a valid comparison — it runs Setup Mode `Early`, `All sessions`, 100%-of-
-equity sizing, 100x leverage and pyramiding 1. Its numbers (+1.68%, PF 1.09,
-28 trades, 28.6% profitable, Sep 1 – Nov 17) describe a different configuration
-from the chart and must not be quoted as evidence for or against the engine.
+**No real money.** Not on US30, not on NAS100, not on gold, not on any market
+tested. Demo is for learning the platform and the rules, not for validating an
+edge that the data says is not there.
+
+Making this profitable would require a different entry thesis. That is new
+research, not repair.
 
 ## Phase 0: demo first (minimum 4 weeks, 30 closed trades)
 - Trade a demo account on Capital.com with the chart layout "TradePulse NAS100"

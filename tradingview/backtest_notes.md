@@ -193,3 +193,72 @@ z ≈ −1.9, not significant. **Conclusion: the entry signal has no demonstrate
 directional edge in either direction. It is a coin flip, and a coin flip on a
 ±1R bracket loses exactly the trading costs.** Do not build an inverted strategy
 on the in-sample number.
+
+## Feature-by-feature edge test, and the final verdict — 2026-11-18
+
+The question: does ANY component of the signal carry directional information?
+If nothing does, there is nothing to repair and no recombination helps.
+Measured as the +1R-first rate on the symmetric ±1R bracket, where a coin
+flip scores 50%.
+
+### In-sample — 188 trades, 14 futures/index markets
+
+| Slice | n | +1R first | z |
+|---|---|---|---|
+| ALL | 187 | 44.4% | −1.54 |
+| LONG | 84 | 39.3% | −1.96 |
+| SHORT | 103 | 48.5% | −0.30 |
+| grade A | 61 | 36.1% | −2.18 |
+| grade B | 122 | 47.5% | −0.54 |
+| score 60–69 | 122 | 47.5% | −0.54 |
+| score 70–79 | 45 | 40.0% | −1.34 |
+| score 80–100 | 20 | 35.0% | −1.34 |
+| 13:00–14:59 UTC | 104 | 51.9% | +0.39 |
+| 15:00–16:59 UTC | 39 | 30.8% | −2.40 |
+| 17:00–20:59 UTC | 44 | 38.6% | −1.51 |
+
+Nothing above 55%. The only two slices clearing |z| > 2 are NEGATIVE. The
+score appeared monotonically ANTI-predictive: 47.5% → 40.0% → 35.0%, which
+would have explained why Strict mode lost on every market.
+
+### Out-of-sample test of that, PRE-COMMITTED before running
+
+Pass required all three: (1) high-score bucket below low-score bucket,
+(2) high bucket below 50% with z < −2, (3) high bucket n ≥ 30.
+
+Fresh markets, none used in-sample: BTC-USD, ETH-USD, AAPL, MSFT, NVDA,
+TSLA, SPY, QQQ, 6B=F, 6J=F, ZC=F, ZS=F. 189 trades.
+
+| Bucket | n | +1R first | z |
+|---|---|---|---|
+| score 60–69 | 111 | 47.7% | −0.47 |
+| score 70–79 | 54 | 51.9% | +0.27 |
+| score 80–100 | 24 | 54.2% | +0.41 |
+| **ALL** | **189** | **49.7%** | **−0.07** |
+
+The decline REVERSED. All three conditions FAILED. **HYPOTHESIS REJECTED.**
+The confluence score does not rank trades in either direction.
+
+### VERDICT — the project's conclusion
+
+Across ~500 trades on 26 distinct markets spanning indices, futures, crypto,
+single stocks, ETFs, FX and grains:
+
+* direction 44.4% in-sample, 48.5% and **49.7%** out-of-sample — a coin flip
+* net −31.7R over the 8-market breadth test, 25% win rate
+* every one of five exit models negative
+* the confluence score carries no predictive power at any threshold
+
+**The engine has no edge. This is not a bug, a setting, or a tuning problem.**
+It is non-repainting, honestly accounted and correctly implemented, and it
+flips a coin on direction. A coin flip on a ±1R bracket loses exactly the
+trading costs.
+
+Three separate leads looked real in-sample and every one died out-of-sample:
+the 39% inversion, the "+4.3R" half-at-TP1 exit (a bug), and the
+anti-predictive score. Do not reopen any of them without a fresh pre-committed
+out-of-sample test. The harness for that is `autotrader/yf_replay.py` and it
+is free to run.
+
+Making this profitable would require a different entry thesis, which is new
+research rather than repair.
