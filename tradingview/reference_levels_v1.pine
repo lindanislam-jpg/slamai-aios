@@ -1,0 +1,163 @@
+// ============================================================================
+// TradePulse Reference Levels
+// ----------------------------------------------------------------------------
+// THIS INDICATOR MAKES NO PREDICTION. It does not generate signals, it has no
+// score, and it will never tell you to buy or sell. It marks where price has
+// already been and gives you the numbers needed to size a position.
+//
+// Everything drawn here is a FACT about past price:
+//   • Previous day high / low        — the completed prior session's extremes
+//   • Previous week high / low       — the completed prior week's extremes
+//   • Overnight range                — high/low between the close and the open
+//   • Today's session open           — where the cash session began
+//   • ATR and position size          — volatility, and what 1R costs you
+//
+// Why there are no signals: seven predictive theses were tested on this engine
+// across 26 markets (see tradingview/backtest_notes.md). None produced a
+// tradeable edge. Rather than ship arrows that fire at a coin flip, this marks
+// the levels and leaves the decision to you.
+//
+// Non-repainting: daily and weekly values use the COMPLETED prior period.
+// ============================================================================
+//@version=6
+indicator("TradePulse Reference Levels", shorttitle="TP Levels", overlay=true,
+     max_lines_count=100, max_labels_count=100, max_boxes_count=50)
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+gLv = "Levels"
+showPD   = input.bool(true,  "Previous Day High / Low",  group=gLv)
+showPW   = input.bool(false, "Previous Week High / Low", group=gLv)
+showON   = input.bool(true,  "Overnight Range",          group=gLv)
+showOpen = input.bool(true,  "Session Open",             group=gLv)
+extendR  = input.int(8, "Extend Lines (bars right)", minval=0, maxval=60, group=gLv,
+     tooltip="How far past the last candle the lines and their price tags sit. Keep it small or the tags land off-screen.")
+
+gSes = "Session"
+sessTz   = input.string("America/New_York", "Timezone", group=gSes,
+     options=["America/New_York","Europe/London","UTC","Africa/Johannesburg","Asia/Tokyo","Australia/Sydney"])
+sessStr  = input.session("0930-1600", "Cash Session", group=gSes)
+onStr    = input.session("1800-0930", "Overnight",    group=gSes)
+shade    = input.bool(false, "Shade The Session", group=gSes)
+
+gSz = "Sizing"
+showTbl  = input.bool(true, "Show Readout", group=gSz)
+acct     = input.float(100000, "Account Size", minval=0, group=gSz)
+riskPct  = input.float(1.0, "Risk Per Trade (%)", minval=0.0, step=0.1, group=gSz)
+atrLen   = input.int(14, "ATR Length", minval=1, group=gSz)
+stopAtr  = input.float(2.0, "Stop Distance (ATR x)", minval=0.1, step=0.1, group=gSz,
+     tooltip="Only used to work out what a position would cost. It is not a recommendation.")
+tblPos   = input.string("Bottom Right", "Readout Position", group=gSz,
+     options=["Bottom Right","Bottom Left","Middle Left","Middle Right","Top Right","Top Left"],
+     tooltip="TradingView draws candles OVER this readout, so put it wherever the price action is not. Move it whenever the market moves into it.")
+
+cPD = input.color(color.new(#42A5F5, 0),  "Prev Day",  group="Colours", inline="c1")
+cPW = input.color(color.new(#AB47BC, 0),  "Prev Week", group="Colours", inline="c1")
+cON = input.color(color.new(#FFA726, 0),  "Overnight", group="Colours", inline="c2")
+cOP = input.color(color.new(#BDBDBD, 0),  "Open",      group="Colours", inline="c2")
+
+// ── Data ────────────────────────────────────────────────────────────────────
+atr = ta.atr(atrLen)
+
+// completed prior periods only — [1] on a higher timeframe never repaints
+pdh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
+pdl = request.security(syminfo.tickerid, "D", low[1],  lookahead=barmerge.lookahead_on)
+pwh = request.security(syminfo.tickerid, "W", high[1], lookahead=barmerge.lookahead_on)
+pwl = request.security(syminfo.tickerid, "W", low[1],  lookahead=barmerge.lookahead_on)
+
+// The overnight range and session open are built from THIS chart's bars, so
+// they only mean anything on an intraday timeframe. On daily and above they
+// would quietly report nonsense, so they are switched off instead.
+isIntraday = timeframe.isintraday
+inSess = not na(time(timeframe.period, sessStr, sessTz))
+inON   = not na(time(timeframe.period, onStr,   sessTz))
+sessStart = inSess and not inSess[1]
+
+// overnight extremes, rebuilt each night
+var float onHi = na
+var float onLo = na
+if inON and not inON[1]
+    onHi := high
+    onLo := low
+else if inON
+    onHi := math.max(nz(onHi, high), high)
+    onLo := math.min(nz(onLo, low),  low)
+
+var float sessOpen = na
+if sessStart
+    sessOpen := open
+
+// ── Drawing ─────────────────────────────────────────────────────────────────
+var line lPDH = na, var line lPDL = na, var line lPWH = na, var line lPWL = na
+var line lONH = na, var line lONL = na, var line lOP  = na
+var label bPDH = na, var label bPDL = na, var label bPWH = na, var label bPWL = na
+var label bONH = na, var label bONL = na, var label bOP  = na
+
+f_lvl(_on, _ln, _lb, _price, _col, _txt, _style) =>
+    line  l = _ln
+    label b = _lb
+    if _on and not na(_price)
+        r = bar_index + extendR
+        if na(l)
+            l := line.new(bar_index, _price, r, _price, color=_col, width=1, style=_style)
+            b := label.new(r, _price, _txt, style=label.style_label_right, color=color.new(_col, 80),
+                 textcolor=_col, size=size.tiny)
+        else
+            line.set_xy1(l, bar_index - 1, _price), line.set_xy2(l, r, _price)
+            label.set_xy(b, r, _price), label.set_text(b, _txt)
+    else
+        if not na(l)
+            line.delete(l), label.delete(b)
+            l := na, b := na
+    [l, b]
+
+if barstate.islast
+    [a1, a2] = f_lvl(showPD, lPDH, bPDH, pdh, cPD, "PDH " + str.tostring(pdh, format.mintick), line.style_solid)
+    lPDH := a1, bPDH := a2
+    [b1, b2] = f_lvl(showPD, lPDL, bPDL, pdl, cPD, "PDL " + str.tostring(pdl, format.mintick), line.style_solid)
+    lPDL := b1, bPDL := b2
+    [c1, c2] = f_lvl(showPW, lPWH, bPWH, pwh, cPW, "PWH " + str.tostring(pwh, format.mintick), line.style_dashed)
+    lPWH := c1, bPWH := c2
+    [d1, d2] = f_lvl(showPW, lPWL, bPWL, pwl, cPW, "PWL " + str.tostring(pwl, format.mintick), line.style_dashed)
+    lPWL := d1, bPWL := d2
+    [e1, e2] = f_lvl(showON and isIntraday, lONH, bONH, onHi, cON, "ON High " + str.tostring(onHi, format.mintick), line.style_dotted)
+    lONH := e1, bONH := e2
+    [f1, f2] = f_lvl(showON and isIntraday, lONL, bONL, onLo, cON, "ON Low " + str.tostring(onLo, format.mintick), line.style_dotted)
+    lONL := f1, bONL := f2
+    [g1, g2] = f_lvl(showOpen and isIntraday, lOP, bOP, sessOpen, cOP, "Open " + str.tostring(sessOpen, format.mintick), line.style_dashed)
+    lOP := g1, bOP := g2
+
+bgcolor(shade and isIntraday and inSess ? color.new(color.gray, 94) : na)
+
+// ── Readout: facts and arithmetic only ──────────────────────────────────────
+var table t = na
+if showTbl and barstate.islast
+    pos = tblPos == "Top Left" ? position.top_left : tblPos == "Bottom Right" ? position.bottom_right :
+         tblPos == "Bottom Left" ? position.bottom_left : tblPos == "Middle Right" ? position.middle_right :
+         tblPos == "Top Right" ? position.top_right : tblPos == "Middle Left" ? position.middle_left :
+         position.bottom_right
+    if na(t)
+        t := table.new(pos, 2, 7, border_width=1, bgcolor=color.new(#0D1117, 0), frame_color=color.new(#37474F, 0), frame_width=1, border_color=color.new(#263238, 0))
+    stopDist = atr * stopAtr
+    cash     = acct * riskPct / 100.0
+    units    = stopDist > 0 ? cash / stopDist : 0.0
+    rng      = not na(onHi) and not na(onLo) ? onHi - onLo : na
+    table.cell(t, 0, 0, "REFERENCE LEVELS", text_color=color.white, text_size=size.small, bgcolor=color.new(#37474F, 0))
+    table.cell(t, 1, 0, "no signals", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(#37474F, 0))
+    table.cell(t, 0, 1, "ATR(" + str.tostring(atrLen) + ")", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 1, 1, str.tostring(atr, format.mintick), text_color=color.white, text_size=size.tiny, text_halign=text.align_right, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 0, 2, "Stop @ " + str.tostring(stopAtr, "#.#") + " ATR", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 1, 2, str.tostring(stopDist, format.mintick), text_color=color.white, text_size=size.tiny, text_halign=text.align_right, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 0, 3, "Risk " + str.tostring(riskPct, "#.#") + "% of " + str.tostring(acct, "#"), text_color=color.gray, text_size=size.tiny, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 1, 3, str.tostring(cash, "#.##"), text_color=color.white, text_size=size.tiny, text_halign=text.align_right, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 0, 4, "= position size", text_color=color.white, text_size=size.small, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 1, 4, str.tostring(units, "#.##") + " units", text_color=#4FC3F7, text_size=size.small, text_halign=text.align_right, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 0, 5, "Overnight range", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 1, 5, not isIntraday ? "intraday only" : na(rng) ? "—" : str.tostring(rng, format.mintick), text_color=color.white, text_size=size.tiny, text_halign=text.align_right, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 0, 6, "Session", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(#0D1117, 0))
+    table.cell(t, 1, 6, not isIntraday ? "intraday only" : inSess ? "OPEN" : "closed", text_color=not isIntraday ? color.gray : inSess ? color.lime : color.gray, text_size=size.tiny, text_halign=text.align_right, bgcolor=color.new(#0D1117, 0))
+
+// ── Alerts: level touches. Information, not instructions. ───────────────────
+alertcondition(showPD and not na(pdh) and ta.crossover(high, pdh),  "Previous day high touched", "Price reached the previous day high")
+alertcondition(showPD and not na(pdl) and ta.crossunder(low, pdl),  "Previous day low touched",  "Price reached the previous day low")
+alertcondition(showON and isIntraday and not na(onHi) and ta.crossover(high, onHi), "Overnight high touched",   "Price reached the overnight high")
+alertcondition(showON and isIntraday and not na(onLo) and ta.crossunder(low, onLo), "Overnight low touched",    "Price reached the overnight low")

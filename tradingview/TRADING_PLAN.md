@@ -57,15 +57,41 @@ edge that the data says is not there.
 Making this profitable would require a different entry thesis. That is new
 research, not repair.
 
-## Phase 0: demo first (minimum 4 weeks, 30 closed trades)
-- Trade a demo account on Capital.com with the chart layout "TradePulse NAS100"
-  (the layout keeps its old name; the symbol on it is US30), 15m, the single
-  "TradePulse Pro 3.1 - ICT Engine (Locked)" indicator, Setup Mode **Balanced**.
-- Log every trade in a sheet: date, side, entry, stop, TP1/2/3, result in R,
-  screenshot. The dashboard's RECORD and NET R rows must match your sheet.
-- Go live only if, after 30 closed trades: net R > 0, profit factor >= 1.2,
-  max drawdown < 8%, and you followed every rule below without exception.
-- Current demo record: 2 trades, 2 losses, -2R. The 30 starts from zero on US30.
+## What is on the chart now (2026-11-19)
+
+**TradePulse ICT is removed.** It had no edge (see the STOP section above), so
+it no longer prints signals on this chart. The source is kept in
+`ict_engine_v28_locked.pine` and can be re-added from the Pine Editor if ever
+wanted.
+
+**In its place: `reference_levels_v1.pine` — "TP Levels".** It marks facts and
+does the sizing arithmetic. It makes NO prediction and has no signals, no score,
+no arrows. What it draws:
+
+| Item | What it is |
+|---|---|
+| PDH / PDL | the completed previous day's high and low |
+| PWH / PWL | previous week's extremes (off by default) |
+| ON High / Low | overnight range, between the close and the open |
+| Open | where today's cash session began |
+| Readout | ATR, stop distance at N ATR, cash at risk, **position size in units** |
+
+The position-size line is the point of it: whatever you decide to trade, it tells
+you how many units put exactly your chosen risk on the locked stop distance.
+
+Known behaviours, so they are not mistaken for bugs:
+* Daily and weekly levels use the COMPLETED prior period, so they never repaint
+  and read identically on any chart timeframe. Verified: PDH showed 27,528.0 on
+  both the 15m and the 1D chart.
+* The overnight range and session open are built from this chart's own bars, so
+  on daily and above they report "intraday only" rather than a wrong number.
+* TradingView draws candles OVER the readout table. Its position is an input —
+  move it when price moves into it.
+
+### How to use it
+
+There is no signal to wait for. You decide the trade. The levels tell you where
+price has already been, and the readout tells you what a position costs.
 
 ## Market and time
 - **No market is approved for real money.** All three tested markets are either
@@ -88,18 +114,14 @@ research, not repair.
   earnings. The script cannot see news; you must.
 
 ## Which signal to take
-The Beast engine has been removed from the chart. There is one engine and one
-signal set, so there is no "do the two agree" test any more.
-- **The signal is the LONG / SHORT triangle with the locked box.** Grade A or A+
-  preferred; grade B only when the dashboard's CONFIRM row agrees and the R:R row
-  is at least 1:1.5.
-- The **BUY / SELL tag** marks the bar where the confirmation chain completed. With
-  the tag floor at 60 it fires on the same bars as the triangle. A tag reading
-  `· outside session` or `· day guard` is information only - **never trade it**.
-- Enter only while price is still at the printed entry. If price has run past 30%
-  of the stop distance, the trade is gone. Do not chase.
-- The market scanner and the trendline / supply-demand drawings are switched off.
-  They never gated a trade; their absence changes nothing about the signals.
+
+**There are none.** The engine that produced signals is off the chart because it
+did not predict direction. TP Levels marks facts and never tells you to buy or
+sell.
+
+If you trade this chart, the decision is entirely yours. The plan's remaining
+value is the risk discipline below — it applies to any trade you take, from any
+source, including your own judgement.
 
 ## Risk
 - 1% of account per trade. Position size = (account x 0.01) / stop distance. The
