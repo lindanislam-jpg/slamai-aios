@@ -318,3 +318,72 @@ Across horizons from 15 minutes to three months, and across indices, futures,
 crypto, equities, ETFs, FX and grains, nothing beat its benchmark. Six separate
 in-sample patterns collapsed under out-of-sample or benchmark testing. The
 research is stopped, not paused.
+
+## Pairs / spread trading — the last thesis, 2026-11-19
+
+Rationale: every previous thesis tried to predict DIRECTION and all failed.
+Pairs trading predicts nothing directional — it bets the spread between two
+correlated instruments reverts. Different statistical object, real mechanism.
+
+Method: z-score of the log-ratio over a 60-day window, enter |z| >= 2, exit at
+z = 0, stop |z| >= 3.5, max 40-day hold. 9 pairs, full available history.
+
+### It was the only thesis to survive an out-of-sample split
+
+| | n | Win% | Mean | t |
+|---|---|---|---|---|
+| 1st half (fit) | 685 | 59.1% | +0.19% | +0.59 |
+| 2nd half (OUT-OF-SAMPLE) | 690 | 55.8% | +0.67% | **+1.94** |
+
+Euro vs Sterling: 61.6% → **71.2% out-of-sample, t = +2.56**. Copper vs Silver
+held too. 7 of 9 pairs positive in the second half. Nothing collapsed.
+
+### Then costs killed it
+
+Average hold **21 days on TWO legs**, so financing accrues on both every night.
+
+| Scenario | Win% | Mean | t |
+|---|---|---|---|
+| gross | 55.8% | +0.67% | +1.94 |
+| futures, 1bp/fill, no financing | 55.7% | +0.63% | +1.82 |
+| futures, 3bp/fill, no financing | 55.1% | +0.55% | +1.59 |
+| CFD, 3bp + 1bp/day/leg | 52.2% | +0.13% | +0.38 |
+| CFD, 3bp + 2bp/day/leg | 48.3% | **−0.28%** | −0.81 |
+
+Break-even financing is about **1.4 bp/day/leg**. Capital.com CFD overnight
+charges on indices and commodities are above that. The edge survives futures
+costs (t = 1.59, still below significance) and dies on CFD costs.
+
+### Intraday version — removing financing does not rescue it
+
+Flat by the 16:00 NY close, so zero overnight cost. 15m bars, 20-bar window.
+
+| | n | Win% | Gross | t |
+|---|---|---|---|---|
+| gross | 85 | 49.4% | **+0.009%** | +0.41 |
+| after 1bp/fill | 85 | 37.6% | −0.031% | −1.38 |
+| after 3bp/fill | 85 | 22.4% | −0.111% | **−4.96** |
+
+Intraday spread moves are an order of magnitude smaller than daily ones. The
+gross edge is **0.9 basis points per trade — smaller than a single fill.**
+Four fills swamp it several times over.
+
+## FINAL — seven theses, 2026-11-17 to 19
+
+| Thesis | Horizon | Outcome |
+|---|---|---|
+| ICT confluence | 15m | 49.7% direction out-of-sample — coin flip |
+| Opening-range breakout | 15m | 45.2% / 50.0% — coin flip |
+| Stretch fade | 15m | sign flips between samples |
+| Stretch continuation | 15m | rejected on all three thresholds |
+| Time-series momentum | daily | significant hit rate, LOSES to buy-and-hold, t = −4.42 |
+| Pairs, daily | weeks | survives out-of-sample, dies on CFD costs |
+| Pairs, intraday | hours | gross edge smaller than one fill |
+
+**No tradeable edge was found.** The closest was daily pairs trading, which is
+real but too small to survive retail CFD costs and would need a futures account
+and tighter execution than this setup has — and even then sits below statistical
+significance.
+
+Research is complete, not paused. Anything new must clear a pre-committed
+out-of-sample test AND a realistic cost model before it is believed.
