@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requireUser, readJson, badRequest, pick } from "@/lib/api";
+
+type ContactInput = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  stage?: string;
+  score?: number;
+  tags?: string;
+  notes?: string;
+};
+
+/** The only columns a client may set, matching the PATCH handler. */
+const WRITABLE = ["name", "email", "phone", "company", "stage", "score", "tags", "notes"] as const;
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireUser();
+  if (!gate.ok) return gate.response;
 
   const contacts = await db.contact.findMany({
-    where: { userId: session.user.id },
+    where: { userId: gate.userId },
     include: { deals: true },
     orderBy: { createdAt: "desc" },
   });
@@ -15,14 +29,20 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireUser();
+  if (!gate.ok) return gate.response;
 
-  const data = await req.json();
-  if (!data.name) return NextResponse.json({ error: "Name required" }, { status: 400 });
+  const body = await readJson<ContactInput>(req);
+  if (!body) return badRequest("Invalid body");
 
+  const name = body.name?.trim();
+  if (!name) return badRequest("Name required");
+
+  // Only the writable columns are passed through: spreading the raw body let a
+  // client set id, timestamps, userId, or nested relation writes.
   const contact = await db.contact.create({
-    data: { ...data, userId: session.user.id },
+    data: { ...pick(body, WRITABLE), name, userId: gate.userId },
+    include: { deals: true },
   });
   return NextResponse.json(contact, { status: 201 });
 }
