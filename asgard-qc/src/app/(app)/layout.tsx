@@ -16,8 +16,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const actor = await requireActor();
-  // Refresh reminders at most every 10 minutes; never blocks the page on error.
-  await maybeScan(10).catch((e) => console.error("notification scan failed", e));
+  // Refresh reminders at most every 10 minutes, after the response so a click never waits for the scan.
+  after(() => maybeScan(10).catch((e) => console.error("notification scan failed", e)));
   // The host cron runs the 09:00/12:00/18:00 reviews; this only catches a slot it missed, after the response.
   after(() => pageLoadTick().catch((e) => console.error("scheduled review safety net failed", e)));
   const [unread, demo] = await Promise.all([db.notification.count({ where: { userId: actor.id, readAt: null, resolvedAt: null } }), demoRecordCount()]);

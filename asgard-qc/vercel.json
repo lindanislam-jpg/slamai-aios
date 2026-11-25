@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "regions": [
+    "lhr1"
+  ],
   "buildCommand": "bash scripts/deploy-build.sh",
   "ignoreCommand": "bash scripts/vercel-ignore.sh",
   "crons": [
