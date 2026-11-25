@@ -16,6 +16,9 @@ import { pdfMatchKey } from "@/lib/pdf-jpegs";
 
 export const metadata = { title: "Incoming Inspections" };
 
+/** Rows per page: each row shows up to three thumbnails, so a page stays light. */
+const PAGE_SIZE = 50;
+
 export default async function IncomingPage({ searchParams }: { searchParams: Promise<SP> }) {
   const actor = await requirePagePermission("records.view");
   const sp = await searchParams;
@@ -23,6 +26,7 @@ export default async function IncomingPage({ searchParams }: { searchParams: Pro
   const result = str(sp, "result");
   const pics = str(sp, "pics");
   const msg = str(sp, "msg");
+  const page = Math.max(1, Number.parseInt(str(sp, "page") ?? "1", 10) || 1);
   const base = { type: "INCOMING_MATERIAL" as const, status: { not: "CANCELLED" as const } };
   const where = {
     ...base,
@@ -30,11 +34,12 @@ export default async function IncomingPage({ searchParams }: { searchParams: Pro
     ...(result && ["PENDING", "PASS", "FAIL", "HOLD"].includes(result) ? { result: result as "PENDING" } : {}),
     ...(pics === "none" ? { photos: { none: { deletedAt: null } } } : pics === "some" ? { photos: { some: { deletedAt: null } } } : {}),
   };
-  const [rows, projects, limits, sourced, totals] = await Promise.all([
+  const [rows, shown, projects, limits, sourced, totals] = await Promise.all([
     db.inspection.findMany({
       where,
-      orderBy: [{ inspectedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
-      take: 1000,
+      orderBy: [{ inspectedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
       select: {
         id: true, code: true, componentRef: true, comments: true, inspectedAt: true, inspectorName: true, result: true, status: true,
         project: { select: { id: true, code: true, name: true } },
@@ -42,6 +47,7 @@ export default async function IncomingPage({ searchParams }: { searchParams: Pro
         _count: { select: { photos: { where: { deletedAt: null } }, ncrs: true } },
       },
     }),
+    db.inspection.count({ where }),
     projectOptions(),
     getSetting("uploadLimits"),
     db.inspection.findMany({
@@ -61,6 +67,8 @@ export default async function IncomingPage({ searchParams }: { searchParams: Pro
   const all = count(() => true);
   const back = `/incoming?${new URLSearchParams(Object.entries({ projectId, result, pics }).filter((e): e is [string, string] => !!e[1])).toString()}`;
   const canAdd = actor.permissions.has("inspection.write") && actor.permissions.has("photo.upload");
+  const pages = Math.max(1, Math.ceil(shown / PAGE_SIZE));
+  const pageHref = (n: number) => `${back}${back.endsWith("?") ? "" : "&"}page=${n}`.replace("?&", "?");
 
   return (
     <div>
@@ -108,7 +116,7 @@ export default async function IncomingPage({ searchParams }: { searchParams: Pro
         <form action={bulkAcceptIncomingAction}>
         <input type="hidden" name="back" value={back} />
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-300">
-          <span>Showing {rows.length} record(s){rows.length === 1000 ? " (first 1000 — use the filters)" : ""}. Records are Draft until a result is decided.</span>
+          <span>Showing {(page - 1) * PAGE_SIZE + 1}–{(page - 1) * PAGE_SIZE + rows.length} of {shown} record(s). Records are Draft until a result is decided.</span>
           {canAdd && <BulkAcceptButton />}
         </div>
         <div className="table-wrap">
@@ -138,6 +146,13 @@ export default async function IncomingPage({ searchParams }: { searchParams: Pro
             </tbody>
           </table>
         </div>
+        {pages > 1 && (
+          <nav className="mt-3 flex flex-wrap items-center gap-2 text-sm" aria-label="Pages">
+            {page > 1 && <Link className="btn-secondary" href={pageHref(page - 1)}>← Previous</Link>}
+            <span className="text-ink-300">Page {page} of {pages}</span>
+            {page < pages && <Link className="btn-secondary" href={pageHref(page + 1)}>Next →</Link>}
+          </nav>
+        )}
         </form>
       )}
     </div>
