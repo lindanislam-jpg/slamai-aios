@@ -9,17 +9,17 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  password      String?
-  image         String?
-  role          String    @default("user")
-  plan          String    @default("free")
-  company       String?
+  id                  String    @id @default(cuid())
+  name                String?
+  email               String    @unique
+  emailVerified       DateTime?
+  password            String?
+  image               String?
+  role                String    @default("user")
+  plan                String    @default("free")
+  company             String?
   /// Set once the user dismisses the setup checklist on the dashboard.
-  onboardingDismissed Boolean @default(false)
+  onboardingDismissed Boolean   @default(false)
 
   stripeCustomerId     String?   @unique
   stripeSubscriptionId String?
@@ -27,24 +27,29 @@ model User {
   stripeStatus         String?
   planRenewsAt         DateTime?
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  agents        AIAgent[]
-  contacts      Contact[]
-  documents     Document[]
-  projects      Project[]
-  campaigns     Campaign[]
-  conversations Conversation[]
-  workflows     Workflow[]
-  integrations  Integration[]
-  calls         CallLog[]
-  voiceAgent    VoiceAgent?
-  websites      Website[]
-  installs      AgentInstall[]
+  accounts       Account[]
+  sessions       Session[]
+  agents         AIAgent[]
+  contacts       Contact[]
+  documents      Document[]
+  projects       Project[]
+  campaigns      Campaign[]
+  conversations  Conversation[]
+  workflows      Workflow[]
+  integrations   Integration[]
+  calls          CallLog[]
+  voiceAgent     VoiceAgent?
+  websites       Website[]
+  installs       AgentInstall[]
   passwordResets PasswordResetToken[]
+
+  // --- SlamAI Voice (multi-tenant module) ---
+  memberships Membership[]
+  sentInvites Invitation[] @relation("InvitedBy")
+  auditEvents AuditLog[]
 }
 
 /// Single-use, time-limited token backing the "forgot password" flow.
@@ -75,6 +80,7 @@ model Account {
   id_token          String?
   session_state     String?
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([provider, providerAccountId])
 }
 
@@ -90,22 +96,23 @@ model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
+
   @@unique([identifier, token])
 }
 
 model AIAgent {
-  id          String   @id @default(cuid())
-  name        String
-  type        String
-  description String?
-  systemPrompt String?
-  model       String   @default("gpt-4o")
-  isActive    Boolean  @default(true)
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String         @id @default(cuid())
+  name          String
+  type          String
+  description   String?
+  systemPrompt  String?
+  model         String         @default("gpt-4o")
+  isActive      Boolean        @default(true)
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversations Conversation[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Conversation {
@@ -130,33 +137,33 @@ model Message {
 }
 
 model Contact {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
   email     String?
   phone     String?
   company   String?
-  stage     String   @default("lead")
-  score     Int      @default(0)
+  stage     String    @default("lead")
+  score     Int       @default(0)
   tags      String?
   notes     String?
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   deals     Deal[]
   calls     CallLog[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Deal {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   title     String
-  value     Float    @default(0)
-  stage     String   @default("prospect")
+  value     Float     @default(0)
+  stage     String    @default("prospect")
   closeDate DateTime?
   contactId String
-  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  contact   Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Document {
@@ -173,18 +180,18 @@ model Document {
 }
 
 model Campaign {
-  id        String   @id @default(cuid())
-  name      String
-  type      String
-  status    String   @default("draft")
-  content   String?
-  platform  String?
-  reach     Int      @default(0)
-  engagement Int     @default(0)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  type       String
+  status     String   @default("draft")
+  content    String?
+  platform   String?
+  reach      Int      @default(0)
+  engagement Int      @default(0)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Project {
@@ -200,38 +207,38 @@ model Project {
 }
 
 model Task {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
   description String?
-  status      String   @default("todo")
-  priority    String   @default("medium")
+  status      String    @default("todo")
+  priority    String    @default("medium")
   dueDate     DateTime?
   projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model MarketplaceAgent {
-  id          String   @id @default(cuid())
+  id          String         @id @default(cuid())
   name        String
   description String
   category    String
   icon        String?
-  price       Float    @default(0)
-  rating      Float    @default(0)
-  installs    Int      @default(0)
-  isActive    Boolean  @default(true)
+  price       Float          @default(0)
+  rating      Float          @default(0)
+  installs    Int            @default(0)
+  isActive    Boolean        @default(true)
   installedBy AgentInstall[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 }
 
 model AgentInstall {
   id        String           @id @default(cuid())
   userId    String
   agentId   String
-  user      User             @relation(fields: [userId],  references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   agent     MarketplaceAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
   createdAt DateTime         @default(now())
 
@@ -239,18 +246,18 @@ model AgentInstall {
 }
 
 model Workflow {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
   description String?
   trigger     String
   action      String
-  isActive    Boolean  @default(false)
-  runCount    Int      @default(0)
+  isActive    Boolean   @default(false)
+  runCount    Int       @default(0)
   lastRunAt   DateTime?
   userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Integration {
@@ -267,43 +274,43 @@ model Integration {
 }
 
 model CallLog {
-  id         String   @id @default(cuid())
-  caller     String
-  direction  String   @default("inbound")
-  durationSec Int     @default(0)
-  outcome    String   @default("completed")
-  summary    String?
+  id           String  @id @default(cuid())
+  caller       String
+  direction    String  @default("inbound")
+  durationSec  Int     @default(0)
+  outcome      String  @default("completed")
+  summary      String?
   recordingUrl String?
 
   /// Twilio's call identifier — present on real calls, absent on manual entries.
-  callSid    String?  @unique
-  status     String   @default("completed")
+  callSid    String? @unique
+  status     String  @default("completed")
   /// The turn-by-turn conversation, stored as a JSON array of {role, text}.
   transcript String?
 
   /// The CRM contact this call was captured as, if a lead was identified.
-  contactId  String?
-  contact    Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([userId, createdAt])
 }
 
 model VoiceAgent {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   /// The Twilio number calls arrive on. Unique so an inbound call routes to one owner.
-  phoneNumber    String?  @unique
-  isActive       Boolean  @default(false)
-  greeting       String   @default("Hello, thanks for calling. How can I help you today?")
-  systemPrompt   String   @default("You are a friendly phone receptionist. Keep replies to one or two short sentences, ask one question at a time, and offer to book a callback. Never invent prices or availability.")
-  voice          String   @default("Polly.Amy")
+  phoneNumber    String? @unique
+  isActive       Boolean @default(false)
+  greeting       String  @default("Hello, thanks for calling. How can I help you today?")
+  systemPrompt   String  @default("You are a friendly phone receptionist. Keep replies to one or two short sentences, ask one question at a time, and offer to book a callback. Never invent prices or availability.")
+  voice          String  @default("Polly.Amy")
   transferNumber String?
-  captureLeads   Boolean  @default(true)
-  maxTurns       Int      @default(20)
+  captureLeads   Boolean @default(true)
+  maxTurns       Int     @default(20)
 
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -312,14 +319,612 @@ model VoiceAgent {
 }
 
 model Website {
-  id         String   @id @default(cuid())
-  name       String
-  template   String
-  domain     String?
-  status     String   @default("draft")
-  visits     Int      @default(0)
+  id        String   @id @default(cuid())
+  name      String
+  template  String
+  domain    String?
+  status    String   @default("draft")
+  visits    Int      @default(0)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// SLAMAI VOICE — multi-tenant AI receptionist platform
+// ----------------------------------------------------------------------------
+// Every model below belongs to exactly one Business (the tenant). Queries must
+// always filter on businessId; the helpers in src/lib/voice/tenant.ts resolve a
+// caller's businessId from their session and are the only sanctioned way in.
+// ============================================================================
+
+model Business {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  /// Industry key from src/lib/voice/industries.ts — drives onboarding defaults.
+  industry    String  @default("other")
+  description String?
+  website     String?
+  email       String?
+  phone       String?
+  addressLine String?
+  city        String?
+  postcode    String?
+  country     String  @default("IE")
+  /// IANA timezone, e.g. "Europe/Dublin". All call/appointment times render in it.
+  timezone    String  @default("Europe/Dublin")
+  currency    String  @default("EUR")
+  locale      String  @default("en-IE")
+
+  /// "active" | "suspended" — suspended tenants are refused at the API boundary.
+  status        String    @default("active")
+  suspendedAt   DateTime?
+  suspendReason String?
+
+  onboardingStep      Int     @default(0)
+  onboardingCompleted Boolean @default(false)
+  /// True for the seeded sales-demo tenant; never billed, resettable.
+  isDemo              Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships       Membership[]
+  invitations       Invitation[]
+  subscription      Subscription?
+  agents            ReceptionAgent[]
+  services          Service[]
+  businessHours     BusinessHour[]
+  knowledgeSources  KnowledgeSource[]
+  knowledgeChunks   KnowledgeChunk[]
+  phoneNumbers      PhoneNumber[]
+  calls             VoiceCall[]
+  customers         Customer[]
+  leads             Lead[]
+  appointments      Appointment[]
+  notificationRules NotificationRule[]
+  notifications     NotificationLog[]
+  usageEvents       UsageEvent[]
+  integrations      BusinessIntegration[]
+  webhooks          WebhookEndpoint[]
+  auditLogs         AuditLog[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Joins a user to a business with a role. A user may belong to several
+/// businesses (agencies managing multiple clients).
+model Membership {
+  id         String  @id @default(cuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  businessId String
+  /// "owner" | "admin" | "manager" | "staff" — see src/lib/voice/roles.ts
+  role       String  @default("owner")
+  /// The tenant this user lands in after signing in.
+  isDefault  Boolean @default(false)
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+}
+
+/// A pending team invitation. Only the token hash is stored.
+model Invitation {
+  id          String    @id @default(cuid())
+  businessId  String
+  email       String
+  role        String    @default("staff")
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String?
+
+  business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invitedBy User?    @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([businessId, email])
+  @@index([businessId])
+}
+
+/// Billing state for a tenant. Plan definitions live in src/lib/voice/plans.ts —
+/// only the plan *id* and Stripe identifiers are persisted.
+model Subscription {
+  id         String @id @default(cuid())
+  businessId String @unique
+
+  planId String @default("trial")
+  /// "trialing" | "active" | "past_due" | "canceled" | "incomplete"
+  status String @default("trialing")
+
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+  stripePriceId        String?
+
+  currentPeriodStart DateTime  @default(now())
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+  trialEndsAt        DateTime?
+
+  /// Set by an admin to override the plan's included minutes for this tenant.
+  minutesOverride Int?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+/// A configured AI receptionist. A business may run several (e.g. sales vs support).
+model ReceptionAgent {
+  id         String @id @default(cuid())
+  businessId String
+  name       String @default("AI Receptionist")
+
+  /// Key from src/lib/voice/personalities.ts.
+  personality  String @default("professional_friendly")
+  /// Provider voice id, e.g. "Polly.Amy-Neural".
+  voice        String @default("Polly.Amy-Neural")
+  language     String @default("en-GB")
+  /// 0.7–1.3; passed to the TTS layer where the provider supports it.
+  speakingRate Float  @default(1.0)
+
+  greeting              String  @default("Hi, thanks for calling. I'm the AI assistant here — how can I help you today?")
+  /// Owner-authored instructions appended to the composed system prompt.
+  customInstructions    String?
+  emergencyInstructions String?
+
+  /// Behaviour outside business hours: "answer" | "message" | "emergency_only" | "voicemail"
+  afterHoursMode String @default("message")
+
+  bookingEnabled     Boolean @default(true)
+  leadCaptureEnabled Boolean @default(true)
+  /// Whether the agent may hand the call to a human.
+  transferEnabled    Boolean @default(true)
+  transferNumber     String?
+  fallbackNumber     String?
+  /// JSON array of trigger keys from src/lib/voice/transfer-rules.ts.
+  transferTriggers   String  @default("[\"asks_for_human\",\"emergency\",\"angry\"]")
+
+  /// Safety rail: caller turns before the agent wraps up.
+  maxTurns  Int     @default(25)
+  isActive  Boolean @default(false)
+  isDefault Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  phoneNumbers PhoneNumber[]
+  calls        VoiceCall[]
+
+  @@index([businessId])
+}
+
+model Service {
+  id          String  @id @default(cuid())
+  businessId  String
+  name        String
+  description String?
+  /// Null means "price on enquiry" — the agent must never invent a number.
+  price       Float?
+  priceNote   String?
+  durationMin Int     @default(60)
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+/// Opening hours, one row per weekday (0 = Sunday).
+model BusinessHour {
+  id         String  @id @default(cuid())
+  businessId String
+  weekday    Int
+  isOpen     Boolean @default(true)
+  /// "HH:mm" in the business's timezone.
+  opensAt    String  @default("09:00")
+  closesAt   String  @default("17:00")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, weekday])
+}
+
+/// A document, page or FAQ the agent may quote from.
+model KnowledgeSource {
+  id            String    @id @default(cuid())
+  businessId    String
+  title         String
+  /// "url" | "pdf" | "docx" | "txt" | "faq" | "text"
+  type          String
+  /// Source URL for web sources; storage key for uploads.
+  sourceUrl     String?
+  /// Raw extracted text, kept so a source can be re-chunked without re-fetching.
+  rawText       String?
+  /// "pending" | "processing" | "ready" | "failed"
+  status        String    @default("pending")
+  error         String?
+  chunkCount    Int       @default(0)
+  bytes         Int       @default(0)
+  lastIndexedAt DateTime?
+
+  business Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  chunks   KnowledgeChunk[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+}
+
+/// One retrievable passage. `embedding` is a plain float array so the schema
+/// stays portable; see src/lib/voice/retrieval.ts for the search strategy and
+/// the documented upgrade path to pgvector.
+model KnowledgeChunk {
+  id         String  @id @default(cuid())
+  businessId String
+  sourceId   String
+  ordinal    Int
+  content    String
+  tokens     Int     @default(0)
+  embedding  Float[]
+
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  source   KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([businessId])
+  @@index([sourceId])
+}
+
+/// A phone number routed to this tenant. `e164` is globally unique so an
+/// inbound webhook can resolve the owning tenant from the dialled number alone.
+model PhoneNumber {
+  id          String  @id @default(cuid())
+  businessId  String
+  e164        String  @unique
+  label       String?
+  /// "twilio" | "byo" — which adapter owns this number.
+  provider    String  @default("twilio")
+  providerSid String?
+  /// "pending" | "active" | "released"
+  status      String  @default("pending")
+  /// Where unanswered / transferred calls go when the agent hands off.
+  forwardTo   String?
+  agentId     String?
+
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  agent    ReceptionAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  calls    VoiceCall[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model VoiceCall {
+  id            String  @id @default(cuid())
+  businessId    String
+  agentId       String?
+  phoneNumberId String?
+
+  /// Provider call id. Unique so webhook retries are idempotent.
+  providerCallId String? @unique
+  provider       String  @default("twilio")
+
+  fromNumber String
+  toNumber   String
+  direction  String @default("inbound")
+
+  /// "ringing" | "in_progress" | "completed" | "failed" | "no_answer"
+  status      String  @default("ringing")
+  /// "answered" | "booked" | "lead_captured" | "transferred" | "message_taken"
+  ///  | "info_only" | "missed" | "failed"
+  outcome     String  @default("answered")
+  /// True when the AI handled the call rather than it going to a human/voicemail.
+  aiHandled   Boolean @default(true)
+  transferred Boolean @default(false)
+  afterHours  Boolean @default(false)
+  isEmergency Boolean @default(false)
+
+  durationSec Int       @default(0)
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+
+  summary      String?
+  intent       String?
+  /// "positive" | "neutral" | "negative"
+  sentiment    String?
+  /// The agent's own 0–1 confidence, averaged across turns.
+  confidence   Float?
+  recordingUrl String?
+
+  /// Tokens spent on this call, for usage reporting.
+  aiTokens Int @default(0)
+
+  business     Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  agent        ReceptionAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  phoneNumber  PhoneNumber?    @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  turns        CallTurn[]
+  lead         Lead?
+  customerId   String?
+  customer     Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  appointments Appointment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, startedAt])
+  @@index([businessId, outcome])
+}
+
+/// One utterance in a call. Stored as rows rather than a JSON blob so
+/// transcripts can be searched and paginated.
+model CallTurn {
+  id        String  @id @default(cuid())
+  callId    String
+  /// "caller" | "agent" | "system"
+  role      String
+  text      String
+  /// Seconds from the start of the call.
+  offsetSec Int     @default(0)
+  /// Knowledge chunk ids quoted for this turn, as a JSON array.
+  citations String?
+
+  call VoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([callId, offsetSec])
+}
+
+/// A person who has contacted the business. Deduplicated on phone number.
+model Customer {
+  id          String  @id @default(cuid())
+  businessId  String
+  name        String?
+  phone       String?
+  email       String?
+  company     String?
+  addressLine String?
+  notes       String?
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leads        Lead[]
+  calls        VoiceCall[]
+  appointments Appointment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, phone])
+  @@index([businessId])
+}
+
+model Lead {
+  id         String  @id @default(cuid())
+  businessId String
+  customerId String?
+  /// One lead per call, so a webhook replay cannot duplicate it.
+  callId     String? @unique
+
+  name             String?
+  phone            String?
+  email            String?
+  company          String?
+  serviceRequested String?
+  /// What the caller wanted, in their own words.
+  summary          String?
+
+  /// 0–100, produced by the scoring rubric in src/lib/voice/scoring.ts.
+  score             Int      @default(0)
+  /// "new" | "contacted" | "qualified" | "booked" | "won" | "lost"
+  status            String   @default("new")
+  /// "voice_call" | "web_form" | "manual" | "api"
+  source            String   @default("voice_call")
+  /// Owner-estimated value used for the (clearly-labelled) revenue estimate.
+  estimatedValue    Float?
+  urgency           String   @default("normal")
+  notes             String?
+  lastInteractionAt DateTime @default(now())
+
+  business Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  call     VoiceCall? @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
+}
+
+model Appointment {
+  id         String  @id @default(cuid())
+  businessId String
+  customerId String?
+  serviceId  String?
+  callId     String?
+
+  title            String
+  startsAt         DateTime
+  endsAt           DateTime
+  /// "pending" | "confirmed" | "cancelled" | "completed" | "no_show"
+  status           String   @default("confirmed")
+  notes            String?
+  /// Set when synced to an external calendar.
+  externalId       String?
+  externalProvider String?
+
+  business Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  service  Service?   @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  call     VoiceCall? @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, startsAt])
+  @@index([businessId, status])
+}
+
+/// Which events a tenant wants delivered where.
+model NotificationRule {
+  id         String  @id @default(cuid())
+  businessId String
+  /// Event key from src/lib/voice/events.ts, e.g. "lead.created".
+  event      String
+  /// "email" | "sms" | "webhook"
+  channel    String
+  /// Address, number or URL depending on channel.
+  target     String
+  isActive   Boolean @default(true)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, event, channel, target])
+  @@index([businessId])
+}
+
+/// Delivery attempts, so a business can see what was sent and what failed.
+model NotificationLog {
+  id         String  @id @default(cuid())
+  businessId String
+  event      String
+  channel    String
+  target     String
+  /// "queued" | "sent" | "failed" | "skipped"
+  status     String  @default("queued")
+  error      String?
+  payload    String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([businessId, createdAt])
+}
+
+/// Metered usage. One row per billable action; aggregated for the usage page.
+model UsageEvent {
+  id         String  @id @default(cuid())
+  businessId String
+  /// "voice_minutes" | "calls" | "ai_tokens" | "knowledge_searches" | "sms"
+  /// | "appointments" | "transfers"
+  metric     String
+  quantity   Float   @default(0)
+  /// "YYYY-MM" in UTC — the billing period this belongs to.
+  period     String
+  refId      String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([businessId, period, metric])
+}
+
+model BusinessIntegration {
+  id         String  @id @default(cuid())
+  businessId String
+  /// Key from src/lib/voice/integrations.ts.
+  provider   String
+  /// "connected" | "disconnected" | "error"
+  status     String  @default("disconnected")
+  accountRef String?
+  /// Provider config as JSON. Never returned to the client unredacted.
+  config     String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, provider])
+}
+
+/// An outbound webhook (n8n, Zapier, a CRM). The signing secret is stored
+/// hashed-at-rest only in the sense that it is never exposed after creation.
+model WebhookEndpoint {
+  id           String    @id @default(cuid())
+  businessId   String
+  name         String
+  url          String
+  /// JSON array of event keys this endpoint subscribes to.
+  events       String    @default("[]")
+  /// HMAC-SHA256 signing secret, shown once on creation.
+  secret       String
+  isActive     Boolean   @default(true)
+  lastStatus   Int?
+  lastFiredAt  DateTime?
+  failureCount Int       @default(0)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model AuditLog {
+  id         String  @id @default(cuid())
+  businessId String?
+  userId     String?
+  /// Dotted action key, e.g. "agent.updated".
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   String?
+  ip         String?
+  userAgent  String?
+
+  business Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([businessId, createdAt])
+}
+
+/// A prospect who asked SlamAI itself for a demo. Not tenant-scoped — this is
+/// SlamAI's own pipeline, visible only in the platform admin panel.
+model DemoRequest {
+  id           String  @id @default(cuid())
+  name         String
+  businessName String
+  email        String
+  phone        String?
+  industry     String?
+  message      String?
+  /// "new" | "contacted" | "booked" | "won" | "lost"
+  status       String  @default("new")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
 }

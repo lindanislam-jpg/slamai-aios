@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen hero-bg flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 mb-6">
+          <Link href="/aios" className="inline-flex items-center gap-2 mb-6">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
