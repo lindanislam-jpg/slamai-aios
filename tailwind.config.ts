@@ -22,6 +22,28 @@ const config: Config = {
           900: "#312e81",
           950: "#1e1b4b",
         },
+        // --- Remittance product palette -------------------------------------
+        // A bright, warm fintech identity, deliberately not a bank blue and
+        // deliberately not dark. Referenced only by the `send` product; the
+        // rest of the app is untouched. Swap these five values and the whole
+        // product rebrands.
+        send: {
+          ink:      "#0B1B2B", // headings and primary text
+          body:     "#3D5266", // body copy
+          muted:    "#6B8199", // secondary text
+          line:     "#E2E9F0", // hairlines and borders
+          surface:  "#FFFFFF",
+          canvas:   "#F5F8FA", // page background
+          primary:  "#0E7C66", // deep jade — actions, the money numbers
+          "primary-strong": "#0A6151",
+          "primary-soft":   "#E6F4F0",
+          accent:   "#F0A202", // amber — the EUR 5 fee, highlights
+          "accent-soft":    "#FDF3E0",
+          success:  "#0E7C66",
+          warning:  "#B45309",
+          danger:   "#B42318",
+          "danger-soft":    "#FEF0EF",
+        },
         slam: {
           purple: "#6366f1",
           blue:   "#3b82f6",

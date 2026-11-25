@@ -45,6 +45,10 @@ model User {
   websites      Website[]
   installs      AgentInstall[]
   passwordResets PasswordResetToken[]
+
+  // Remittance module (see the bottom of this file).
+  remitCustomer RemitCustomer?
+  remitAdmin    RemitAdmin?
 }
 
 /// Single-use, time-limited token backing the "forgot password" flow.
@@ -322,4 +326,615 @@ model Website {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// =============================================================================
+// REMITTANCE MODULE
+// -----------------------------------------------------------------------------
+// Everything below powers the international money-transfer product. It is
+// namespaced with a `Remit` prefix and mapped to `remit_*` tables so it stays a
+// liftable module: it can be extracted into its own service/database later
+// without renaming anything.
+//
+// MONEY REPRESENTATION
+//   All monetary amounts are stored as BigInt *minor units* (cents) alongside
+//   their ISO-4217 currency code. Floating point is never used for money.
+//   Exchange rates are Decimal(18,8). See src/remit/money/money.ts.
+// =============================================================================
+
+enum RemitCustomerStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum RemitKycStatus {
+  NOT_STARTED
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum RemitPaymentMethod {
+  BANK_TRANSFER
+  DEBIT_CARD
+  CREDIT_CARD
+  APPLE_PAY
+  GOOGLE_PAY
+}
+
+enum RemitPayoutMethod {
+  BANK_DEPOSIT
+  MOBILE_WALLET
+  CASH_PICKUP
+}
+
+enum RemitQuoteStatus {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+}
+
+/// Ordered lifecycle of a transfer. Only the transfer engine may move a
+/// transfer between these states — no API accepts a status from a client.
+enum RemitTransferStatus {
+  PENDING
+  PROCESSING
+  PAYMENT_RECEIVED
+  COMPLIANCE_REVIEW
+  CONVERTING
+  SENT
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RemitComplianceStatus {
+  NORMAL
+  REVIEW_REQUIRED
+  APPROVED
+  REJECTED
+}
+
+enum RemitPaymentStatus {
+  REQUIRES_ACTION
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum RemitPayoutStatus {
+  PENDING
+  SENT
+  PAID
+  FAILED
+  RETURNED
+}
+
+enum RemitReviewStatus {
+  OPEN
+  APPROVED
+  REJECTED
+}
+
+enum RemitNotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum RemitNotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum RemitActorType {
+  CUSTOMER
+  ADMIN
+  SYSTEM
+  PROVIDER
+}
+
+enum RemitVerificationChannel {
+  EMAIL
+  PHONE
+}
+
+/// The remittance-side profile of a platform user. Kept separate from `User`
+/// so the module owns its own compliance data and can be extracted cleanly.
+model RemitCustomer {
+  id                String              @id @default(cuid())
+  userId            String              @unique
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            RemitCustomerStatus @default(PENDING_VERIFICATION)
+
+  fullName          String
+  email             String              @unique
+  emailVerifiedAt   DateTime?
+  phone             String?
+  phoneVerifiedAt   DateTime?
+  dateOfBirth       DateTime?
+  countryCode       String              @default("IE")
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  postalCode        String?
+
+  kycStatus         RemitKycStatus      @default(NOT_STARTED)
+  kycApprovedAt     DateTime?
+  /// Rolling risk score (0-100) recalculated on each transfer.
+  riskScore         Int                 @default(0)
+  suspendedAt       DateTime?
+  suspendedReason   String?
+
+  /// Demo accounts can only ever create sandbox transfers.
+  isDemo            Boolean             @default(false)
+
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  kycChecks         RemitKycCheck[]
+  recipients        RemitRecipient[]
+  quotes            RemitQuote[]
+  transfers         RemitTransfer[]
+  notifications     RemitNotification[]
+  verifications     RemitVerificationToken[]
+
+  @@index([status])
+  @@index([kycStatus])
+  @@map("remit_customers")
+}
+
+/// Single-use email/phone verification codes. Only the SHA-256 hash is stored.
+model RemitVerificationToken {
+  id          String                   @id @default(cuid())
+  customerId  String
+  customer    RemitCustomer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  channel     RemitVerificationChannel
+  codeHash    String
+  destination String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  attempts    Int                      @default(0)
+  createdAt   DateTime                 @default(now())
+
+  @@index([customerId, channel])
+  @@map("remit_verification_tokens")
+}
+
+/// One record per KYC attempt with an external provider. The provider payload
+/// is retained verbatim for record-keeping obligations.
+model RemitKycCheck {
+  id          String         @id @default(cuid())
+  customerId  String
+  customer    RemitCustomer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  provider    String
+  providerRef String?
+  level       String         @default("standard")
+  status      RemitKycStatus @default(PENDING)
+  reason      String?
+  payload     Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([customerId])
+  @@map("remit_kyc_checks")
+}
+
+model RemitCountry {
+  code          String   @id
+  name          String
+  currencyCode  String
+  flagEmoji     String
+  dialCode      String
+  /// Country risk band used by the compliance risk engine: LOW | MEDIUM | HIGH.
+  riskBand      String   @default("LOW")
+  canSend       Boolean  @default(false)
+  canReceive    Boolean  @default(false)
+
+  sendCorridors    RemitCorridor[] @relation("SourceCountry")
+  receiveCorridors RemitCorridor[] @relation("DestCountry")
+
+  @@map("remit_countries")
+}
+
+model RemitCurrency {
+  code       String @id
+  name       String
+  symbol     String
+  /// Number of decimal places (EUR/ZAR = 2, JPY = 0).
+  minorUnits Int    @default(2)
+
+  @@map("remit_currencies")
+}
+
+/// A supported send route, e.g. IE -> ZA (EUR -> ZAR). Nothing in the code
+/// hardcodes a corridor; adding a row here adds a country pair.
+model RemitCorridor {
+  id                 String   @id @default(cuid())
+  sourceCountryCode  String
+  destCountryCode    String
+  sourceCurrency     String
+  destCurrency       String
+  sourceCountry      RemitCountry @relation("SourceCountry", fields: [sourceCountryCode], references: [code])
+  destCountry        RemitCountry @relation("DestCountry", fields: [destCountryCode], references: [code])
+
+  isActive           Boolean  @default(true)
+  /// Inclusive per-transfer limits, in source-currency minor units.
+  minAmountMinor     BigInt
+  maxAmountMinor     BigInt
+  /// Rolling 24h and 30d ceilings per customer, source-currency minor units.
+  dailyLimitMinor    BigInt
+  monthlyLimitMinor  BigInt
+  /// FX margin applied on top of the market rate, in basis points.
+  /// 0 = the customer gets the market rate and the €5 fee is the only charge.
+  fxMarginBps        Int      @default(0)
+  estimatedMinMins   Int      @default(60)
+  estimatedMaxMins   Int      @default(1440)
+  /// Provider keys resolved by src/remit/providers/registry.ts.
+  fxProviderKey      String   @default("sandbox")
+  payoutProviderKey  String   @default("sandbox")
+  /// Whether a real regulated provider is wired up. Drives the "Sandbox"
+  /// badge the UI shows so nobody mistakes a demo for real money movement.
+  isLive             Boolean  @default(false)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  paymentOptions     RemitCorridorPaymentOption[]
+  payoutOptions      RemitCorridorPayoutOption[]
+  feeRules           RemitFeeRule[]
+  quotes             RemitQuote[]
+  transfers          RemitTransfer[]
+
+  @@unique([sourceCountryCode, destCountryCode])
+  @@index([isActive])
+  @@map("remit_corridors")
+}
+
+model RemitCorridorPaymentOption {
+  id           String             @id @default(cuid())
+  corridorId   String
+  corridor     RemitCorridor      @relation(fields: [corridorId], references: [id], onDelete: Cascade)
+  method       RemitPaymentMethod
+  providerKey  String             @default("sandbox")
+  isEnabled    Boolean            @default(false)
+  sortOrder    Int                @default(0)
+
+  @@unique([corridorId, method])
+  @@map("remit_corridor_payment_options")
+}
+
+model RemitCorridorPayoutOption {
+  id           String            @id @default(cuid())
+  corridorId   String
+  corridor     RemitCorridor     @relation(fields: [corridorId], references: [id], onDelete: Cascade)
+  method       RemitPayoutMethod
+  providerKey  String            @default("sandbox")
+  isEnabled    Boolean           @default(false)
+  sortOrder    Int               @default(0)
+
+  @@unique([corridorId, method])
+  @@map("remit_corridor_payout_options")
+}
+
+/// Configurable fee engine. The €5 flat fee is a row here, not a constant in
+/// the code. Highest `priority` matching rule wins.
+model RemitFeeRule {
+  id               String        @id @default(cuid())
+  name             String
+  /// Null = applies to every corridor.
+  corridorId       String?
+  corridor         RemitCorridor? @relation(fields: [corridorId], references: [id], onDelete: Cascade)
+  /// Null = applies to every customer segment (e.g. "business", "promo").
+  segment          String?
+  promoCode        String?
+  /// Inclusive source-amount band the rule applies to (minor units).
+  minAmountMinor   BigInt?
+  maxAmountMinor   BigInt?
+  fixedFeeMinor    BigInt        @default(0)
+  percentageBps    Int           @default(0)
+  currency         String        @default("EUR")
+  priority         Int           @default(0)
+  isActive         Boolean       @default(true)
+  effectiveFrom    DateTime      @default(now())
+  effectiveTo      DateTime?
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  quotes           RemitQuote[]
+
+  @@index([isActive, priority])
+  @@map("remit_fee_rules")
+}
+
+/// Append-only log of every rate observed from an FX provider. Quotes snapshot
+/// the rate they used, so a later rate move can never alter a past transfer.
+model RemitExchangeRate {
+  id           String   @id @default(cuid())
+  baseCurrency String
+  quoteCurrency String
+  marketRate   Decimal  @db.Decimal(18, 8)
+  provider     String
+  fetchedAt    DateTime @default(now())
+
+  @@index([baseCurrency, quoteCurrency, fetchedAt])
+  @@map("remit_exchange_rates")
+}
+
+model RemitRecipient {
+  id             String            @id @default(cuid())
+  customerId     String
+  customer       RemitCustomer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  nickname       String?
+  fullName       String
+  destCountryCode String
+  destCurrency   String
+  payoutMethod   RemitPayoutMethod
+  /// Corridor-specific payout fields, validated server-side against the
+  /// schema in src/remit/corridors/recipient-schema.ts. Only fields the
+  /// payout network actually requires are collected.
+  details        Json
+  isArchived     Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  transfers      RemitTransfer[]
+
+  @@index([customerId, isArchived])
+  @@map("remit_recipients")
+}
+
+/// An immutable priced offer. Amounts are frozen at creation; if it expires the
+/// customer must request a new one — the amount is never silently changed.
+model RemitQuote {
+  id                 String           @id @default(cuid())
+  customerId         String
+  customer           RemitCustomer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  corridorId         String
+  corridor           RemitCorridor    @relation(fields: [corridorId], references: [id])
+
+  sourceCurrency     String
+  destCurrency       String
+  sourceAmountMinor  BigInt
+  feeMinor           BigInt
+  feeRuleId          String?
+  feeRule            RemitFeeRule?    @relation(fields: [feeRuleId], references: [id])
+  /// Mid-market rate from the FX provider, before any margin.
+  marketRate         Decimal          @db.Decimal(18, 8)
+  /// Rate actually applied for the customer (market rate less the margin).
+  customerRate       Decimal          @db.Decimal(18, 8)
+  fxMarginBps        Int              @default(0)
+  destAmountMinor    BigInt
+  totalPayableMinor  BigInt
+  paymentMethod      RemitPaymentMethod
+  payoutMethod       RemitPayoutMethod
+  estimatedMinMins   Int
+  estimatedMaxMins   Int
+  status             RemitQuoteStatus @default(ACTIVE)
+  expiresAt          DateTime
+  createdAt          DateTime         @default(now())
+
+  transfer           RemitTransfer?
+
+  @@index([customerId, status])
+  @@map("remit_quotes")
+}
+
+model RemitTransfer {
+  id                 String                @id @default(cuid())
+  /// Customer-facing reference, e.g. TR-7QK4-2M9X.
+  reference          String                @unique
+  customerId         String
+  customer           RemitCustomer         @relation(fields: [customerId], references: [id])
+  corridorId         String
+  corridor           RemitCorridor         @relation(fields: [corridorId], references: [id])
+  quoteId            String                @unique
+  quote              RemitQuote            @relation(fields: [quoteId], references: [id])
+  recipientId        String
+  recipient          RemitRecipient        @relation(fields: [recipientId], references: [id])
+
+  /// Pricing snapshot taken from the quote at confirmation time. Never
+  /// recalculated — this is what the customer agreed to.
+  sourceCurrency     String
+  destCurrency       String
+  sourceAmountMinor  BigInt
+  feeMinor           BigInt
+  marketRate         Decimal               @db.Decimal(18, 8)
+  customerRate       Decimal               @db.Decimal(18, 8)
+  fxMarginBps        Int                   @default(0)
+  destAmountMinor    BigInt
+  totalPayableMinor  BigInt
+  paymentMethod      RemitPaymentMethod
+  payoutMethod       RemitPayoutMethod
+
+  status             RemitTransferStatus   @default(PENDING)
+  complianceStatus   RemitComplianceStatus @default(NORMAL)
+  riskScore          Int                   @default(0)
+  riskReasons        String[]              @default([])
+  failureReason      String?
+
+  /// Costs actually incurred, filled in by provider webhooks. Fee revenue minus
+  /// these is the real gross margin — the €5 fee is not profit.
+  providerCostMinor  BigInt                @default(0)
+
+  /// True for sandbox/demo transfers. No real money ever moves for these.
+  isDemo             Boolean               @default(false)
+  /// Client-supplied idempotency key, unique per customer. Blocks the
+  /// double-tap duplicate transfer.
+  idempotencyKey     String
+
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  completedAt        DateTime?
+
+  events             RemitTransferEvent[]
+  payments           RemitPayment[]
+  payouts            RemitPayout[]
+  reviews            RemitRiskReview[]
+  notifications      RemitNotification[]
+
+  @@unique([customerId, idempotencyKey])
+  @@index([status])
+  @@index([customerId, createdAt])
+  @@index([complianceStatus])
+  @@map("remit_transfers")
+}
+
+/// Append-only status history. Rows are only ever inserted — the application
+/// exposes no update or delete path for this table.
+model RemitTransferEvent {
+  id           String               @id @default(cuid())
+  transferId   String
+  transfer     RemitTransfer        @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  fromStatus   RemitTransferStatus?
+  toStatus     RemitTransferStatus
+  actorType    RemitActorType       @default(SYSTEM)
+  actorId      String?
+  reason       String?
+  metadata     Json?
+  createdAt    DateTime             @default(now())
+
+  @@index([transferId, createdAt])
+  @@map("remit_transfer_events")
+}
+
+model RemitPayment {
+  id               String             @id @default(cuid())
+  transferId       String
+  transfer         RemitTransfer      @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  provider         String
+  providerRef      String?
+  method           RemitPaymentMethod
+  amountMinor      BigInt
+  currency         String
+  status           RemitPaymentStatus @default(PENDING)
+  /// What the payment provider charged us to collect the funds.
+  providerFeeMinor BigInt             @default(0)
+  failureReason    String?
+  /// Redacted provider response. Card numbers are never stored — the provider
+  /// only ever returns tokens/references to us.
+  rawResponse      Json?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([transferId])
+  @@index([providerRef])
+  @@map("remit_payments")
+}
+
+model RemitPayout {
+  id                String            @id @default(cuid())
+  transferId        String
+  transfer          RemitTransfer     @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  provider          String
+  providerRef       String?
+  method            RemitPayoutMethod
+  amountMinor       BigInt
+  currency          String
+  status            RemitPayoutStatus @default(PENDING)
+  providerCostMinor BigInt            @default(0)
+  failureReason     String?
+  rawResponse       Json?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([transferId])
+  @@index([providerRef])
+  @@map("remit_payouts")
+}
+
+/// Every inbound webhook, stored before processing. The unique key on
+/// (provider, externalId) makes webhook handling idempotent — a provider
+/// retrying a delivery can never move a transfer twice.
+model RemitProviderEvent {
+  id                String   @id @default(cuid())
+  provider          String
+  externalId        String
+  eventType         String
+  signatureVerified Boolean  @default(false)
+  payload           Json
+  processedAt       DateTime?
+  error             String?
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, externalId])
+  @@index([processedAt])
+  @@map("remit_provider_events")
+}
+
+model RemitRiskReview {
+  id           String            @id @default(cuid())
+  transferId   String
+  transfer     RemitTransfer     @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  reasons      String[]          @default([])
+  riskScore    Int               @default(0)
+  status       RemitReviewStatus @default(OPEN)
+  notes        String?
+  decidedById  String?
+  decidedAt    DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([status])
+  @@map("remit_risk_reviews")
+}
+
+model RemitNotification {
+  id          String                   @id @default(cuid())
+  customerId  String
+  customer    RemitCustomer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  transferId  String?
+  transfer    RemitTransfer?           @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  channel     RemitNotificationChannel @default(EMAIL)
+  template    String
+  destination String
+  subject     String?
+  body        String
+  status      RemitNotificationStatus  @default(QUEUED)
+  provider    String?
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime                 @default(now())
+
+  @@index([customerId, createdAt])
+  @@map("remit_notifications")
+}
+
+/// Append-only audit trail. Insert-only by contract: no service in this module
+/// exposes an update or delete for these rows.
+model RemitAuditLog {
+  id         String         @id @default(cuid())
+  actorType  RemitActorType
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime       @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("remit_audit_logs")
+}
+
+/// Admin access is granted per-user with explicit permissions rather than a
+/// single global "admin" flag, so sensitive operations can be scoped.
+model RemitAdmin {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("remit_admins")
 }
