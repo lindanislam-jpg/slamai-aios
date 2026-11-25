@@ -44,6 +44,14 @@ describe("extractPdfJpegs", () => {
     expect(found[0].width).toBe(1000);
   });
 
+  it("skips the wide company-logo banner across the top of an MIS sheet but keeps photos and scanned pages", async () => {
+    const banner = await jpeg(2251, 597, 30); // the size of the logo in Asgard MIS reports
+    const photo = await jpeg(750, 1000, 140);
+    const scan = await jpeg(1530, 1980, 230);
+    const found = extractPdfJpegs(new Uint8Array(await pdfWith([banner, photo, scan])));
+    expect(found.map((f) => `${f.width}x${f.height}`)).toEqual(["750x1000", "1530x1980"]);
+  });
+
   it("returns nothing for a PDF without JPEG photos", async () => {
     const pdf = await pdfWith([]);
     expect(extractPdfJpegs(new Uint8Array(pdf))).toEqual([]);

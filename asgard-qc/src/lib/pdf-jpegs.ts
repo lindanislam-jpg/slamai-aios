@@ -54,10 +54,12 @@ export function jpegSize(b: Uint8Array): { width: number; height: number } | nul
 }
 
 /**
- * All JPEG photos in the PDF, in file order, skipping exact duplicates and
- * images smaller than `minSide` pixels on their short side (logos, icons).
+ * All JPEG photos in the PDF, in file order, skipping exact duplicates,
+ * images smaller than `minSide` pixels on their short side (icons) and
+ * banner-shaped images wider than `maxAspect` : 1 (the company logo across the
+ * top of an MIS sheet is about 3.8 : 1; photos and scanned pages are near 4 : 3).
  */
-export function extractPdfJpegs(pdf: Uint8Array, minSide = 300): PdfJpeg[] {
+export function extractPdfJpegs(pdf: Uint8Array, minSide = 300, maxAspect = 2.5): PdfJpeg[] {
   const out: PdfJpeg[] = [];
   const seen = new Set<string>();
   let pos = 0;
@@ -86,6 +88,7 @@ export function extractPdfJpegs(pdf: Uint8Array, minSide = 300): PdfJpeg[] {
     const bytes = pdf.slice(start, stop);
     const size = jpegSize(bytes);
     if (!size || Math.min(size.width, size.height) < minSide) continue;
+    if (Math.max(size.width, size.height) / Math.min(size.width, size.height) > maxAspect) continue;
     const key = `${bytes.length}:${bytes[bytes.length >> 1]}:${bytes[bytes.length >> 2]}:${bytes[(bytes.length * 3) >> 2]}`;
     if (seen.has(key)) continue;
     seen.add(key);
