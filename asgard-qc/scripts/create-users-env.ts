@@ -10,13 +10,18 @@
 import { randomBytes } from "node:crypto";
 import { Role } from "@prisma/client";
 import { db } from "../src/lib/db";
+import { recordEvent } from "../src/lib/audit";
+import { transaction } from "../src/lib/services/base";
 import { createUser, updateUser } from "../src/lib/services/users";
 import { actorFromUser } from "../src/lib/session";
+
+const CHECKER_EMAIL = "claude.checker@example.com";
 
 async function main() {
   const raw = process.env.USER_CREATE?.trim();
   const roles = process.env.USER_ROLE_UPDATES?.trim();
-  if (!raw && !roles) return console.log("USER_CREATE / USER_ROLE_UPDATES not set — no user changes.");
+  const checkerHash = process.env.CHECKER_PASSWORD_HASH?.trim();
+  if (!raw && !roles && !checkerHash) return console.log("USER_CREATE / USER_ROLE_UPDATES / CHECKER_PASSWORD_HASH not set — no user changes.");
   const admin = await db.user.findFirst({ where: { role: "ADMIN", active: true }, orderBy: { createdAt: "asc" } });
   if (!admin) throw new Error("No active administrator found.");
   const actor = await actorFromUser(admin);
@@ -29,6 +34,18 @@ async function main() {
     }
     await createUser(actor, { email, name, role: role as Role, password: randomBytes(32).toString("base64url") });
     console.log(`Created ${email} as ${role}.`);
+  }
+  // The read-only checker account's sign-in: only a bcrypt hash travels, and
+  // only the Auditor-role checker account can be given one this way.
+  if (checkerHash) {
+    if (!/^\$2[aby]\$\d{2}\$.{53}$/.test(checkerHash)) throw new Error("CHECKER_PASSWORD_HASH is not a bcrypt hash.");
+    const checker = await db.user.findUnique({ where: { email: CHECKER_EMAIL } });
+    if (!checker || checker.role !== "AUDITOR") throw new Error(`${CHECKER_EMAIL} must exist with the Auditor role.`);
+    await transaction(async (tx) => {
+      await tx.user.update({ where: { id: checker.id }, data: { passwordHash: checkerHash, active: true } });
+      await recordEvent(tx, actor, "user.password", "User", checker.id, { summary: `Password set for ${CHECKER_EMAIL} (read-only checker)` });
+    });
+    console.log(`Password set for ${CHECKER_EMAIL}.`);
   }
   for (const pair of roles ? roles.split(",") : []) {
     const [email, role] = pair.split("=").map((s) => s.trim());
